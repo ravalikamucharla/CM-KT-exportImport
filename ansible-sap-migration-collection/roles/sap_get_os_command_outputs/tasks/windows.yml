@@ -1,0 +1,125 @@
+---
+
+- name: To check if ports are open to run os scripts | windows
+  command: nc -vz {{ hostip }} {{ ansible_port | default('5985')}}
+  register: port_status_windows
+
+- debug:
+    msg: "{{ ansible_port }} Port is not open"
+  when: 
+    - port_status_windows is search('No route to host')
+
+- debug:
+    msg: "{{ ansible_port }} Port is open"
+  when: 
+    - port_status_windows.stderr is search('Connected') 
+
+- name: Write OS version data
+  template: 
+    src: os_version.j2
+    dest: '{{ os_export_path }}{{ ansible_os_family}}/os_version_{{ ansible_hostname }}.json'    
+  delegate_to: localhost 
+
+- name: Execute command for disk layout
+  win_shell: "wmic logicaldisk get size,freespace,caption"
+  register: disk_layout_outputs
+
+- name: Compose disk layout data
+  template:
+     src: disk_layout.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/disk_layout_{{ ansible_hostname }}.json'
+  delegate_to: localhost 
+
+- name: Fetch java version
+  win_command: "java -version"
+  register: java_version_outputs
+  when: sap_type == 'java'
+
+- name: Compose java version data
+  template:
+     src: java_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/java_version_{{ ansible_hostname }}.json'
+  delegate_to: localhost 
+  when: sap_type == 'java'
+
+- name: Execute command to get windows services
+  win_shell: net start
+  register: win_service_outputs
+
+- name: Compose list of windows servicen data
+  template:
+     src: win_services.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/win_services_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- shell: |
+     sed -i '$s/,]/]/' '{{ os_export_path }}{{ ansible_os_family}}/win_services_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for r3load version
+  win_command: 'R3load -version'
+  register: r3load_outputs
+  
+- name: Compose r3load version data
+  template:
+     src: r3load_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/r3load_version_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Write capture total memory cpu data
+  template: 
+    src: capture_memory.j2
+    dest: '{{ os_export_path }}/{{ ansible_os_family}}/capture_memory_{{ ansible_hostname }}.json'      
+  delegate_to: localhost 
+
+- name: Write validate cpu data
+  template: 
+    src: validate_cpu.j2
+    dest: '{{ os_export_path }}{{ ansible_os_family}}/validate_cpu_{{ ansible_hostname }}.json'      
+  delegate_to: localhost 
+
+- name: Run OS command for windows
+  win_shell: "{{ item.command_value }}" 
+  with_items:
+      - "{{ osCommands }}"
+  loop_control:
+      index_var: index    
+  register: output  
+  failed_when: output.rc == '1' 
+
+- name: Write windows command ouptut
+  copy:
+      content: "{{ output.results[index].stdout }}"
+      dest: '{{ os_export_path }}{{ ansible_os_family }}/{{ item.cmd_name }}_output.txt'
+  delegate_to: localhost
+  with_items:
+      - "{{ osCommands }}"
+  loop_control:
+      index_var: index
+  when: 
+      - (item.cmd_name) == output.results[index].item.cmd_name
+
+- name: getting drive name
+  shell: cat {{ os_export_path }}{{ ansible_os_family }}/custom_cmd_output.txt
+  register: drive
+  delegate_to: localhost
+
+- name: getting all files in that drive
+  win_shell:  "{{ 'cd ' + drive.stdout + ':/usr/sap/'+ sid + '/SYS/profile;' + ' Get-ChildItem -Name' }}" 
+  register: all_items
+
+- name: copy profiles
+  fetch:
+     src: "{{ drive.stdout + ':' + '/usr/sap/'+ sid + '/SYS/profile/' }}{{ item }}"
+     dest: '{{ os_export_path }}{{ ansible_os_family }}/'
+     flat: yes
+  with_items: "{{ all_items.stdout_lines }}"
+
+- name: capture etc hosts and services files
+  fetch:
+     src: "{{ item }}"
+     dest: '{{ os_export_path }}{{ ansible_os_family }}/'
+     flat: yes
+  with_items:
+     - C:\Windows\System32\drivers\etc\hosts
+     - C:\Windows\System32\drivers\etc\services

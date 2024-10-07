@@ -1,0 +1,161 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_DEL_TABLE_ENTRIES                       *
+* Title               :   Delete table entries                        *
+* Purpose             :   This report is used to to delete table      *
+*                         entries during Cloud Migration              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXX                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                 X       *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*05-19-2021  Initial   Ruchir Kamble  Local    To delete table entries*
+*09-08-2022  V001      Soumya Ray     Local    To pass no data found  *
+*                                              in case table has no   *
+*                                              data                   *
+*---------------------------------------------------------------------*
+
+REPORT zcm_del_table_entries.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep       TYPE c VALUE '|'                          LENGTH 1,
+    lc_mode      TYPE c VALUE 'E'                          LENGTH 1,
+    lc_delete    TYPE c VALUE 'DELETE'                     LENGTH 6,
+    lc_title     TYPE c VALUE 'Delete table'               LENGTH 12,
+    lc_inc_input TYPE c VALUE 'Incorrect input'            LENGTH 20,
+    lc_noinput   TYPE c VALUE 'No input given'             LENGTH 20,
+    lc_lock      TYPE c VALUE 'table is locked'            LENGTH 25,
+    lc_noexist   TYPE c VALUE 'table does not exist'       LENGTH 20,
+    lc_success   TYPE c VALUE 'Entries deleted in table'   LENGTH 35,
+*   Begin of changes in V001
+    lc_no_data   TYPE c VALUE 'No data found in table'     LENGTH 30.
+*   End of changes in V001
+
+  DATA: ls_output  TYPE tab512,
+        ls_input   TYPE tab512,
+        lv_action  TYPE char6,
+        lv_count   TYPE i,
+        lv_tabname TYPE dd02l-tabname,
+        lv_table   TYPE dd02l-tabname.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, lv_action, lv_table, lv_count, lv_tabname.
+
+  FREE: lt_output.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+    lv_action              " Action
+    lv_table.
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_delete.               " When action is DELETE
+
+      " Translating table name to Upper case
+      TRANSLATE lv_table TO UPPER CASE.
+
+      " To check whether table exists in the system
+
+      SELECT SINGLE tabname FROM dd02l INTO lv_tabname
+        WHERE tabname = lv_table.
+
+      IF lv_tabname IS NOT INITIAL.
+
+        SELECT COUNT(*) FROM (lv_table) INTO lv_count.
+
+        IF lv_count > 0.
+
+          " FM to lock table
+          CALL FUNCTION 'ENQUEUE_E_TABLE'
+            EXPORTING
+              mode_rstable   = lc_mode
+              tabname        = lv_table
+            EXCEPTIONS
+              foreign_lock   = 1
+              system_failure = 2
+              OTHERS         = 3.
+
+          IF sy-subrc EQ 0.
+
+            DELETE FROM (lv_table).
+
+            IF sy-subrc EQ 0.
+
+              " Entries deleted in table
+              CONCATENATE lc_success lv_table INTO ls_output
+              SEPARATED BY space.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+
+            ENDIF.
+
+            COMMIT WORK.
+
+            " FM to unlock table
+            CALL FUNCTION 'DEQUEUE_E_TABLE'
+              EXPORTING
+                mode_rstable = lc_mode
+                tabname      = lv_table.
+
+          ELSE.
+            " Table is locked
+            CONCATENATE lv_table lc_lock INTO ls_output
+            SEPARATED BY space.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+          ENDIF.
+
+        ELSE.
+          " No entries in the table
+          CONCATENATE lc_no_data lv_table INTO ls_output
+          SEPARATED BY space.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+      ELSE.
+
+        " Table does not exist
+        CONCATENATE lv_table lc_noexist INTO ls_output
+        SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.

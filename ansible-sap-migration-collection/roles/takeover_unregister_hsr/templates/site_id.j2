@@ -1,0 +1,3 @@
+select secondary_site_id from SYS_DATABASES.M_SERVICE_REPLICATION
+where replication_status='ACTIVE'
+and secondary_host='{{ unregister_dbname }}';

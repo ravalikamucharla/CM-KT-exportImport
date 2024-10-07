@@ -1,0 +1,8 @@
+---
+- name: delete
+  become_method: sudo 
+  become: yes
+  ini_file:
+    path: /usr/sap/{{ sid|upper }}/SYS/global/hdb/custom/config/global.ini
+    section: "{{ item }}"
+    state: absent

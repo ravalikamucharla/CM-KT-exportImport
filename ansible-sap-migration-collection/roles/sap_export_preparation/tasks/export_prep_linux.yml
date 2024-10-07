@@ -1,0 +1,148 @@
+- name: Export Preparation | Set installation directory facts
+  set_fact:
+    install_dir_expre: "{{ params.export.sapinst_path }}"
+  tags: 
+    - exp_prep
+    - retry_exp_prep
+
+- name: Export Preparation | Create LOGS & backup directories
+  file:
+    path: "{{ install_dir_expre }}/{{ item }}"
+    mode: '0755'
+    state: directory
+  loop:
+    - LOGS
+    - backup
+  tags: exp_prep
+
+- name: Export Preparation | Backing up sapinst_instdir
+  command: cp -r /tmp/sapinst_instdir "{{ install_dir_expre }}/backup/sapinst_instdir_expre_{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+  tags: exp_prep
+
+- name: Export Preparation | Deleting old log files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+   - /tmp/sapinst_instdir
+   - /root/.sapinst
+  tags: exp_prep
+
+- name: Export Preparation | Creating dump directory
+  file:
+    path: "{{ params.dump_directory }}"
+    mode: '0777'
+    recurse: yes
+    state: directory
+  tags: exp_prep
+
+- name: Export Preparation | Get running processes
+  shell: ps -ef | grep -v grep | grep -w 'sapinst\|sapinst_exe' | awk '{print $2}'
+  register: running_processes_expre
+  tags: exp_prep
+
+- name: Export Preparation | Kill running processes
+  shell: "kill {{ item }}"
+  with_items: "{{ running_processes_expre.stdout_lines }}"
+  ignore_errors: yes
+  tags: exp_prep
+
+- wait_for:
+    path: "/proc/{{ item }}/status"
+    state: absent
+  with_items: "{{ running_processes_expre.stdout_lines }}"
+  ignore_errors: yes
+  register: killed_processes_expre
+  tags: exp_prep
+
+- name: Export Preparation | Force kill stuck processes
+  shell: "kill -9 {{ item }}"
+  with_items: "{{ killed_processes_expre.results | select('failed') | map(attribute='item') | list }}"
+  ignore_errors: yes
+  tags: exp_prep
+
+- name: Export Preparation | Creating params file
+  template:
+    src: "exp_prep.j2"
+    dest: "{{ install_dir_expre }}/{{ansible_hostname}}_expprep.params"
+    mode: '0755'
+  tags: exp_prep
+  when: db_type == "oracle"
+
+- name: Export Preparation | Creating params file
+  template:
+    src: "db2_exp_prep.j2"
+    dest: "{{ install_dir_expre }}/{{ansible_hostname}}_expprep.params"
+    mode: '0755'
+  tags: exp_prep
+  when: db_type == "db2"
+     
+- name: Export Preparation | Make sure sapinst is executable
+  file:
+   path: "{{install_dir_expre}}/sapinst"
+   mode: '0755'
+  tags: exp_prep
+
+- name: create a folder
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "777"
+  loop: "{{ params.export_import_dir }}"
+
+- name: Export Preparation | Export Preparation 
+  command:
+    cmd: "./sapinst SAPINST_INPUT_PARAMETERS_URL=/{{ install_dir_expre }}/{{ ansible_hostname }}_expprep.params SAPINST_EXECUTE_PRODUCT_ID={{ params.product_ids.export_prep }} SAPINST_SKIP_DIALOGS=true SAPINST_START_GUI=true SAPINST_START_GUISERVER=true SAPINST_GUI_HOSTNAME={{ ansible_hostname }}"
+    creates: "{{ install_dir_expre }}/LOGS/export_preparation_{{ ansible_hostname }}_{{ ansible_date_time }}.log"
+  args:
+    chdir: "{{install_dir_expre}}"
+  register: export_expre
+  async: 3600
+  poll: 0
+  tags: exp_prep
+
+- debug:
+    var: export_expre
+  tags: exp_prep
+
+- name: Export Preparation | Export Preparation Status Checking
+  async_status:
+     jid: "{{ export_expre.ansible_job_id }}"
+  register: job_result_export_expre
+  until: job_result_export_expre.finished
+  retries: 2000
+  delay: 10
+  tags: exp_prep
+
+- stat: 
+    path: "/tmp/sapinst_instdir/{{ params.export.product }}/{{ params.export.source_db_type }}/COPY/EXP/AS-ABAP/PREEXP/installationSuccesfullyFinished.dat"
+  register: st
+  tags: 
+    - exp_prep
+    - retry_exp_prep
+
+- name: Export Preparation resume
+  command:
+    cmd: "/usr/sap/sapinst/SWPM/sapinst SAPINST_INPUT_PARAMETERS_URL=/{{install_dir_expre}}/{{ansible_hostname}}.params SAPINST_EXECUTE_PRODUCT_ID={{ params.product_ids.export_prep }} SAPINST_SKIP_DIALOGS=true SAPINST_START_GUI=true SAPINST_START_GUISERVER=true SAPINST_GUI_HOSTNAME={{ansible_hostname}}"
+    creates: "{{install_dir_expre}}/LOGS/export_preparation_{{ansible_hostname}}_{{ansible_date_time}}.log"
+  args:
+    chdir: "/tmp/sapinst_instdir/{{ params.export.product }}/{{ params.export.source_db_type }}/COPY/EXP/AS-ABAP/PREEXP"
+  register: export_expre_retry
+  async: 3600
+  poll: 0
+  tags: 
+    - exp_prep
+    - retry_exp_prep
+  when: not (st.stat.exists) #or "'retry_exp_prep' in ansible_run_tags"
+
+- name: Export Preparation | Export Preparation Status Checking
+  async_status:
+     jid: "{{ export_expre_retry.ansible_job_id }}"
+  register: job_result_export_expre_retry
+  until: job_result_export_expre_retry.finished
+  retries: 2000
+  delay: 10
+  tags: 
+    - exp_prep
+    - retry_exp_prep
+  when: not (st.stat.exists) #and "'retry_exp_prep' in ansible_run_tags"

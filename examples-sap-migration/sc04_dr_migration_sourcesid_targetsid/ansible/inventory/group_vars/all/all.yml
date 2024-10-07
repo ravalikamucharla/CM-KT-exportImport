@@ -1,0 +1,235 @@
+login_mechanism: sudo # sudo, dzdo provide login mechanism 
+platform: azure # azure, gcp, aws
+
+bucket_name: "ns-sw"  # IF platform is aws
+downloads_path:
+  - url: "https://sapdatastorage.blob.core.windows.net/export-migrate/*"
+    token: "{{ vault_sas_tokens.token }}"  # please provide sas token if platform is azure
+    dest: "/usr/local/sap"
+
+source:
+  hana_mini_checks: 
+    set_max_table_count: "no" # Setting max_table_count_in_statement to 0
+    hdbuserstore: LDHSAPDBCTRL
+  snc_string_name: "" #If the SAP logon method is snc, specify the snc partner name. By default, ddic password is used for login
+  sap:
+    logical_hosts:
+      ascs:
+        hostname: ascs-vip #virtual_hostname
+        ip: 10.0.2.105 #virtual_ip
+      pas:
+        hostname: pas-vip #virtual_hostname
+        ip: 10.0.2.106 #virtual_ip
+      db:
+        hostname: db-vip #virtual_hostname
+        ip: 10.0.3.105 #virtual_ip
+    os_type: #linux,windows,solaris,aix
+      ascs: "linux"  
+      pas: "linux"
+      db: "linux"
+    sid: "SHO"  #FIO,NWO
+    r3_user: "ddic"  #ddic,admin
+    client: "000"  #000
+    ### if more clients needed fill all_clients, else comment the below 3 lines.
+    all_clients: 
+         -  { client: "", user: "", password: "{{ vault_passwords.source_client1 }}" }
+         -  { client: "", user: "", password: "{{ vault_passwords.source_client2 }}" }
+    instance_numbers:
+      ascs: "00"  #00,01
+      pas: "01"
+      db: "02"
+    port_number:
+      ascs: "36"
+      pas: "33"
+    db:
+      type: "hana"  #hana,oracle,db2,sybase,sql
+      sid: "HDB"  #HDB,ORA
+      db_user: "SYSTEM"  #SYSTEM
+      port: "30015"  #30015,30041
+      executable_path: ""
+      export_path: ""
+      schema_name: "SAPBS7" #SAPBS7,SAPSR3,SAPABAP1
+      oracle_user: "oranw1" # Please provide user if the user is other than default i.e sidadm, which can execute oracle sql commands
+      hana_db_name: "SYSTEMDB" # Please provide dbname if it is other than tenantdb(sid) to execute hana sql commands.
+    webdisp_sid: "WDT" #WDT
+    webdisp_instance_number: "02" #012
+
+target:
+  hana_mini_checks: 
+    set_max_table_count: "no" # Setting max_table_count_in_statement to 0
+    hdbuserstore: LDHSAPDBCTRL
+  snc_string_name: "" #If the SAP logon method is snc, specify the snc partner name. By default, ddic password is used for login
+  sap:
+    logical_hosts:
+      ascs:
+        hostname: ascs1-vip #virtual_hostname
+        ip: 10.0.2.107 #virtual_ip
+      pas:
+        hostname: pas1-vip #virtual_hostname
+        ip: 10.0.2.108 #virtual_ip
+      db:
+        hostname: db1-vip #virtual_hostname
+        ip: 10.0.3.107 #virtual_ip
+    os_type:
+      ascs: "linux"  #linux,windows,solaris,aix
+      pas: "linux"
+      db: "linux"
+    sid: "NWO"  #FIO,NWO
+    r3_user: "ddic"  #ddic,ddic_copy
+    client: "000"  #000
+    ### if more clients needed fill all_clients, else comment the below 3 lines.
+    all_clients:
+      -  { client: "", user: "", password: "{{ vault_passwords.target_client1 }}" }
+      -  { client: "", user: "", password: "{{ vault_passwords.target_client2 }}" }
+    instance_numbers:
+      ascs: "00"  #00,01
+      pas: "01"
+      db: "02"
+    port_number:
+      ascs: "36"
+      pas: "33"
+    db:
+      type: "hana"  #hana,oracle,db2,sybase,sql
+      sid: "NWO"  #HDB,ORA
+      db_user: "SYSTEM"  #SYSTEM
+      port: "30015"  #30015
+      executable_path: ""
+      import_path: ""
+      schema_name: "SAPABAP1" #SAPBS7,SAPSR3,SAPABAP1
+      oracle_user: "oranw1" # Please provide user if the user is other than default i.e sidadm, which can execute oracle sql commands
+      hana_db_name: "SYSTEMDB" # SYSTEMDB Please provide dbname to execute sql command in hana db.
+    webdisp_sid: "WDT"
+    webdisp_instance_number: "02"
+
+sap_type: "abap"  
+group: "_NULL"  #SPACE(ascs),_NULL(pas)
+python_interpreter: "/usr/bin/python3"
+cloudmigrate_server_sudo_user: "root"  #root,azureuser,cloudcoe
+cloudmigrate_server_sudo_user_group: "root"  #root,azureuser,cloudcoe
+DAA_instance_number: "98"  #98,97 please provide only the instance number[/usr/sap/DAA/SMDA98/work/dev_smdagent]
+DAA_path: "/usr/sap/DAA" #please provide the DAA path if it other than default path i.e /usr/sap/DAA 
+pse_cert_path: "D" # please provide the pse and certificate path if its other than default D
+pse_cert_instance_number: "01" 
+sm02_message: "The system is under migration."
+SM21_no_of_days: "7"  #Please mention the number of days for ZCM_SM21_EXP_SYSTEM_LOGS tcode 
+SOST_no_of_days: "7"  #Please mention the number of days for ZCM_SOST_EXP_FAILED_MAILS tcode
+SM58_no_of_days: "7"  #Please mention the number of days for ZCM_SM58_EXPORT_FAILED_TRFC tcode
+ST22_no_of_days: "7"  #Please mention the number of days for ZCM_ST22_EXP_RUNTIME_ERRORS tcode
+
+# Please provide the inputs for spad,rz21,AL11,smlg_source and smlg_target if update scripts(07 playbook) is executed
+spad_input: "EXPORT"  #EXPORT or EXPORT,ALL please provide the input for ZCM_SPAD_EXP_OPDEVICE_SERVERS tcode 
+rz21_input: "EXPORT"  #EXPORT or SAP_CCMS_solmantest_NWO_04,solmantest_NWO_04,Online,D please provide the input for ZCM_RZ21_DEL_OLDAPPL_SERV tcode. 
+AL11: 
+  source_hostname:
+    -  #e.g all, source_server
+  target_hostname: 
+    -  #e.g all, target_server
+  source_dir_params: 
+    - #e.g /test_1
+  target_dir_params: 
+    - #e.g /test3
+
+multiple_instance_smlg: "no" #yes , no
+multiple_instance_rz12: "no" #yes , no
+multiple_instance_spad: "no" #yes, no
+multiple_instance_strust: "no" #yes, no
+smlg_rz12_spad_source: # add aas multiple instances in the form of list
+  - hostname: "{{ groups['source_aas'][0] }}" #NULL,{{ groups['source_aas'][0] }}
+    sid: H21 # sid of source aas 
+    instance_name: aas # provide this input if spad update script is executed
+    instance_no: "07" # instance number of source aas 
+smlg_rz12_spad_target:
+    - hostname: "{{ groups['target_aas'][0] }}" #NULL,,{{ groups['source_aas'][0] }}
+      sid: H21 # sid of target aas
+      instance_name: pas # provide this input if spad update script is executed
+      instance_no: "07" # instance number of target aas
+
+# please provide the inputs if 04  playbook is executed
+rampdown_activities: 
+  se14_input: "DELETE" #EXPORT or DELETE(double check if you are giving DELETE),ZCM_SE14_DEL_QCM_TABLES
+  del_table_entry: "ZDEMO" # Please provide the table name which has to be deleted.
+  smigr: # Refer README.md file for db_version
+    db_version: "" 
+    target_db_type: "" # hana,mssql,db2 
+    installation_directory: ""
+
+#provide the profile parameters for upating required parameter.
+profile_parameter:
+  required: no
+  inclusion_parameters:
+    - rdisp/gui_auto_logout
+
+#provide the table names for db if it is other than default.
+default_table_name: 
+  - USR02
+
+users:  #The users having sudo access for os script execution.
+  os:
+    source:
+      ascs: "admin_accenture"
+      pas: "admin_accenture"
+      db: "admin_accenture"
+    target:
+      ascs: "admin_accenture"
+      pas: "admin_accenture"
+      db: "admin_accenture"
+
+#sql server credentals
+sql_db_host: ""  # Hostname of the sql server
+sql_db_password: "{{ vault_passwords.sql_db_password }}"
+sql_db_name: "" # dbsid of sql server
+sql_db_port: ""
+default_table_name_sql: "USR02"
+
+osCommands:
+    - cmd_name: "custom_cmd"
+      command_value: $demo=cmd /c sc qc SAP{{ sid }}_{{ ascs_instance_number }} |findstr "BINARY_PATH_NAME"; $demo.split(':')[1][2] -replace "\t|\n|\r",""
+
+pyrfc:
+  url: https://github.com/SAP/PyRFC/releases/download/2.0.2/pyrfc-2.0.2-cp36-cp36m-linux_x86_64.whl  #ansible team will update
+  file_name: pyrfc-2.0.2-cp36-cp36m-linux_x86_64.whl
+
+env_var_update:
+  #env_pem_file_path:  #/root/.ssh/file.pem (path of pem file)
+  windows_registry: "no" # yes, no
+  env_user: # The users for environment variables update execution.
+    source: "azureuser"
+    target: "azureuser"
+
+passwords:  #The passwords of sudo users for os script execution.
+  r3:
+    source: "{{ vault_passwords.source_r3 }}"
+    target: "{{ vault_passwords.target_r3 }}"
+  db:
+    source: "{{ vault_passwords.source_db }}"
+    target: "{{ vault_passwords.target_db }}"
+  os:
+    source:
+      ascs: "{{ vault_passwords.source_ascs_osuser }}"
+      ers: "{{ vault_passwords.source_ers_osuser }}"
+      pas: "{{ vault_passwords.source_pas_osuser }}"
+      aas:
+        - "{{ vault_passwords.source_aas_osuser[0] }}"
+      db: "{{ vault_passwords.source_db_osuser }}"
+    target:
+      ascs: "{{ vault_passwords.target_ascs_osuser }}"
+      ers: "{{ vault_passwords.target_ers_osuser }}"
+      pas: "{{ vault_passwords.target_pas_osuser }}"
+      aas:
+        - "{{ vault_passwords.target_aas_osuser[0] }}"
+      db: "{{ vault_passwords.target_db_osuser }}"
+    windows:
+      source:
+        ascs: "{{ windows.source_ascs }}"
+        pas: "{{ windows.source_pas }}"
+        db: "{{ windows.source_db }}"
+      target:
+        ascs: "{{ windows.target_ascs }}"
+        pas: "{{ windows.target_pas }}"
+        db: "{{ windows.target_db }}"
+  env_update:
+    source: "{{ env_update_passwords.source }}"
+    target: "{{ env_update_passwords.target }}"
+ 
+abap_scripts_path: "/cm_sap_migration/examples-sap-migration/sc01_abap_migration_{{ source.sap.sid }}_{{ target.sap.sid }}/ansible/scripts/"
+outputs_path: "/cm_sap_migration/examples-sap-migration/sc01_abap_migration_{{ source.sap.sid }}_{{ target.sap.sid }}/ansible/outputs"

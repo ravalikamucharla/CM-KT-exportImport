@@ -1,0 +1,40 @@
+---
+
+- set_fact:
+    install_dir_path: "{{ migration_checkers.target.checker_extract_files_path | default('/tmp/sapinst_instdir/{{ migration_checkers.target.product | upper }}/{{ migration_checkers.target.db_type | upper }}/COPY/SYSTEM/{{ migration_checkers.target.tier | upper }}/AS-ABAP/REF')}}"
+    abap_dir_path: "{{ migration_checkers.target.abap_path }}"
+    install_dir_path_src: "{{ params.checker_extract_files_path | default('/tmp/sapinst_instdir/{{ migration_checkers.source.product | upper }}/{{ migration_checkers.source.source_db_type | upper }}/COPY/EXP/AS-ABAP/EXP') }}"
+    tab_check_path: "{{ migration_checkers.target.table_checker_path | default('/Data/export/ABAP/DATA') }}"
+
+- name: main | Time Analyser in source
+  include_tasks: time_analyser_source.yml
+  when: time_anayser == 'yes' and mode == 'export'
+
+- name: main | time join
+  include_tasks: time_join_source.yml
+  when: time_join == 'yes' and mode == 'export'
+
+- name: main | Object checker
+  include_tasks: object_check.yml
+  when: object_check == 'yes' and mode == 'import'
+
+- name: main | Package checker
+  include_tasks: package_checker.yml
+  when: package_check == 'yes' and mode == 'import'
+
+- name: main | Table checker
+  include_tasks: table_checker.yml
+  when: table_check == 'yes' and mode == 'import'
+
+- name: main | Time Analyser
+  include_tasks: time_analyser.yml
+  when: time_anayser == 'yes' and mode == 'import'
+
+- name: main | Time Join
+  include_tasks: time_join.yml
+  when: time_join == 'yes' and mode == 'import'
+
+
+
+  
+   

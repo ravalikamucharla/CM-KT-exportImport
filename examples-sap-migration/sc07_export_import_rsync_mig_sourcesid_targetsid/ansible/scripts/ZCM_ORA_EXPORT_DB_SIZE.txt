@@ -1,0 +1,146 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_ORA_EXPORT_DB_SIZE                      *
+* Title               :   Capture total, used and free DB size        *
+* Purpose             :   To capture total, used and free db size     *
+*                         for ORACLE DB                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DBACOCKPIT                                                          *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*                           X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*03-21-2020  Initial   Fathima   Local         To capture total, used *
+*                                              free db size for ORACLE*
+*01-03-2021  V001     Soumya Ray Local         To make column heading *
+*                                              synchronus across db's *
+*---------------------------------------------------------------------*
+REPORT zcm_ora_export_db_size.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c        VALUE '|'       LENGTH 1,
+             lc_export     TYPE c   VALUE 'EXPORT'       LENGTH 6,
+*  Begin of changes in V001
+             lc_title      TYPE c  VALUE
+             'Current & Free DB size'                    LENGTH 50,
+             lc_null       TYPE c VALUE 'NULL'           LENGTH 4,
+             lc_size       TYPE c VALUE 'TotalSize'      LENGTH 9,
+             lc_usedspace  TYPE c VALUE 'UsedSpace'      LENGTH 9,
+             lc_freespace  TYPE c VALUE 'FreeSpace'      LENGTH 9,
+             lc_ninput     TYPE c VALUE
+             'No input passed'                           LENGTH 15,
+             lc_remote_sys TYPE dbcon_name VALUE 'DEFAULT',
+             lc_inc_input  TYPE c VALUE
+             'Incorrect input'                           LENGTH 20.
+*  End of changes in V001
+
+  DATA: ls_input      TYPE tab512,
+        ls_output     TYPE tab512,
+        lv_action     TYPE char8,
+        lv_size       TYPE string,
+        lv_used_space TYPE string,
+        lv_free_space TYPE string.
+
+  DATA :tab_db_ge_hi_d             TYPE TABLE OF    dbase_hist_avg,
+        tab_db_ge_hi_d_with_dup    TYPE TABLE OF    dbase_hist,
+        tab_db_ge_hi_d_without_dup TYPE TABLE OF    dbase_hist,
+        tab_db_ge_hi_w             TYPE TABLE OF    dbase_hist_avg,
+        tab_db_ge_hi_w_with_dup    TYPE TABLE OF    dbase_hist,
+        tab_db_ge_hi_w_without_dup TYPE TABLE OF    dbase_hist,
+        tab_db_ge_hi_m             TYPE TABLE OF    dbase_hist_avg,
+        tab_db_ge_hi_m_with_dup    TYPE TABLE OF    dbase_hist,
+        tab_db_ge_hi_m_without_dup TYPE TABLE OF    dbase_hist.
+
+
+  CLEAR: ls_input, lv_action, ls_output, lv_size, lv_used_space,
+  lv_free_space. "+V001
+
+* Begin of changes in V001
+* Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of changes in V001
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    "No input passed
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+      CALL FUNCTION 'C_ORA_DB_INIT'
+        EXPORTING
+          i_remote_system            = lc_remote_sys "+V001
+        IMPORTING
+          size                       = lv_size
+          used_space                 = lv_used_space
+          free_space                 = lv_free_space
+        TABLES
+          tab_db_ge_hi_d             = tab_db_ge_hi_d
+          tab_db_ge_hi_d_with_dup    = tab_db_ge_hi_d_with_dup
+          tab_db_ge_hi_d_without_dup = tab_db_ge_hi_d_without_dup
+          tab_db_ge_hi_w             = tab_db_ge_hi_w
+          tab_db_ge_hi_w_with_dup    = tab_db_ge_hi_w_with_dup
+          tab_db_ge_hi_w_without_dup = tab_db_ge_hi_w_without_dup
+          tab_db_ge_hi_m             = tab_db_ge_hi_m
+          tab_db_ge_hi_m_with_dup    = tab_db_ge_hi_m_with_dup
+          tab_db_ge_hi_m_without_dup = tab_db_ge_hi_m_without_dup.
+
+*Column Headings
+      CONCATENATE lc_size lc_sep
+      lc_usedspace lc_sep
+      lc_freespace
+      INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+*   Begin of changes in V001
+      "NULL check
+      IF lv_size IS INITIAL.
+        lv_size = lc_null.
+      ENDIF.
+      IF lv_used_space IS INITIAL.
+        lv_used_space = lc_null.
+      ENDIF.
+      IF lv_free_space IS INITIAL.
+        lv_free_space = lc_null.
+      ENDIF.
+*   End of changes in V001
+* Data
+      CONCATENATE lv_size lc_sep
+      lv_used_space lc_sep
+      lv_free_space
+      INTO ls_output.
+      APPEND ls_output TO lt_output.
+
+      CLEAR: ls_input, lv_action, ls_output, lv_size, lv_used_space,
+      lv_free_space. "+V001
+
+    WHEN OTHERS.
+*  Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+
+ENDFORM.

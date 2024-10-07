@@ -1,0 +1,57 @@
+---
+- name: creating hdbuserstore key in source system
+  command: sudo su - {{ sid | lower }}adm -c "hdbuserstore SET {{ hdbuserstore_key_source.key_name }} '{{ node1 }}:3{{ instance_number }}13,{{ node1 }}:3{{ instance_number }}15' SYSTEM {{ db_password }}"
+  async: 12000
+  poll: 3
+  register: keys_source
+  when: 
+    - source_primary_db is defined
+    - hdbuserstore_key_source.required == "yes"
+
+- name: checking hdbuserstore key in source system
+  debug: 
+    var: keys_source
+  when: 
+    - source_primary_db is defined
+    - hdbuserstore_key_source.required == "yes"
+
+- name: creating hdbuserstore key in target system
+  command: sudo su - {{ sid | lower }}adm -c "hdbuserstore SET {{ hdbuserstore_key_target.key_name | default(BACKUP) }} '{{ node1 }}:3{{ instance_number }}13,{{ node1 }}:3{{ instance_number }}15' SYSTEM {{ db_password }}"
+  async: 12000
+  poll: 3
+  register: keys_target
+  when: 
+    - target_primary_db is defined 
+    - hdbuserstore_key_target.required == "yes"
+
+- name: checking hdbuserstore key in target system
+  debug: 
+    var: keys_target
+  when: 
+    - target_primary_db is defined
+    - hdbuserstore_key_target.required == "yes"
+
+- name: creating hdbuserstore key in target secondary system
+  command: sudo su - {{ sid | lower }}adm -c "hdbuserstore SET {{ hdbuserstore_key_target_secondary.key_name | default(BACKUP) }} '{{ node1 }}:3{{ instance_number }}13,{{ node1 }}:3{{ instance_number }}15' SYSTEM {{ db_password }}"
+  async: 12000
+  poll: 3
+  register: keys_target_sec
+  when: 
+    - target_secondary_db is defined 
+    - hdbuserstore_key_target_secondary.required == "yes"
+
+- name: checking hdbuserstore key in target system
+  debug: 
+    var: keys_target_sec
+  when:
+    - target_secondary_db is defined  
+    - hdbuserstore_key_target_secondary.required == "yes"
+
+- name: listing hdbuserstore key
+  command: sudo su - {{ sid | lower }}adm -c "hdbuserstore list"
+  register: list 
+
+- name: checking hdbuserstore key list
+  debug: 
+    var: list
+    

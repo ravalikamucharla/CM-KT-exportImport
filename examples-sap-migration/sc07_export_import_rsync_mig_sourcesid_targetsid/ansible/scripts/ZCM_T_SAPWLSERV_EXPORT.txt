@@ -1,0 +1,113 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_T_SAPWLSERV_EXPORT                       *
+* Title               :  To fetch active servers                      *
+* Purpose             :  This report is used to fetch active servers  *
+*                     :  from SAPWLSERV Table                         *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXXXXX                                                          *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* SAPWLSERV                 X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author         TR#/Local     Description       *
+*---------------------------------------------------------------------*
+*14-09-2022  Initial   Yasaswini K   Local   To fetch active servers  *
+*---------------------------------------------------------------------*
+REPORT zcm_t_sapwlserv_export.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_inc_input TYPE c VALUE 'Incorrect input'  LENGTH 20,
+             lc_noinput   TYPE c VALUE 'No input given'   LENGTH 20,
+             lc_null      TYPE c VALUE 'NULL'             LENGTH 4,
+             lc_export    TYPE c VALUE 'EXPORT'           LENGTH 6,
+             lc_sep       TYPE c VALUE '|'                LENGTH 1,
+             lc_host      TYPE c VALUE 'Host'             LENGTH 4,
+             lc_inst      TYPE c VALUE 'Instance'         LENGTH 10,
+             lc_title     TYPE c VALUE 'ActiveServers'    LENGTH 20,
+             lc_err_msg   TYPE c VALUE 'No data found'    LENGTH 20.
+
+  DATA: lv_action    TYPE char10,
+        ls_input     TYPE tab512,
+        ls_output    TYPE tab512,
+        lt_sapwlserv TYPE STANDARD TABLE OF sapwlserv,
+        ls_sapwlserv TYPE sapwlserv.
+
+  CLEAR: lv_action, ls_input, ls_output, ls_sapwlserv.
+
+  FREE: lt_sapwlserv[],
+        lt_output[].
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read input file from Python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+  IF sy-subrc EQ 0.
+    lv_action  = ls_input.                              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+      SELECT * FROM sapwlserv INTO TABLE lt_sapwlserv.
+
+      IF sy-subrc = 0.
+
+        "Column Headings
+        CONCATENATE lc_host lc_sep lc_inst
+        INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_sapwlserv INTO ls_sapwlserv.
+
+          IF ls_sapwlserv-host IS INITIAL.
+            ls_sapwlserv-host = lc_null.
+          ENDIF.
+
+          IF ls_sapwlserv-instno IS INITIAL.
+            ls_sapwlserv-instno = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_sapwlserv-host lc_sep
+                      ls_sapwlserv-instno INTO
+                      ls_output.
+
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_sapwlserv.
+        ENDLOOP.
+      ELSE.
+        " No records found
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.

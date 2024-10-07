@@ -1,0 +1,1 @@
+select value from "SYS"."M_INIFILE_CONTENTS" where key='log_mode'

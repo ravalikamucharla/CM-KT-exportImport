@@ -1,0 +1,287 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_RZ12_EXP_RFC_GRP_702S                   *
+* Title               :   RFC Groups                                  *
+* Purpose             :   This report is used to migrate RFC Groups   *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RZ12                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author           TR#/Local     Description     *
+*---------------------------------------------------------------------*
+*07-03-2023  Initial  Ashwini K P         Local       To fetch RFC    *
+*                                                     groups          *
+*---------------------------------------------------------------------*
+
+REPORT zcm_rz12_exp_rfc_grp_702s.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE C      VALUE '|'             LENGTH 1,
+             lc_export     TYPE char20 VALUE 'EXPORT',
+             lc_title      TYPE C      VALUE 'RFCGroups'     LENGTH 20,
+             lc_msg_nodata TYPE string VALUE 'No data found',
+             lc_inc_input  TYPE C      VALUE
+             'Incorrect input'                               LENGTH 20,
+             lc_noinput    TYPE C      VALUE
+             'No input passed'                               LENGTH 20.
+
+
+  DATA: ls_input    TYPE tab512,
+        ls_output   TYPE tab512,
+        ls_prefinal TYPE string,
+        lv_action   TYPE char8.
+
+
+  TABLES: rzllitab.
+
+  TYPES : BEGIN OF arfc_configuration,
+    applserver          LIKE rzllitab-applserver,
+    status,    "M)odified, N)ew
+
+    use_quotas          TYPE  arfcquotau,
+    max_queue           TYPE  arfcquotaq,
+    max_login           TYPE  arfcquotal,
+    max_own_lg          TYPE  arfcquotao,
+    max_own_wp          TYPE  arfcquotaw,
+    min_wait_d          TYPE  arfcquotav,
+    max_comm            TYPE  arfcquotac,
+    max_wait_t          TYPE  arfcquotat.
+
+  TYPES:  END OF arfc_configuration.
+
+  DATA :arfc_quotas     TYPE TABLE OF arfc_configuration
+        WITH HEADER LINE,
+        relations       TYPE TABLE OF rzllitab WITH HEADER LINE,
+        ls_relations    TYPE rzllitab,
+        erfc_relations  TYPE TABLE OF rzlliclass,
+        instances       TYPE TABLE OF msxxlist WITH HEADER LINE,
+        lv_value_holder TYPE string.
+
+  DATA: BEGIN OF lt_table OCCURS 0.
+        INCLUDE STRUCTURE rzllitab.
+  DATA: activeserver(8) TYPE C,
+        END OF lt_table.
+
+
+  FIELD-SYMBOLS: <fs_structure> TYPE ANY,
+                 <comp>         TYPE ANY,
+                 <fs_quotas>    TYPE ANY.
+
+  CLEAR: ls_input, lv_action.
+
+*  Table name
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+  WHEN lc_export.
+
+*   Logon Group and instance
+    CALL FUNCTION 'SMLG_GET_SETUP'
+    EXPORTING
+      set_lock   = space
+      grouptype  = 'S'  "group_type
+    TABLES
+      setup      = relations
+      erfc_setup = erfc_relations.
+
+*   Instances
+    CALL FUNCTION 'TH_SERVER_LIST'
+    TABLES
+      list = instances.
+
+*   find instances without a group & add them
+    LOOP AT instances.
+      READ TABLE relations INTO ls_relations
+                         WITH KEY applserver = instances-name
+                         BINARY SEARCH.
+
+      IF sy-subrc NE 0.         "instance has no corresponding group
+        relations-classname  = 'NULL'.
+        relations-applserver = instances-name.
+        APPEND relations.
+      ENDIF.
+    ENDLOOP.
+
+*   Resource allocation details
+    LOOP AT instances.
+      arfc_quotas-applserver = instances-name.
+      CALL FUNCTION 'TH_ARFC_GET_QUOTAS'
+      DESTINATION arfc_quotas-applserver
+      IMPORTING
+        use_quotas            = arfc_quotas-use_quotas
+        max_queue             = arfc_quotas-max_queue
+        max_login             = arfc_quotas-max_login
+        max_own_login         = arfc_quotas-max_own_lg
+        max_own_used_wp       = arfc_quotas-max_own_wp
+        min_wait_dia_wp       = arfc_quotas-min_wait_d
+        max_comm_entries      = arfc_quotas-max_comm
+        max_wait_time         = arfc_quotas-max_wait_t
+      EXCEPTIONS
+        system_failure        = 1
+        communication_failure = 2
+        OTHERS                = 99.
+      APPEND arfc_quotas .
+    ENDLOOP.
+
+    SORT arfc_quotas BY applserver.
+    SORT instances BY name.
+
+    IF relations[] IS INITIAL.
+      ls_output = lc_msg_nodata.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      RETURN.
+    ENDIF.
+
+*   Column Headings
+    CONCATENATE 'Classname'         lc_sep
+                'ApplServer'        lc_sep
+                'GroupType'         lc_sep
+                'IPAddress'         lc_sep
+                'RespTime'          lc_sep
+                'Users'             lc_sep
+                'OPMode'            lc_sep
+                'WPQuota'           lc_sep
+                'Active'            lc_sep
+                'ApplicationServer' lc_sep
+                'Status'            lc_sep
+                'UseQuotas'         lc_sep
+                'MaxQueue'          lc_sep
+                'MaxLogin'          lc_sep
+                'MaxOwnLogin'       lc_sep
+                'MaxOwnUsedWP'      lc_sep
+                'MinWaitDiaWP'      lc_sep
+                'MaxCommEntries'    lc_sep
+                'MaxWaitTime'       
+    INTO ls_output.
+    APPEND ls_output TO lt_output.
+
+
+    "Table data
+    LOOP AT relations.
+
+*Append active servers status
+      MOVE-CORRESPONDING relations TO lt_table.
+
+      READ TABLE instances WITH KEY name = relations-applserver
+      BINARY SEARCH TRANSPORTING NO FIELDS.
+      IF sy-subrc <> 0.
+        lt_table-activeserver = 'Inactive'.
+      ELSE.
+        lt_table-activeserver = 'Active'.
+      ENDIF.
+
+*Build the 1st part of output from relations table
+      CLEAR: ls_prefinal, ls_output.
+      ASSIGN lt_table TO <fs_structure>.
+      DO .
+        ASSIGN COMPONENT sy-INDEX OF STRUCTURE <fs_structure>
+        TO <comp>.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+        lv_value_holder = <comp>.
+        CONCATENATE ls_prefinal lv_value_holder '|' INTO ls_prefinal.
+      ENDDO.
+
+*Build the 2nd part of output from arfc_quotas table
+      READ TABLE arfc_quotas WITH KEY
+      applserver = relations-applserver.
+      IF sy-subrc = 0.
+        ASSIGN arfc_quotas TO <fs_quotas>.
+        DO .
+          ASSIGN COMPONENT sy-INDEX OF STRUCTURE <fs_quotas>
+          TO <comp>.
+          IF sy-subrc <> 0.
+            EXIT .
+          ENDIF.
+          lv_value_holder = <comp>.
+          CONCATENATE ls_prefinal lv_value_holder '|'
+          INTO ls_prefinal.
+        ENDDO.
+        ls_prefinal = shift_right( val = ls_prefinal  PLACES = 1 ).
+
+      ELSE.
+* Add NULL to prevent list index errors
+        CONCATENATE ls_prefinal lc_sep
+        'NULL'  lc_sep
+        'NULL'   lc_sep
+        'NULL'   lc_sep
+        'NULL'   lc_sep
+        'NULL'   lc_sep
+        'NULL'   lc_sep
+        'NULL'   lc_sep
+        'NULL'   lc_sep
+        'NULL'   
+        INTO ls_prefinal.
+
+      ENDIF.
+
+      PERFORM end_null_check CHANGING ls_prefinal.
+      ls_output = ls_prefinal.
+      APPEND ls_output TO lt_output.
+
+    ENDLOOP.
+
+    PERFORM null_check TABLES  lt_output.
+
+  WHEN OTHERS .
+
+    ls_output = lc_inc_input. "Incorrect input
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+
+
+  ENDCASE.
+
+
+ENDFORM.
+
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+  off = STRLEN( ls_string ) - 1
+  len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+    INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+
+FORM null_check TABLES lt_table TYPE TABLE.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

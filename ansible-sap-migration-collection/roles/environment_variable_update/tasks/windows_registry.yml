@@ -1,0 +1,11 @@
+---
+
+- name: Add or update registory #instead of v if we use ve it will create defaults
+  win_shell: REG ADD HKLM\Software\SAP\{{ sid | upper }}\Environment /v "{{  env_var_update.env_user.source }}" /t REG_SZ /d "{{  env_var_update.env_user.target }}" /f 
+  register: variable
+
+- name: show registory
+  win_shell: REG Query HKLM\Software\SAP\{{ sid | upper }}\Environment
+  register: variable_update
+
+- debug: var=variable_update

@@ -1,0 +1,10 @@
+---
+- hosts: localhost
+  ignore_errors: true
+  vars: 
+    source_hostip: "{{ hostvars[groups['source_ascs'][0]].ansible_host }}"
+    target_hostip: "{{ hostvars[groups['target_ascs'][0]].ansible_host }}"
+  vars_files:
+    - ../inventory/host_vars/{{ groups['target_ascs'][0] }}.yml
+  roles:
+    - role: environment_variable_update                 

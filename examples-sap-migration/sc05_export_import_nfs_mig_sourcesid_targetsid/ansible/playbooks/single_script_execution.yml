@@ -1,0 +1,34 @@
+- name: testingPyrfc
+  hosts: localhost
+  any_errors_fatal: false
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    abap_scripts_path: /cm_sap_migration/ansible-sap-migration-collection/roles/sap_abap_execute_queries/files
+  tasks:
+    - sap_pyrfc: 
+        username: "ddic"
+        password: "{{ passwords.r3.source }}"
+        hostname: "serqascs01"
+        hostip: "10.0.2.100"
+        instance: "00" 
+        client: "000"
+        group: "_NULL"
+        abappath: "{{ abap_scripts_path }} "
+        abapscript: "" 
+        outputspath: /tmp/
+        inputparams: EXPORT
+      async: 3600
+      poll: 0
+      register: output
+
+    - name: Check on an async task
+      async_status:
+        jid: "{{ output.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 2000
+      delay: 10
+
+    - debug: var=job_result
+
+

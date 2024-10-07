@@ -1,0 +1,1932 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_STRUST_EXP_CERT_740S                    *
+* Title               :   STRUST certificates export                  *
+* Purpose             :   This report is used to export PSE own       *
+*                     :   certificates and any other certificates     *
+*                     :   from certificate list from tcode STRUST     *
+*                     :   pre migration                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* STRUST/STRUSTSSO2                                                   *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* strustssls          :     X                                         *
+* strustssl           :     X                                         *
+* strustwsse          :     X                                         *
+* strustsmim          :     X                                         *
+* ssfargs             :     X                                         *
+* ssfvkeydef          :     X                                         *
+* ssf_pse_h           :     X                                         *
+* ssf_pse_t           :     X                                         *
+* ssf_pse_d           :     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*10-23-2020  Initial  Ashwini K P     Local   To Export STRUST certif-*
+*                                             -icates                 *
+*01-25-2023   V001    Ashwini K P     Local   To add logic to indicate*
+*                                             the status of PSE       *
+*---------------------------------------------------------------------*
+REPORT zcm_strust_exp_cert_740s.
+
+  TYPES: gtt_pse_h TYPE STANDARD TABLE OF ssf_pse_h,
+
+         BEGIN OF gty_strust,
+           applic TYPE char6,
+         END OF gty_strust,
+
+         gtt_strust TYPE STANDARD TABLE OF gty_strust.
+
+  CLASS lcl_certificate_export DEFINITION.
+
+    PUBLIC SECTION.
+      METHODS: read_sys_certificates
+        IMPORTING iv_context  TYPE psecontext
+                  iv_applic   TYPE ssfargs-applic
+                  it_pse_h    TYPE gtt_pse_h
+        EXPORTING it_owncert  TYPE STANDARD TABLE
+                  it_certlist TYPE STANDARD TABLE
+                  it_pse      TYPE STANDARD TABLE. "+V001
+
+
+      METHODS: read_certificates
+        IMPORTING iv_context  TYPE psecontext
+                  it_pse_h    TYPE gtt_pse_h
+                  it_strust   TYPE gtt_strust
+        EXPORTING it_owncert  TYPE STANDARD TABLE
+                  it_certlist TYPE STANDARD TABLE
+                  it_pse      TYPE STANDARD TABLE. "+V001
+
+
+      METHODS: read_ssls_certificates
+        IMPORTING iv_context   TYPE psecontext
+                  it_pse_h     TYPE gtt_pse_h
+                  it_strust    TYPE gtt_strust
+        EXPORTING it_owncert   TYPE STANDARD TABLE
+                  it_certlist  TYPE STANDARD TABLE
+                  it_ssls_cert TYPE STANDARD TABLE
+                  it_pse       TYPE STANDARD TABLE. "+V001
+
+
+ENDCLASS.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep         TYPE c    VALUE '|'             LENGTH 1,
+             lc_act_exp     TYPE c    VALUE 'EXPORT'        LENGTH 6,
+             lc_len         TYPE i    VALUE 511,
+             lc_pse_name    TYPE c    VALUE 'PSE name'      LENGTH 9,
+             lc_instance    TYPE c    VALUE
+             'Instance name'                                LENGTH 14,
+             lc_sign        TYPE c    VALUE
+             'Signature'                                    LENGTH 17,
+             lc_cert_name   TYPE c    VALUE
+             'Certificate name'                             LENGTH 17,
+             lc_issuer_name TYPE c    VALUE
+             'Issuer name'                                  LENGTH 17,
+             lc_from_date   TYPE c    VALUE
+             'Valid from date'                              LENGTH 17,
+             lc_from_time   TYPE c    VALUE
+             'Valid from time'                              LENGTH 15,
+             lc_to_date     TYPE c    VALUE
+             'Valid to date'                                LENGTH 15,
+             lc_to_time     TYPE c    VALUE
+             'Valid to time'                                LENGTH 15,
+             lc_key         TYPE c    VALUE
+             'Key strength'                                 LENGTH 15,
+             lc_signalg     TYPE c    VALUE
+             'Signature algorithm'                          LENGTH 20,
+             lc_ssls_node   TYPE c    VALUE
+             'SSL server Standard'                          LENGTH 30,
+             lc_title       TYPE c    VALUE
+             'List of own certificates for PSEs'            LENGTH 60,
+             lc_title1      TYPE c    VALUE
+             'List of certificates for PSEs'                LENGTH 50,
+             lc_msg         TYPE c    VALUE
+             'No PSEs created in the system'                LENGTH 50,
+             lc_msg1        TYPE c    VALUE
+           'No additional certificates present for any PSE' LENGTH 100,
+             lc_incout      TYPE c    VALUE
+             'Incorrect input'                              LENGTH 15,
+* Begin of changes V001
+             lc_status      TYPE c    VALUE 'Status'        LENGTH 6.
+* End of changes V001
+
+
+  TYPES: BEGIN OF lty_owncert,
+           pse_name    TYPE strustappltxt,
+           status      TYPE string,          "+V001
+           instance    TYPE msxxlist_v6-name,
+           sign        TYPE string,
+           cert_name   TYPE ssf_pse_h-id,
+           issuer      TYPE certattrs-subject,
+           date_from   TYPE datum,
+           time_from   TYPE uzeit,
+           date_to     TYPE datum,
+           time_to     TYPE uzeit,
+           keystrength TYPE string,
+           sigalg      TYPE string,
+           own_cert    TYPE xstring,
+         END OF lty_owncert,
+
+         BEGIN OF lty_certlist,
+           pse_name    TYPE strustappltxt,
+           cert_name   TYPE certattrs-subject,
+           date_from   TYPE datum,
+           time_from   TYPE uzeit,
+           date_to     TYPE datum,
+           time_to     TYPE uzeit,
+           keystrength TYPE string,
+           sigalg      TYPE string,
+           cert_list   TYPE xstring,
+         END OF lty_certlist,
+
+         BEGIN OF lty_ssls_cert,
+           pse_name    TYPE strustappltxt,
+           status      TYPE string,          "+V001
+           instance    TYPE msxxlist_v6-name,
+           sign        TYPE string,
+           cert_name   TYPE ssf_pse_h-id,
+           issuer      TYPE certattrs-subject,
+           date_from   TYPE datum,
+           time_from   TYPE uzeit,
+           date_to     TYPE datum,
+           time_to     TYPE uzeit,
+           keystrength TYPE string,
+           sigalg      TYPE string,
+           own_cert    TYPE xstring,
+         END OF lty_ssls_cert,
+
+         lty_cwa(lc_len) TYPE c,
+
+* Begin of changes V001
+         BEGIN OF lty_pse,
+           context TYPE psecontext,
+           applic  TYPE ssfargs-applic,
+           psename TYPE ssfpsename,
+           psetext TYPE strustappltxt,
+         END OF lty_pse,
+
+         BEGIN OF lty_final,
+           psetext  TYPE strustappltxt,
+           instance TYPE msxxlist_v6-name,
+           status   TYPE string,
+         END OF lty_final,
+
+         BEGIN OF lty_final1,
+           psetext  TYPE strustappltxt,
+           status   TYPE string,
+         END OF lty_final1.
+* End of changes V001
+
+  DATA: ls_input              TYPE tab512,
+        ls_output             TYPE tab512,
+        lv_action             TYPE char8,
+        lt_owncert            TYPE STANDARD TABLE OF lty_owncert,
+        ls_owncert            TYPE lty_owncert,
+        lt_certlist           TYPE STANDARD TABLE OF lty_certlist,
+        ls_certlist           TYPE lty_certlist,
+        lt_ssls_cert          TYPE STANDARD TABLE OF lty_ssls_cert,
+        ls_ssls_cert          TYPE lty_ssls_cert,
+        lo_certificate_export TYPE REF TO lcl_certificate_export,
+        lo_not_found          TYPE REF TO cx_sy_itab_line_not_found,
+        lt_ctab               TYPE TABLE OF lty_cwa,
+        ls_certb64            TYPE string,
+        lv_rest               TYPE i,
+        lv_offset             TYPE i,
+* Begin of changes V001
+        lt_pse                TYPE STANDARD TABLE OF lty_pse,
+        ls_pse                TYPE lty_pse,
+        lt_imsxxlist          TYPE STANDARD TABLE OF msxxlist_v6,
+        ls_imsxxlist          TYPE msxxlist_v6,
+        lt_server             TYPE msxxlist_t,
+        ls_server             TYPE msxxlist,
+        lo_strust_sapcontrol  TYPE REF TO object,
+        lv_standalone         TYPE x VALUE '01',
+        lv_crc                TYPE ssfparms-ssfcrc,
+        lv_psemode_act        TYPE ssfpsemode,
+        lv_psemode_req        TYPE ssfpsemode,
+        lv_errortext          TYPE string,
+        lt_final              TYPE STANDARD TABLE OF lty_final,
+        ls_final              TYPE lty_final,
+        lt_final1             TYPE STANDARD TABLE OF lty_final1,
+        ls_final1             TYPE lty_final1,
+        lv_status             TYPE string.
+* End of changes V001
+
+  FIELD-SYMBOLS: <data_tab>  TYPE table.
+
+  CLEAR: ls_input,
+        lv_action.
+
+  ls_output = lc_title.
+  APPEND ls_output TO lt_ctab.
+  CLEAR: ls_output.
+
+  " Read input values from Python
+  TRY.
+      ls_input = lt_input[ 1 ].
+      lv_action = ls_input.
+
+    CATCH cx_sy_itab_line_not_found INTO lo_not_found.
+      DATA(lv_error) = lo_not_found->get_text( ).
+      CLEAR: ls_output.
+      ls_output = lv_error.
+      APPEND ls_output TO lt_output.
+      RETURN.
+
+  ENDTRY.
+
+
+  CASE lv_action.
+
+    WHEN lc_act_exp. "EXPORT
+
+* Under the pre-migration activities, the certificates
+* related to PSE created in the system is exported to
+* Python.
+
+      " Get SSL server identity
+      SELECT applic
+        FROM strustssls
+        INTO TABLE @DATA(lt_strustssls).
+      IF sy-subrc EQ 0.
+        SORT: lt_strustssls BY applic.
+      ENDIF.
+
+      " Get SSL client identity
+      SELECT applic
+        FROM strustssl
+        INTO TABLE @DATA(lt_strustssl).
+      IF sy-subrc EQ 0.
+        SORT: lt_strustssl BY applic.
+      ENDIF.
+
+      "Get WS security identity
+      SELECT applic
+        FROM strustwsse
+        INTO TABLE @DATA(lt_strustwsse).
+      IF sy-subrc EQ 0.
+        SORT: lt_strustwsse BY applic.
+      ENDIF.
+
+      "Get SMIME identities
+      SELECT applic
+        FROM strustsmim
+        INTO TABLE @DATA(lt_strustsmim).
+      IF sy-subrc EQ 0.
+        SORT: lt_strustsmim BY applic.
+      ENDIF.
+
+      "Get Application-Dependent Parameters for
+      "SSF Functions (SSFG)
+      SELECT applic
+        FROM ssfargs
+        INTO TABLE @DATA(lt_ssfargs).
+      IF sy-subrc EQ 0.
+        SORT: lt_ssfargs BY applic.
+      ENDIF.
+
+      "Get SSF application key verions
+      SELECT applic
+        FROM ssfvkeydef
+        INTO TABLE @DATA(lt_ssfvkeydef).
+      IF sy-subrc EQ 0.
+        SORT: lt_ssfvkeydef BY applic.
+      ENDIF.
+
+      "Get the ID for all nodes
+      SELECT *
+        FROM ssf_pse_h
+        INTO TABLE @DATA(lt_pse_h).
+      IF sy-subrc EQ 0.
+        SORT: lt_pse_h BY name.
+      ENDIF.
+
+***Instantiating a class object
+      CREATE OBJECT lo_certificate_export.
+
+      FREE: lt_owncert[],
+            lt_certlist[].
+
+*** Read the system PSE descriptions
+      CALL METHOD lo_certificate_export->read_sys_certificates
+        EXPORTING
+          iv_context  = 'PROG'
+          iv_applic   = '<SYST>'
+          it_pse_h    = lt_pse_h
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+      CALL METHOD lo_certificate_export->read_sys_certificates
+        EXPORTING
+          iv_context  = 'PROG'
+          iv_applic   = '<SNCS>'
+          it_pse_h    = lt_pse_h
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+
+**** Read various PSE descriptions for SSLS
+      FREE: lt_ssls_cert[].
+      CALL METHOD lo_certificate_export->read_ssls_certificates
+        EXPORTING
+          iv_context   = 'SSLS'
+          it_pse_h     = lt_pse_h
+          it_strust    = lt_strustssls
+        IMPORTING
+          it_owncert   = lt_owncert
+          it_certlist  = lt_certlist
+          it_ssls_cert = lt_ssls_cert.
+
+
+*** Read various PSE descriptions for SSLC
+      CALL METHOD lo_certificate_export->read_certificates
+        EXPORTING
+          iv_context  = 'SSLC'
+          it_pse_h    = lt_pse_h
+          it_strust   = lt_strustssl
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+*** Read various PSE descriptions for WSSE
+
+      CALL METHOD lo_certificate_export->read_certificates
+        EXPORTING
+          iv_context  = 'WSSE'
+          it_pse_h    = lt_pse_h
+          it_strust   = lt_strustwsse
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+
+*** Read various PSE descriptions for SMIM
+      CALL METHOD lo_certificate_export->read_certificates
+        EXPORTING
+          iv_context  = 'SMIM'
+          it_pse_h    = lt_pse_h
+          it_strust   = lt_strustsmim
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+
+*** Read various PSE descriptions for SSFA
+      CALL METHOD lo_certificate_export->read_certificates
+        EXPORTING
+          iv_context  = 'SSFA'
+          it_pse_h    = lt_pse_h
+          it_strust   = lt_ssfargs
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+
+*** Read various PSE descriptions for SSFV
+      CALL METHOD lo_certificate_export->read_certificates
+        EXPORTING
+          iv_context  = 'SSFV'
+          it_pse_h    = lt_pse_h
+          it_strust   = lt_ssfvkeydef
+        IMPORTING
+          it_owncert  = lt_owncert
+          it_certlist = lt_certlist.
+
+
+      " Pass all the own certificates for PSEs
+      IF lt_owncert[] IS NOT INITIAL.
+
+        CLEAR: ls_output.
+        CONCATENATE lc_pse_name    lc_sep
+                    lc_instance    lc_sep
+                    lc_sign        lc_sep
+                    lc_cert_name   lc_sep
+                    lc_issuer_name lc_sep
+                    lc_from_date   lc_sep
+                    lc_from_time   lc_sep
+                    lc_to_date     lc_sep
+                    lc_to_time     lc_sep
+                    lc_key         lc_sep
+                    lc_signalg   INTO ls_output.
+        APPEND ls_output TO lt_ctab.
+
+        CLEAR: ls_owncert.
+        LOOP AT lt_owncert INTO ls_owncert.
+
+          " SSL server Standard
+          IF ls_owncert-pse_name EQ lc_ssls_node.
+
+            IF lt_ssls_cert[] IS NOT INITIAL.
+
+              CLEAR: ls_ssls_cert.
+              LOOP AT lt_ssls_cert INTO ls_ssls_cert.
+
+                IF ls_ssls_cert-date_from IS NOT INITIAL.
+                  CONCATENATE ls_ssls_cert-date_from+6(2) '.'
+                              ls_ssls_cert-date_from+4(2) '.'
+                              ls_ssls_cert-date_from+0(4)
+                              INTO DATA(lv_date_from).
+                ELSE.
+                  lv_date_from = 'Nodate'.
+                ENDIF.
+
+                IF ls_ssls_cert-date_to IS NOT INITIAL.
+                  CONCATENATE ls_ssls_cert-date_to+6(2) '.'
+                              ls_ssls_cert-date_to+4(2) '.'
+                              ls_ssls_cert-date_to+0(4)
+                              INTO DATA(lv_date_to).
+                ELSE.
+                  lv_date_to = 'Nodate'.
+                ENDIF.
+
+                IF ls_ssls_cert-time_from IS NOT INITIAL.
+                  CONCATENATE ls_ssls_cert-time_from+0(2) ':'
+                              ls_ssls_cert-time_from+2(2) ':'
+                              ls_ssls_cert-time_from+4(2)
+                              INTO DATA(lv_time_from).
+                ELSE.
+                  lv_time_from = 'Notime'.
+                ENDIF.
+
+                IF ls_ssls_cert-time_to IS NOT INITIAL.
+                  CONCATENATE ls_ssls_cert-time_to+0(2) ':'
+                              ls_ssls_cert-time_to+2(2) ':'
+                              ls_ssls_cert-time_to+4(2)
+                              INTO DATA(lv_time_to).
+                ELSE.
+                  lv_time_to = 'Notime'.
+                ENDIF.
+
+                IF ls_ssls_cert-sigalg IS INITIAL.
+                  ls_ssls_cert-sigalg = 'NULL'.
+                ENDIF.
+
+                CONCATENATE ls_ssls_cert-pse_name    lc_sep
+                            ls_ssls_cert-instance    lc_sep
+                            ls_ssls_cert-sign        lc_sep
+                            ls_ssls_cert-cert_name   lc_sep
+                            ls_ssls_cert-issuer      lc_sep
+                            lv_date_from             lc_sep
+                            lv_time_from             lc_sep
+                            lv_date_to               lc_sep
+                            lv_time_to               lc_sep
+                            ls_ssls_cert-keystrength lc_sep
+                            ls_ssls_cert-sigalg INTO ls_output.
+
+                APPEND ls_output TO lt_ctab.
+
+                CALL FUNCTION 'SSFC_BASE64_ENCODE'
+                  EXPORTING
+                    bindata                  = ls_ssls_cert-own_cert
+                  IMPORTING
+                    b64data                  = ls_certb64
+                  EXCEPTIONS
+                    ssf_krn_error            = 1
+                    ssf_krn_noop             = 2
+                    ssf_krn_nomemory         = 3
+                    ssf_krn_opinv            = 4
+                    ssf_krn_input_data_error = 5
+                    ssf_krn_invalid_par      = 6
+                    ssf_krn_invalid_parlen   = 7
+                    OTHERS                   = 8.
+                IF sy-subrc EQ 0.
+
+                  lv_rest = strlen( ls_certb64 ). "fileleng = 0
+
+                  APPEND '-----BEGIN CERTIFICATE-----' TO lt_ctab.
+
+                  WHILE lv_rest > 0.
+                    APPEND ls_certb64+lv_offset TO lt_ctab.
+                    ADD lc_len TO lv_offset.
+                    SUBTRACT lc_len FROM lv_rest.
+                  ENDWHILE.
+
+                  APPEND '-----END CERTIFICATE-----' TO lt_ctab.
+
+                  ASSIGN lt_ctab TO <data_tab>.
+
+                  lt_output[] = <data_tab>.
+
+                ENDIF.
+                CLEAR: lv_rest,lv_offset.
+                CLEAR: ls_ssls_cert,lv_date_from,ls_output,
+                       lv_time_from, lv_date_to, lv_time_to.
+              ENDLOOP.
+
+            ENDIF.
+          ENDIF.
+
+          IF ls_owncert-date_from IS NOT INITIAL.
+            CONCATENATE ls_owncert-date_from+6(2) '.'
+                        ls_owncert-date_from+4(2) '.'
+                        ls_owncert-date_from+0(4)
+                        INTO lv_date_from.
+          ELSE.
+            lv_date_from = 'Nodate'.
+          ENDIF.
+
+          IF ls_owncert-date_to IS NOT INITIAL.
+            CONCATENATE ls_owncert-date_to+6(2) '.'
+                        ls_owncert-date_to+4(2) '.'
+                        ls_owncert-date_to+0(4)
+                        INTO lv_date_to.
+          ELSE.
+            lv_date_to = 'Nodate'.
+          ENDIF.
+
+          IF ls_owncert-time_from IS NOT INITIAL.
+            CONCATENATE ls_owncert-time_from+0(2) ':'
+                        ls_owncert-time_from+2(2) ':'
+                        ls_owncert-time_from+4(2)
+                        INTO lv_time_from.
+          ELSE.
+            lv_time_from = 'Notime'.
+          ENDIF.
+
+          IF ls_owncert-time_to IS NOT INITIAL.
+            CONCATENATE ls_owncert-time_to+0(2) ':'
+                        ls_owncert-time_to+2(2) ':'
+                        ls_owncert-time_to+4(2)
+                        INTO lv_time_to.
+          ELSE.
+            lv_time_to = 'Notime'.
+          ENDIF.
+
+          IF ls_owncert-sigalg IS INITIAL.
+            ls_owncert-sigalg = 'NULL'.
+          ENDIF.
+
+          CONCATENATE ls_owncert-pse_name    lc_sep
+                      ls_owncert-instance    lc_sep
+                      ls_owncert-sign        lc_sep
+                      ls_owncert-cert_name   lc_sep
+                      ls_owncert-issuer      lc_sep
+                      lv_date_from           lc_sep
+                      lv_time_from           lc_sep
+                      lv_date_to             lc_sep
+                      lv_time_to             lc_sep
+                      ls_owncert-keystrength lc_sep
+                      ls_owncert-sigalg INTO ls_output.
+
+          APPEND ls_output TO lt_ctab.
+
+          CALL FUNCTION 'SSFC_BASE64_ENCODE'
+            EXPORTING
+              bindata                  = ls_owncert-own_cert
+            IMPORTING
+              b64data                  = ls_certb64
+            EXCEPTIONS
+              ssf_krn_error            = 1
+              ssf_krn_noop             = 2
+              ssf_krn_nomemory         = 3
+              ssf_krn_opinv            = 4
+              ssf_krn_input_data_error = 5
+              ssf_krn_invalid_par      = 6
+              ssf_krn_invalid_parlen   = 7
+              OTHERS                   = 8.
+          IF sy-subrc EQ 0.
+
+            lv_rest = strlen( ls_certb64 ). "fileleng = 0
+
+            APPEND '-----BEGIN CERTIFICATE-----' TO lt_ctab.
+
+            WHILE lv_rest > 0.
+              APPEND ls_certb64+lv_offset TO lt_ctab.
+              ADD lc_len TO lv_offset.
+              SUBTRACT lc_len FROM lv_rest.
+            ENDWHILE.
+
+            APPEND '-----END CERTIFICATE-----' TO lt_ctab.
+
+            ASSIGN lt_ctab TO <data_tab>.
+
+            lt_output[] = <data_tab>.
+
+          ENDIF.
+
+          CLEAR: lv_rest,lv_offset.
+          CLEAR: ls_owncert,lv_date_from,
+                 lv_time_from, lv_date_to, lv_time_to.
+        ENDLOOP.
+
+      ELSE.
+
+        CLEAR: ls_output.
+        ls_output = lc_msg.
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+
+      " Pass if any additional certificates for PSEs
+      IF lt_certlist IS NOT INITIAL.
+
+        CLEAR: ls_output.
+        ls_output = ' '.
+        APPEND ls_output TO lt_ctab.
+
+        CLEAR: ls_output.
+        ls_output = lc_title1.
+        APPEND ls_output TO lt_ctab.
+
+        CLEAR: ls_output.
+        CONCATENATE lc_pse_name   lc_sep
+                    lc_cert_name  lc_sep
+                    lc_from_date  lc_sep
+                    lc_from_time  lc_sep
+                    lc_to_date    lc_sep
+                    lc_to_time    lc_sep
+                    lc_key        lc_sep
+                    lc_signalg INTO ls_output.
+        APPEND ls_output TO lt_ctab.
+
+        CLEAR: ls_certlist,lv_date_from,
+               lv_time_from, lv_date_to, lv_time_to.
+        LOOP AT lt_certlist INTO ls_certlist.
+
+          IF ls_certlist-date_from IS NOT INITIAL.
+            CONCATENATE ls_certlist-date_from+6(2) '.'
+                        ls_certlist-date_from+4(2) '.'
+                        ls_certlist-date_from+0(4)
+                        INTO lv_date_from.
+          ELSE.
+            lv_date_from = 'Nodate'.
+          ENDIF.
+
+          IF ls_certlist-date_to IS NOT INITIAL.
+            CONCATENATE ls_certlist-date_to+6(2) '.'
+                        ls_certlist-date_to+4(2) '.'
+                        ls_certlist-date_to+0(4)
+                        INTO lv_date_to.
+          ELSE.
+            lv_date_to = 'Nodate'.
+          ENDIF.
+
+          IF ls_certlist-time_from IS NOT INITIAL.
+            CONCATENATE ls_certlist-time_from+0(2) ':'
+                        ls_certlist-time_from+2(2) ':'
+                        ls_certlist-time_from+4(2)
+                        INTO lv_time_from.
+          ELSE.
+            lv_time_from = 'Notime'.
+          ENDIF.
+
+          IF ls_certlist-time_to IS NOT INITIAL.
+            CONCATENATE ls_certlist-time_to+0(2) ':'
+                        ls_certlist-time_to+2(2) ':'
+                        ls_certlist-time_to+4(2)
+                        INTO lv_time_to.
+          ELSE.
+            lv_time_to = 'Notime'.
+          ENDIF.
+
+          IF ls_certlist-sigalg IS INITIAL.
+            ls_certlist-sigalg = 'NULL'.
+          ENDIF.
+
+          CONCATENATE ls_certlist-pse_name    lc_sep
+                      ls_certlist-cert_name   lc_sep
+                      lv_date_from            lc_sep
+                      lv_time_from            lc_sep
+                      lv_date_to              lc_sep
+                      lv_time_to              lc_sep
+                      ls_certlist-keystrength lc_sep
+                      ls_certlist-sigalg INTO ls_output.
+
+          APPEND ls_output TO lt_ctab.
+
+          CALL FUNCTION 'SSFC_BASE64_ENCODE'
+            EXPORTING
+              bindata                  = ls_certlist-cert_list
+            IMPORTING
+              b64data                  = ls_certb64
+            EXCEPTIONS
+              ssf_krn_error            = 1
+              ssf_krn_noop             = 2
+              ssf_krn_nomemory         = 3
+              ssf_krn_opinv            = 4
+              ssf_krn_input_data_error = 5
+              ssf_krn_invalid_par      = 6
+              ssf_krn_invalid_parlen   = 7
+              OTHERS                   = 8.
+          IF sy-subrc EQ 0.
+
+            lv_rest = strlen( ls_certb64 ). "fileleng = 0
+
+            APPEND '-----BEGIN CERTIFICATE-----' TO lt_ctab.
+
+            WHILE lv_rest > 0.
+              APPEND ls_certb64+lv_offset TO lt_ctab.
+              ADD lc_len TO lv_offset.
+              SUBTRACT lc_len FROM lv_rest.
+            ENDWHILE.
+
+            APPEND '-----END CERTIFICATE-----' TO lt_ctab.
+
+            ASSIGN lt_ctab TO <data_tab>.
+
+            lt_output[] = <data_tab>.
+
+          ENDIF.
+
+          CLEAR: lv_rest,lv_offset.
+          CLEAR: ls_certlist,lv_date_from,
+                 lv_time_from, lv_date_to, lv_time_to.
+        ENDLOOP.
+
+      ELSE.
+
+        CLEAR: ls_output.
+        ls_output = ' '.
+        APPEND ls_output TO lt_output.
+
+        CLEAR: ls_output.
+        ls_output = lc_title1.
+        APPEND ls_output TO lt_output.
+
+        CLEAR: ls_output.
+        ls_output = lc_msg1.
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+
+      "Adding NULL values in between
+      DO.
+         REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+         IN TABLE lt_output WITH '|NULL|'.
+         FIND '||' IN TABLE lt_output.
+         IF sy-subrc <> 0.
+           EXIT .
+         ENDIF.
+      ENDDO.
+
+    WHEN OTHERS.
+
+      " Incorrect Input
+      ls_output = lc_incout.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+      RETURN.
+
+  ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Class (Implementation) lcl_certificate_export
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+CLASS lcl_certificate_export IMPLEMENTATION.
+
+  METHOD read_sys_certificates.
+
+    CONSTANTS: lc_signed     TYPE c    VALUE
+               'Self-Signed'                             LENGTH 15,
+               lc_na         TYPE c    VALUE 'NA'        LENGTH 2,
+               lc_issuer     TYPE c    VALUE 'Issuer'    LENGTH 7.
+
+    TYPES: BEGIN OF lty_owncert,
+             pse_name    TYPE strustappltxt,
+             status      TYPE string,            "+V001
+             instance    TYPE msxxlist_v6-name,
+             sign        TYPE string,
+             cert_name   TYPE ssf_pse_h-id,
+             issuer      TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             own_cert    TYPE xstring,
+           END OF lty_owncert,
+
+           BEGIN OF lty_certlist,
+             pse_name    TYPE strustappltxt,
+             cert_name   TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             cert_list   TYPE xstring,
+           END OF lty_certlist.
+
+    DATA:
+      lv_psetext     TYPE strustappltxt,
+      lv_psename     TYPE ssfpsename,
+      lv_own_cert    TYPE xstring,
+      lv_id          TYPE ssf_pse_h-id,
+      lv_subject     TYPE certattrs-subject,
+      lv_issuer      TYPE certattrs-subject,
+      lt_pklist      TYPE ssfbintab,
+      ls_pklist      TYPE xstring,
+      lv_validfrom   TYPE string,
+      lv_validto     TYPE string,
+      lr_certificate TYPE REF TO cl_abap_x509_certificate,
+      lv_alg         TYPE string,
+      lv_sigalg      TYPE string,
+      lv_keystrength TYPE string,
+      ls_pse_h       TYPE ssf_pse_h,
+      ls_owncert     TYPE lty_owncert,
+      ls_certlist    TYPE lty_certlist.
+
+    " Read the pse name and pse text
+    CLEAR: lv_psetext,lv_own_cert,lv_psename.
+    CALL FUNCTION 'SSFPSE_FILENAME'
+      EXPORTING
+        context       = iv_context
+        applic        = iv_applic
+      IMPORTING
+        psetext       = lv_psetext
+        psename       = lv_psename
+      EXCEPTIONS
+        pse_not_found = 1
+        OTHERS        = 2.
+    IF sy-subrc EQ 0.
+      " Get the certificates related to PSEs
+      CALL FUNCTION 'SSFP_GET_PSEINFO'
+        EXPORTING
+          context           = iv_context
+          applic            = iv_applic
+        IMPORTING
+          certificate       = lv_own_cert
+          certificatelist   = lt_pklist
+        EXCEPTIONS
+          ssf_no_ssflib     = 1
+          ssf_krn_error     = 2
+          ssf_invalid_par   = 3
+          ssf_unknown_error = 4
+          OTHERS            = 5.
+      IF sy-subrc EQ 0.
+        " Read the own certificate name
+        CLEAR: ls_pse_h,lv_id.
+        TRY.
+            ls_pse_h = it_pse_h[ filename = lv_psename ].
+
+          CATCH cx_sy_itab_line_not_found.
+        ENDTRY.
+
+        lv_id = ls_pse_h-id.
+
+
+        " Parse the certificate to read details
+        CLEAR: lv_subject,lv_issuer,lv_validfrom,
+               lv_validto.
+        CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+          EXPORTING
+            certificate         = lv_own_cert
+          IMPORTING
+            subject             = lv_subject
+            issuer              = lv_issuer
+            validfrom           = lv_validfrom
+            validto             = lv_validto
+            keylength           = lv_keystrength
+          EXCEPTIONS
+            ssf_krn_error       = 1
+            ssf_krn_nomemory    = 2
+            ssf_krn_nossflib    = 3
+            ssf_krn_invalid_par = 4
+            OTHERS              = 5.
+
+        CLEAR: lv_alg,lv_sigalg.
+        TRY.
+            lr_certificate =
+            cl_abap_x509_certificate=>get_instance( lv_own_cert ).
+             DATA(lv_sigalg_oid)
+             = lr_certificate->get_signature_alg_oid( ).
+
+             PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                             CHANGING lv_sigalg.
+             IF lv_sigalg IS NOT INITIAL.
+               lv_alg = lv_sigalg.
+             ENDIF.
+          CATCH cx_abap_x509_certificate.
+        ENDTRY.
+
+        IF lv_subject EQ lv_issuer.
+
+          CLEAR: ls_owncert.
+          ls_owncert-sign        = lc_signed.
+          ls_owncert-pse_name    = lv_psetext.
+          ls_owncert-instance    = lc_na.
+          ls_owncert-cert_name   = lv_id.
+          ls_owncert-issuer      = lc_na.
+          IF lv_validfrom IS NOT INITIAL.
+            ls_owncert-date_from = lv_validfrom(8).
+            ls_owncert-time_from = lv_validfrom+8(6).
+          ENDIF.
+          IF lv_validto IS NOT INITIAL.
+            ls_owncert-date_to   = lv_validto(8).
+            ls_owncert-time_to   = lv_validto+8(6).
+          ENDIF.
+          ls_owncert-keystrength = lv_keystrength.
+          ls_owncert-sigalg      = lv_alg.
+          ls_owncert-own_cert    = lv_own_cert.
+          APPEND ls_owncert TO it_owncert.
+
+        ELSE.
+
+          CLEAR: ls_owncert.
+          ls_owncert-sign        = lc_issuer.
+          ls_owncert-pse_name    = lv_psetext.
+          ls_owncert-instance    = lc_na.
+          ls_owncert-cert_name   = lv_id.
+          ls_owncert-issuer      = lv_issuer.
+          IF lv_validfrom IS NOT INITIAL.
+            ls_owncert-date_from = lv_validfrom(8).
+            ls_owncert-time_from = lv_validfrom+8(6).
+          ENDIF.
+          IF lv_validto IS NOT INITIAL.
+            ls_owncert-date_to   = lv_validto(8).
+            ls_owncert-time_to   = lv_validto+8(6).
+          ENDIF.
+          ls_owncert-keystrength = lv_keystrength.
+          ls_owncert-sigalg      = lv_alg.
+          ls_owncert-own_cert    = lv_own_cert.
+          APPEND ls_owncert TO it_owncert.
+
+        ENDIF.
+
+        IF lt_pklist[] IS NOT INITIAL.
+          CLEAR: ls_pklist,ls_certlist,lv_subject.
+          LOOP AT lt_pklist INTO ls_pklist.
+            " Read the certificate name
+            CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+              EXPORTING
+                certificate         = ls_pklist
+              IMPORTING
+                subject             = lv_subject
+                issuer              = lv_issuer
+                validfrom           = lv_validfrom
+                validto             = lv_validto
+                keylength           = lv_keystrength
+              EXCEPTIONS
+                ssf_krn_error       = 1
+                ssf_krn_nomemory    = 2
+                ssf_krn_nossflib    = 3
+                ssf_krn_invalid_par = 4
+                OTHERS              = 5.
+            IF sy-subrc EQ 0.
+              CLEAR: ls_certlist.
+              ls_certlist-cert_name = lv_subject.
+            ELSE.
+              CLEAR: ls_certlist.
+              ls_certlist-cert_name = lv_subject.
+            ENDIF.
+
+            CLEAR: lv_alg,lv_sigalg.
+            TRY.
+                lr_certificate =
+              cl_abap_x509_certificate=>get_instance( ls_pklist ).
+                lv_sigalg_oid
+                = lr_certificate->get_signature_alg_oid( ).
+
+                PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                                CHANGING lv_sigalg.
+                IF lv_sigalg IS NOT INITIAL.
+                  lv_alg = lv_sigalg.
+                ENDIF.
+              CATCH cx_abap_x509_certificate.
+            ENDTRY.
+
+            ls_certlist-pse_name    = lv_psetext.
+            IF lv_validfrom IS NOT INITIAL.
+              ls_certlist-date_from = lv_validfrom(8).
+              ls_certlist-time_from = lv_validfrom+8(6).
+            ENDIF.
+            IF lv_validto IS NOT INITIAL.
+              ls_certlist-date_to   = lv_validto(8).
+              ls_certlist-time_to   = lv_validto+8(6).
+            ENDIF.
+            ls_certlist-keystrength = lv_keystrength.
+            ls_certlist-sigalg      = lv_alg.
+            ls_certlist-cert_list   = ls_pklist.
+            APPEND ls_certlist TO it_certlist.
+            CLEAR: ls_pklist,ls_certlist,lv_subject.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD read_certificates.
+
+    CONSTANTS: lc_signed     TYPE c    VALUE
+               'Self-Signed'                             LENGTH 15,
+               lc_na         TYPE c    VALUE 'NA'        LENGTH 2,
+               lc_issuer     TYPE c    VALUE 'Issuer'    LENGTH 7.
+
+    TYPES: BEGIN OF lty_owncert,
+             pse_name    TYPE strustappltxt,
+             status      TYPE string,               "+V001
+             instance    TYPE msxxlist_v6-name,
+             sign        TYPE string,
+             cert_name   TYPE ssf_pse_h-id,
+             issuer      TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             own_cert    TYPE xstring,
+           END OF lty_owncert,
+
+           BEGIN OF lty_certlist,
+             pse_name    TYPE strustappltxt,
+             cert_name   TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             cert_list   TYPE xstring,
+           END OF lty_certlist.
+
+    DATA:
+      lv_psetext     TYPE strustappltxt,
+      lv_psename     TYPE ssfpsename,
+      lv_own_cert    TYPE xstring,
+      lv_id          TYPE ssf_pse_h-id,
+      lv_subject     TYPE certattrs-subject,
+      lv_issuer      TYPE certattrs-subject,
+      lt_pklist      TYPE ssfbintab,
+      ls_pklist      TYPE xstring,
+      lv_validfrom   TYPE string,
+      lv_validto     TYPE string,
+      lr_certificate TYPE REF TO cl_abap_x509_certificate,
+      lv_alg         TYPE string,
+      lv_sigalg      TYPE string,
+      lv_keystrength TYPE string,
+      ls_pse_h       TYPE ssf_pse_h,
+      ls_owncert     TYPE lty_owncert,
+      ls_certlist    TYPE lty_certlist.
+
+    LOOP AT it_strust INTO DATA(ls_strust).
+      " Read the pse name and pse text
+      CLEAR: lv_psetext,lv_own_cert,lv_psename.
+      CALL FUNCTION 'SSFPSE_FILENAME'
+        EXPORTING
+          context       = iv_context
+          applic        = ls_strust-applic
+        IMPORTING
+          psetext       = lv_psetext
+          psename       = lv_psename
+        EXCEPTIONS
+          pse_not_found = 1
+          OTHERS        = 2.
+      IF sy-subrc EQ 0.
+        " Get the certificates related to PSEs
+        CALL FUNCTION 'SSFP_GET_PSEINFO'
+          EXPORTING
+            context           = iv_context
+            applic            = ls_strust-applic
+          IMPORTING
+            certificate       = lv_own_cert
+            certificatelist   = lt_pklist
+          EXCEPTIONS
+            ssf_no_ssflib     = 1
+            ssf_krn_error     = 2
+            ssf_invalid_par   = 3
+            ssf_unknown_error = 4
+            OTHERS            = 5.
+        IF sy-subrc EQ 0.
+          " Read the own certificate name
+          CLEAR: ls_pse_h,lv_id.
+          TRY.
+              ls_pse_h = it_pse_h[ filename = lv_psename ].
+
+            CATCH cx_sy_itab_line_not_found.
+          ENDTRY.
+
+          lv_id = ls_pse_h-id.
+
+
+          " Parse the certificate to read details
+          CLEAR: lv_subject,lv_issuer,lv_validfrom,
+                 lv_validto.
+          CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+            EXPORTING
+              certificate         = lv_own_cert
+            IMPORTING
+              subject             = lv_subject
+              issuer              = lv_issuer
+              validfrom           = lv_validfrom
+              validto             = lv_validto
+              keylength           = lv_keystrength
+            EXCEPTIONS
+              ssf_krn_error       = 1
+              ssf_krn_nomemory    = 2
+              ssf_krn_nossflib    = 3
+              ssf_krn_invalid_par = 4
+              OTHERS              = 5.
+
+          CLEAR: lv_alg,lv_sigalg.
+          TRY.
+              lr_certificate =
+              cl_abap_x509_certificate=>get_instance( lv_own_cert ).
+              DATA(lv_sigalg_oid)
+              = lr_certificate->get_signature_alg_oid( ).
+
+              PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                              CHANGING lv_sigalg.
+              IF lv_sigalg IS NOT INITIAL.
+                lv_alg = lv_sigalg.
+              ENDIF.
+            CATCH cx_abap_x509_certificate.
+          ENDTRY.
+
+          IF lv_subject EQ lv_issuer.
+
+            CLEAR: ls_owncert.
+            ls_owncert-sign        = lc_signed.
+            ls_owncert-pse_name    = lv_psetext.
+            ls_owncert-instance    = lc_na.
+            ls_owncert-cert_name   = lv_id.
+            ls_owncert-issuer      = lc_na.
+            IF lv_validfrom IS NOT INITIAL.
+              ls_owncert-date_from = lv_validfrom(8).
+              ls_owncert-time_from = lv_validfrom+8(6).
+            ENDIF.
+            IF lv_validto IS NOT INITIAL.
+              ls_owncert-date_to   = lv_validto(8).
+              ls_owncert-time_to   = lv_validto+8(6).
+            ENDIF.
+            ls_owncert-keystrength = lv_keystrength.
+            ls_owncert-sigalg      = lv_alg.
+            ls_owncert-own_cert    = lv_own_cert.
+            APPEND ls_owncert TO it_owncert.
+
+          ELSE.
+
+            CLEAR: ls_owncert.
+            ls_owncert-sign        = lc_issuer.
+            ls_owncert-pse_name    = lv_psetext.
+            ls_owncert-instance    = lc_na.
+            ls_owncert-cert_name   = lv_id.
+            ls_owncert-issuer      = lv_issuer.
+            IF lv_validfrom IS NOT INITIAL.
+              ls_owncert-date_from = lv_validfrom(8).
+              ls_owncert-time_from = lv_validfrom+8(6).
+            ENDIF.
+            IF lv_validto IS NOT INITIAL.
+              ls_owncert-date_to   = lv_validto(8).
+              ls_owncert-time_to   = lv_validto+8(6).
+            ENDIF.
+            ls_owncert-keystrength = lv_keystrength.
+            ls_owncert-sigalg      = lv_alg.
+            ls_owncert-own_cert    = lv_own_cert.
+            APPEND ls_owncert TO it_owncert.
+
+          ENDIF.
+
+          IF lt_pklist[] IS NOT INITIAL.
+            CLEAR: ls_pklist,ls_certlist,lv_subject.
+            LOOP AT lt_pklist INTO ls_pklist.
+              " Read the certificate name
+              CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+                EXPORTING
+                  certificate         = ls_pklist
+                IMPORTING
+                  subject             = lv_subject
+                  issuer              = lv_issuer
+                  validfrom           = lv_validfrom
+                  validto             = lv_validto
+                  keylength           = lv_keystrength
+                EXCEPTIONS
+                  ssf_krn_error       = 1
+                  ssf_krn_nomemory    = 2
+                  ssf_krn_nossflib    = 3
+                  ssf_krn_invalid_par = 4
+                  OTHERS              = 5.
+              IF sy-subrc EQ 0.
+                CLEAR: ls_certlist.
+                ls_certlist-cert_name = lv_subject.
+              ELSE.
+                CLEAR: ls_certlist.
+                ls_certlist-cert_name = lv_subject.
+              ENDIF.
+
+              CLEAR: lv_alg,lv_sigalg.
+              TRY.
+                  lr_certificate =
+                cl_abap_x509_certificate=>get_instance( ls_pklist ).
+                  lv_sigalg_oid
+                  = lr_certificate->get_signature_alg_oid( ).
+
+                  PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                                  CHANGING lv_sigalg.
+                  IF lv_sigalg IS NOT INITIAL.
+                    lv_alg = lv_sigalg.
+                  ENDIF.
+                CATCH cx_abap_x509_certificate.
+              ENDTRY.
+
+              ls_certlist-pse_name    = lv_psetext.
+              IF lv_validfrom IS NOT INITIAL.
+                ls_certlist-date_from = lv_validfrom(8).
+                ls_certlist-time_from = lv_validfrom+8(6).
+              ENDIF.
+              IF lv_validto IS NOT INITIAL.
+                ls_certlist-date_to   = lv_validto(8).
+                ls_certlist-time_to   = lv_validto+8(6).
+              ENDIF.
+              ls_certlist-keystrength = lv_keystrength.
+              ls_certlist-sigalg      = lv_alg.
+              ls_certlist-cert_list   = ls_pklist.
+              APPEND ls_certlist TO it_certlist.
+              CLEAR: ls_pklist,ls_certlist,lv_subject.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      CLEAR: ls_strust.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD read_ssls_certificates.
+
+    CONSTANTS: lc_signed     TYPE c    VALUE
+               'Self-Signed'                             LENGTH 15,
+               lc_na         TYPE c    VALUE 'NA'        LENGTH 2,
+               lc_issuer     TYPE c    VALUE 'Issuer'    LENGTH 7.
+
+    TYPES: BEGIN OF lty_owncert,
+             pse_name    TYPE strustappltxt,
+             status      TYPE string,                "+V001
+             instance    TYPE msxxlist_v6-name,
+             sign        TYPE string,
+             cert_name   TYPE ssf_pse_h-id,
+             issuer      TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             own_cert    TYPE xstring,
+           END OF lty_owncert,
+
+           BEGIN OF lty_certlist,
+             pse_name    TYPE strustappltxt,
+             cert_name   TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             cert_list   TYPE xstring,
+           END OF lty_certlist,
+
+           BEGIN OF lty_ssls_cert,
+             pse_name    TYPE strustappltxt,
+             status      TYPE string,         "+V001
+             instance    TYPE msxxlist_v6-name,
+             sign        TYPE string,
+             cert_name   TYPE ssf_pse_h-id,
+             issuer      TYPE certattrs-subject,
+             date_from   TYPE datum,
+             time_from   TYPE uzeit,
+             date_to     TYPE datum,
+             time_to     TYPE uzeit,
+             keystrength TYPE string,
+             sigalg      TYPE string,
+             own_cert    TYPE xstring,
+           END OF lty_ssls_cert.
+
+    DATA:
+      lv_psetext           TYPE strustappltxt,
+      lv_psename           TYPE ssfpsename,
+      lv_own_cert          TYPE xstring,
+      lv_id                TYPE ssf_pse_h-id,
+      lv_subject           TYPE certattrs-subject,
+      lv_issuer            TYPE certattrs-subject,
+      lt_pklist            TYPE ssfbintab,
+      ls_pklist            TYPE xstring,
+      lt_imsxxlist         TYPE TABLE OF msxxlist_v6,
+      ls_imsxxlist         TYPE msxxlist_v6,
+      lv_pseblob           TYPE xstring,
+      lv_psepin            TYPE ssfpabpw,
+      lv_valid             TYPE abap_bool,
+      lv_xcert             TYPE xstring,
+      lo_mempse            TYPE REF TO cl_abap_pse,
+      lv_validfrom         TYPE string,
+      lv_validto           TYPE string,
+      lr_certificate       TYPE REF TO cl_abap_x509_certificate,
+      lv_len               TYPE i,
+      lv_server_host       TYPE ssf_pse_h-host,
+      ls_pse_h             TYPE ssf_pse_h,
+      ls_owncert           TYPE lty_owncert,
+      ls_certlist          TYPE lty_certlist,
+      ls_ssls_cert         TYPE lty_ssls_cert,
+      lv_alg               TYPE string,
+      lv_sigalg            TYPE string,
+      lv_keystrength       TYPE string,
+      lv_instanceid        TYPE numc2,
+      lt_psebin            TYPE STANDARD TABLE OF ssfbin,
+      ls_psebin            TYPE ssfbin.
+
+
+    LOOP AT it_strust INTO DATA(ls_strust).
+      CLEAR: lv_psetext,lv_own_cert,
+             lv_psename.
+      " Read the pse name and pse text
+      CALL FUNCTION 'SSFPSE_FILENAME'
+        EXPORTING
+          context       = iv_context
+          applic        = ls_strust-applic
+        IMPORTING
+          psetext       = lv_psetext
+          psename       = lv_psename
+        EXCEPTIONS
+          pse_not_found = 1
+          OTHERS        = 2.
+      IF sy-subrc EQ 0.
+        " Get the certificates related to PSEs
+        FREE: lt_pklist[].
+        CALL FUNCTION 'SSFP_GET_PSEINFO'
+          EXPORTING
+            context           = iv_context
+            applic            = ls_strust-applic
+          IMPORTING
+            certificate       = lv_own_cert
+            certificatelist   = lt_pklist
+          EXCEPTIONS
+            ssf_no_ssflib     = 1
+            ssf_krn_error     = 2
+            ssf_invalid_par   = 3
+            ssf_unknown_error = 4
+            OTHERS            = 5.
+        IF sy-subrc EQ 0.
+          " Read the own certificate name
+          CLEAR: ls_pse_h,lv_id.
+          TRY.
+              ls_pse_h = it_pse_h[ host = ' '
+                                   filename = lv_psename ].
+
+            CATCH cx_sy_itab_line_not_found.
+          ENDTRY.
+
+          lv_id = ls_pse_h-id.
+
+          IF ls_pse_h-type = 'LPSE'.
+            CLEAR: lv_pseblob.
+            SELECT SINGLE bindata
+              FROM  ssf_pse_t
+              INTO  lv_pseblob BYPASSING BUFFER
+              WHERE name = ls_pse_h-name.
+          ELSE. "pse_s-type = 'PSE'
+            CLEAR: ls_psebin.
+            SELECT bindata
+              FROM ssf_pse_d BYPASSING BUFFER
+              INTO ls_psebin-bindata
+              WHERE name = ls_pse_h-name
+              ORDER BY seqno.
+              APPEND ls_psebin TO lt_psebin.
+            ENDSELECT.
+
+            " Copy pse table to blob
+            CLEAR: lv_pseblob,ls_psebin.
+            LOOP AT lt_psebin INTO ls_psebin.
+              CONCATENATE lv_pseblob ls_psebin-bindata
+              INTO lv_pseblob IN BYTE MODE.
+            ENDLOOP.
+            IF ls_pse_h-datalen > 0.
+              lv_pseblob = lv_pseblob(ls_pse_h-datalen).
+            ENDIF.
+          ENDIF.
+
+          IF lv_pseblob IS NOT INITIAL.
+
+            TRY.
+                IF lo_mempse IS BOUND.
+                  lo_mempse->clean_up( ).
+                ENDIF.
+                CREATE OBJECT lo_mempse
+                  EXPORTING
+                    iv_pse    = lv_pseblob
+                    iv_pse_pw = lv_psepin.
+              CATCH cx_abap_pse .
+                CLEAR lo_mempse.
+            ENDTRY.
+
+            " Check if PSE can be accessed
+            TRY.
+                lv_valid = lo_mempse->is_valid( ).
+
+              CATCH cx_abap_pse.
+
+            ENDTRY.
+
+            " Parse own certificate
+            CLEAR: lv_xcert.
+            TRY.
+                CALL METHOD lo_mempse->get_own_certificate
+                  IMPORTING
+                    ev_own_cert = lv_xcert.
+              CATCH cx_abap_pse.
+            ENDTRY.
+
+            " Parse the certificate to read details
+            CLEAR: lv_validfrom,
+                   lv_validto,lv_subject,lv_issuer.
+            CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+              EXPORTING
+                certificate         = lv_xcert
+              IMPORTING
+                subject             = lv_subject
+                issuer              = lv_issuer
+                validfrom           = lv_validfrom
+                validto             = lv_validto
+                keylength           = lv_keystrength
+              EXCEPTIONS
+                ssf_krn_error       = 1
+                ssf_krn_nomemory    = 2
+                ssf_krn_nossflib    = 3
+                ssf_krn_invalid_par = 4
+                OTHERS              = 5.
+            CLEAR: lv_alg,lv_sigalg.
+            TRY.
+                lr_certificate =
+              cl_abap_x509_certificate=>get_instance( lv_xcert ).
+                DATA(lv_sigalg_oid)
+                  = lr_certificate->get_signature_alg_oid( ).
+
+                PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                                CHANGING lv_sigalg.
+                IF lv_sigalg IS NOT INITIAL.
+                  lv_alg = lv_sigalg.
+                ENDIF.
+              CATCH cx_abap_x509_certificate.
+            ENDTRY.
+
+            IF lv_subject EQ lv_issuer.
+
+              CLEAR: ls_owncert.
+              ls_owncert-sign        = lc_signed.
+              ls_owncert-pse_name    = lv_psetext.
+              ls_owncert-instance    = lc_na.
+              ls_owncert-cert_name   = lv_id.
+              ls_owncert-issuer      = lc_na.
+              IF lv_validfrom IS NOT INITIAL.
+                ls_owncert-date_from = lv_validfrom(8).
+                ls_owncert-time_from = lv_validfrom+8(6).
+              ENDIF.
+              IF lv_validto IS NOT INITIAL.
+                ls_owncert-date_to   = lv_validto(8).
+                ls_owncert-time_to   = lv_validto+8(6).
+              ENDIF.
+              ls_owncert-keystrength = lv_keystrength.
+              ls_owncert-sigalg      = lv_alg.
+              ls_owncert-own_cert    = lv_xcert.
+              APPEND ls_owncert TO it_owncert.
+
+            ELSE.
+
+              CLEAR: ls_owncert.
+              ls_owncert-sign        = lc_issuer.
+              ls_owncert-pse_name    = lv_psetext.
+              ls_owncert-instance    = lc_na.
+              ls_owncert-cert_name   = lv_id.
+              ls_owncert-issuer      = lv_issuer.
+              IF lv_validfrom IS NOT INITIAL.
+                ls_owncert-date_from = lv_validfrom(8).
+                ls_owncert-time_from = lv_validfrom+8(6).
+              ENDIF.
+              IF lv_validto IS NOT INITIAL.
+                ls_owncert-date_to   = lv_validto(8).
+                ls_owncert-time_to   = lv_validto+8(6).
+              ENDIF.
+              ls_owncert-keystrength = lv_keystrength.
+              ls_owncert-sigalg      = lv_alg.
+              ls_owncert-own_cert    = lv_xcert.
+              APPEND ls_owncert TO it_owncert.
+
+            ENDIF.
+          ENDIF.
+
+          IF lt_pklist[] IS NOT INITIAL.
+            CLEAR: ls_pklist,ls_certlist,lv_subject,
+                   lv_validfrom,lv_validto.
+            LOOP AT lt_pklist INTO ls_pklist.
+              " Read the certificate name and other details
+              CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+                EXPORTING
+                  certificate         = ls_pklist
+                IMPORTING
+                  subject             = lv_subject
+                  issuer              = lv_issuer
+                  validfrom           = lv_validfrom
+                  validto             = lv_validto
+                  keylength           = lv_keystrength
+                EXCEPTIONS
+                  ssf_krn_error       = 1
+                  ssf_krn_nomemory    = 2
+                  ssf_krn_nossflib    = 3
+                  ssf_krn_invalid_par = 4
+                  OTHERS              = 5.
+              IF sy-subrc EQ 0.
+                ls_certlist-cert_name = lv_subject.
+              ELSE.
+                ls_certlist-cert_name = lv_subject.
+              ENDIF.
+
+              CLEAR: lv_alg,lv_sigalg.
+              TRY.
+                  lr_certificate =
+               cl_abap_x509_certificate=>get_instance( ls_pklist ).
+                  lv_sigalg_oid
+                  = lr_certificate->get_signature_alg_oid( ).
+
+                  PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                                  CHANGING lv_sigalg.
+                  IF lv_sigalg IS NOT INITIAL.
+                    lv_alg = lv_sigalg.
+                  ENDIF.
+                CATCH cx_abap_x509_certificate.
+              ENDTRY.
+
+              ls_certlist-pse_name    = lv_psetext.
+              IF lv_validfrom IS NOT INITIAL.
+                ls_certlist-date_from = lv_validfrom(8).
+                ls_certlist-time_from = lv_validfrom+8(6).
+              ENDIF.
+              IF lv_validto IS NOT INITIAL.
+                ls_certlist-date_to   = lv_validto(8).
+                ls_certlist-time_to   = lv_validto+8(6).
+              ENDIF.
+              ls_certlist-keystrength = lv_keystrength.
+              ls_certlist-sigalg      = lv_alg.
+              ls_certlist-cert_list   = ls_pklist.
+              APPEND ls_certlist TO it_certlist.
+
+              CLEAR: ls_pklist,ls_certlist,lv_subject,
+                     lv_validfrom,lv_validto.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+        " Get all the active servers from system
+        FREE: lt_imsxxlist[].
+        CALL FUNCTION 'TH_SERVER_LIST'
+          EXPORTING
+            active_server  = 0
+          TABLES
+            list           = lt_imsxxlist
+          EXCEPTIONS
+            no_server_list = 1
+            OTHERS         = 2.
+        IF sy-subrc EQ 0.
+
+          SORT:lt_imsxxlist[] BY name AS TEXT.
+
+          CLEAR: lv_own_cert,ls_imsxxlist.
+          LOOP AT lt_imsxxlist INTO ls_imsxxlist.
+
+            CLEAR: lv_len.
+            lv_len = strlen( ls_imsxxlist-name ).
+
+            " Get instance id
+            SUBTRACT 2 FROM lv_len.
+            IF lv_len >= 0.
+              lv_instanceid = ls_imsxxlist-name+lv_len(2).
+            ENDIF.
+
+            " Get host name
+            SUBTRACT 5 FROM lv_len.
+            IF lv_len > 0.
+              CLEAR: lv_server_host.
+              lv_server_host = ls_imsxxlist-name(lv_len).
+            ENDIF.
+
+            " Get the certificates related to PSEs
+            CALL FUNCTION 'SSFP_GET_PSEINFO'
+              DESTINATION ls_imsxxlist-name
+              EXPORTING
+                context           = iv_context
+                applic            = ls_strust-applic
+              IMPORTING
+                certificate       = lv_own_cert
+              EXCEPTIONS
+                ssf_no_ssflib     = 1
+                ssf_krn_error     = 2
+                ssf_invalid_par   = 3
+                ssf_unknown_error = 4
+                OTHERS            = 5.
+            IF sy-subrc EQ 0.
+              " Read the own certificate name
+              CLEAR: ls_pse_h,lv_id.
+              TRY.
+                  ls_pse_h =
+                  it_pse_h[ host       = lv_server_host
+                            instanceid = lv_instanceid
+                            filename   = lv_psename ].
+
+                CATCH cx_sy_itab_line_not_found.
+              ENDTRY.
+
+              IF ls_pse_h IS INITIAL.
+                TRY.
+                    ls_pse_h = it_pse_h[ host = ' '
+                                         filename = lv_psename ].
+
+                  CATCH cx_sy_itab_line_not_found.
+                ENDTRY.
+              ENDIF.
+
+              lv_id = ls_pse_h-id.
+
+              " Parse the certificate to read details
+              CLEAR: lv_validfrom,
+                     lv_validto,lv_subject,lv_issuer.
+              CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+                EXPORTING
+                  certificate         = lv_own_cert
+                IMPORTING
+                  subject             = lv_subject
+                  issuer              = lv_issuer
+                  validfrom           = lv_validfrom
+                  validto             = lv_validto
+                  keylength           = lv_keystrength
+                EXCEPTIONS
+                  ssf_krn_error       = 1
+                  ssf_krn_nomemory    = 2
+                  ssf_krn_nossflib    = 3
+                  ssf_krn_invalid_par = 4
+                  OTHERS              = 5.
+              CLEAR: lv_alg,lv_sigalg.
+              TRY.
+                  lr_certificate =
+                cl_abap_x509_certificate=>get_instance( lv_own_cert ).
+                 lv_sigalg_oid
+                  = lr_certificate->get_signature_alg_oid( ).
+
+                  PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                                  CHANGING lv_sigalg.
+                  IF lv_sigalg IS NOT INITIAL.
+                    lv_alg = lv_sigalg.
+                  ENDIF.
+                CATCH cx_abap_x509_certificate.
+              ENDTRY.
+
+              IF lv_subject EQ lv_issuer.
+
+                CLEAR:ls_ssls_cert.
+                ls_ssls_cert-sign        = 'Self-Signed'.
+                ls_ssls_cert-pse_name    = lv_psetext.
+                ls_ssls_cert-instance    = ls_imsxxlist-name.
+                ls_ssls_cert-cert_name   = lv_id.
+                ls_ssls_cert-issuer      = 'NA'.
+                IF lv_validfrom IS NOT INITIAL.
+                  ls_ssls_cert-date_from = lv_validfrom(8).
+                  ls_ssls_cert-time_from = lv_validfrom+8(6).
+                ENDIF.
+                IF lv_validto IS NOT INITIAL.
+                  ls_ssls_cert-date_to   = lv_validto(8).
+                  ls_ssls_cert-time_to   = lv_validto+8(6).
+                ENDIF.
+                ls_ssls_cert-keystrength = lv_keystrength.
+                ls_ssls_cert-sigalg      = lv_alg.
+                ls_ssls_cert-own_cert    = lv_own_cert.
+                APPEND ls_ssls_cert TO it_ssls_cert.
+
+              ELSE.
+
+                CLEAR:ls_ssls_cert.
+                ls_ssls_cert-sign        = 'Issuer'.
+                ls_ssls_cert-pse_name    = lv_psetext.
+                ls_ssls_cert-instance    = ls_imsxxlist-name.
+                ls_ssls_cert-cert_name   = lv_id.
+                ls_ssls_cert-issuer      = lv_issuer.
+                IF lv_validfrom IS NOT INITIAL.
+                  ls_ssls_cert-date_from = lv_validfrom(8).
+                  ls_ssls_cert-time_from = lv_validfrom+8(6).
+                ENDIF.
+                IF lv_validto IS NOT INITIAL.
+                  ls_ssls_cert-date_to   = lv_validto(8).
+                  ls_ssls_cert-time_to   = lv_validto+8(6).
+                ENDIF.
+                ls_ssls_cert-keystrength = lv_keystrength.
+                ls_ssls_cert-sigalg      = lv_alg.
+                ls_ssls_cert-own_cert    = lv_own_cert.
+                APPEND ls_ssls_cert TO it_ssls_cert.
+
+              ENDIF.
+
+            ELSE.
+
+              IF lv_own_cert IS INITIAL.
+
+                CLEAR: ls_pse_h.
+                TRY.
+                    ls_pse_h =
+                    it_pse_h[ host       = lv_server_host
+                              instanceid = lv_instanceid
+                              filename   = lv_psename ].
+
+                  CATCH cx_sy_itab_line_not_found.
+                ENDTRY.
+
+                IF ls_pse_h IS INITIAL.
+                  TRY.
+                      ls_pse_h = it_pse_h[ host = ' '
+                                           filename = lv_psename ].
+
+                    CATCH cx_sy_itab_line_not_found.
+                  ENDTRY.
+                ENDIF.
+
+                lv_id = ls_pse_h-id.
+
+                IF ls_pse_h-type = 'LPSE'.
+                  CLEAR: lv_pseblob.
+                  SELECT SINGLE bindata
+                    FROM  ssf_pse_t
+                    INTO  lv_pseblob BYPASSING BUFFER
+                    WHERE name = ls_pse_h-name.
+                ELSE. "pse_s-type = 'PSE'
+                  CLEAR: ls_psebin.
+                  SELECT bindata
+                    FROM ssf_pse_d BYPASSING BUFFER
+                    INTO ls_psebin-bindata
+                    WHERE name = ls_pse_h-name
+                    ORDER BY seqno.
+                    APPEND ls_psebin TO lt_psebin.
+                  ENDSELECT.
+
+                  " Copy pse table to blob
+                  CLEAR: lv_pseblob,ls_psebin.
+                  LOOP AT lt_psebin INTO ls_psebin.
+                    CONCATENATE lv_pseblob ls_psebin-bindata
+                    INTO lv_pseblob IN BYTE MODE.
+                  ENDLOOP.
+                  IF ls_pse_h-datalen > 0.
+                    lv_pseblob = lv_pseblob(ls_pse_h-datalen).
+                  ENDIF.
+                ENDIF.
+
+                IF lv_pseblob IS NOT INITIAL.
+
+                  TRY.
+                      IF lo_mempse IS BOUND.
+                        lo_mempse->clean_up( ).
+                      ENDIF.
+                      CREATE OBJECT lo_mempse
+                        EXPORTING
+                          iv_pse    = lv_pseblob
+                          iv_pse_pw = lv_psepin.
+                    CATCH cx_abap_pse .
+                      CLEAR lo_mempse.
+                  ENDTRY.
+
+                  " Check if PSE can be accessed
+                  TRY.
+                      lv_valid = lo_mempse->is_valid( ).
+
+                    CATCH cx_abap_pse.
+
+                  ENDTRY.
+
+                  " Parse own certificate
+                  CLEAR: lv_xcert.
+                  TRY.
+                      CALL METHOD lo_mempse->get_own_certificate
+                        IMPORTING
+                          ev_own_cert = lv_xcert.
+                    CATCH cx_abap_pse.
+                  ENDTRY.
+
+                  " Parse the certificate to read details
+                  CLEAR: lv_validfrom,
+                         lv_validto,lv_subject,lv_issuer.
+                  CALL FUNCTION 'SSFC_PARSE_CERTIFICATE'
+                    EXPORTING
+                      certificate         = lv_xcert
+                    IMPORTING
+                      subject             = lv_subject
+                      issuer              = lv_issuer
+                      validfrom           = lv_validfrom
+                      validto             = lv_validto
+                      keylength           = lv_keystrength
+                    EXCEPTIONS
+                      ssf_krn_error       = 1
+                      ssf_krn_nomemory    = 2
+                      ssf_krn_nossflib    = 3
+                      ssf_krn_invalid_par = 4
+                      OTHERS              = 5.
+                  CLEAR: lv_alg,lv_sigalg.
+                  TRY.
+                      lr_certificate =
+                   cl_abap_x509_certificate=>get_instance( lv_xcert ).
+                      lv_sigalg_oid
+                      = lr_certificate->get_signature_alg_oid( ).
+
+                   PERFORM get_signature_algorithm USING lv_sigalg_oid
+                                                   CHANGING lv_sigalg.
+                      IF lv_sigalg IS NOT INITIAL.
+                        lv_alg = lv_sigalg.
+                      ENDIF.
+                    CATCH cx_abap_x509_certificate.
+                  ENDTRY.
+
+                  IF lv_subject EQ lv_issuer.
+
+                    CLEAR:ls_ssls_cert.
+                    ls_ssls_cert-sign        = lc_signed.
+                    ls_ssls_cert-pse_name    = lv_psetext.
+                    ls_ssls_cert-instance    = ls_imsxxlist-name.
+                    ls_ssls_cert-cert_name   = lv_id.
+                    ls_ssls_cert-issuer      = lc_na.
+                    IF lv_validfrom IS NOT INITIAL.
+                      ls_ssls_cert-date_from = lv_validfrom(8).
+                      ls_ssls_cert-time_from = lv_validfrom+8(6).
+                    ENDIF.
+                    IF lv_validto IS NOT INITIAL.
+                      ls_ssls_cert-date_to   = lv_validto(8).
+                      ls_ssls_cert-time_to   = lv_validto+8(6).
+                    ENDIF.
+                    ls_ssls_cert-keystrength = lv_keystrength.
+                    ls_ssls_cert-sigalg      = lv_alg.
+                    ls_ssls_cert-own_cert    = lv_xcert.
+                    APPEND ls_ssls_cert TO it_ssls_cert.
+
+                  ELSE.
+
+                    CLEAR:ls_ssls_cert.
+                    ls_ssls_cert-sign        = lc_issuer.
+                    ls_ssls_cert-pse_name    = lv_psetext.
+                    ls_ssls_cert-instance    = ls_imsxxlist-name.
+                    ls_ssls_cert-cert_name   = lv_id.
+                    ls_ssls_cert-issuer      = lv_issuer.
+                    IF lv_validfrom IS NOT INITIAL.
+                      ls_ssls_cert-date_from = lv_validfrom(8).
+                      ls_ssls_cert-time_from = lv_validfrom+8(6).
+                    ENDIF.
+                    IF lv_validto IS NOT INITIAL.
+                      ls_ssls_cert-date_to   = lv_validto(8).
+                      ls_ssls_cert-time_to   = lv_validto+8(6).
+                    ENDIF.
+                    ls_ssls_cert-keystrength = lv_keystrength.
+                    ls_ssls_cert-sigalg      = lv_alg.
+                    ls_ssls_cert-own_cert    = lv_xcert.
+                    APPEND ls_ssls_cert TO it_ssls_cert.
+
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+            CLEAR: lv_own_cert,ls_imsxxlist.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+      CLEAR: ls_strust.
+    ENDLOOP.
+
+  ENDMETHOD.
+ENDCLASS.
+*&---------------------------------------------------------------------*
+*& Form GET_SIGNATURE_ALGORITHM
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+FORM get_signature_algorithm  USING    lv_sigalg_oid
+                              CHANGING lv_sigalg.
+
+  CLEAR:lv_sigalg.
+
+  CASE lv_sigalg_oid.
+    WHEN 'id-dsa-with-sha1 (OID 1.2.840.10040.4.3)'.
+      MESSAGE S130(TRUST) INTO lv_sigalg.
+    WHEN 'md5WithRSAEncryption (OID 1.2.840.113549.1.1.4)'.
+      MESSAGE S131(TRUST) INTO lv_sigalg.
+    WHEN 'sha1WithRsaEncryption (OID 1.2.840.113549.1.1.5)'.
+      MESSAGE S132(TRUST) INTO lv_sigalg.
+    WHEN 'sha256WithRsaEncryption (OID 1.2.840.113549.1.1.11)'.
+      MESSAGE S133(TRUST) INTO lv_sigalg.
+    WHEN 'sha384WithRsaEncryption (OID 1.2.840.113549.1.1.12)'.
+      MESSAGE S134(TRUST) INTO lv_sigalg.
+    WHEN 'sha512WithRsaEncryption (OID 1.2.840.113549.1.1.13)'.
+      MESSAGE S135(TRUST) INTO lv_sigalg.
+    WHEN 'sha224WithRsaEncryption (OID 1.2.840.113549.1.1.14)'.
+      MESSAGE S136(TRUST) INTO lv_sigalg.
+    WHEN 'dsa-with-sha224 (OID 2.16.840.1.101.3.4.3.1)'.
+      MESSAGE S137(TRUST) INTO lv_sigalg.
+    WHEN 'dsa-with-sha256 (OID 2.16.840.1.101.3.4.3.2)'.
+      MESSAGE S138(TRUST) INTO lv_sigalg.
+  ENDCASE.
+
+ENDFORM.

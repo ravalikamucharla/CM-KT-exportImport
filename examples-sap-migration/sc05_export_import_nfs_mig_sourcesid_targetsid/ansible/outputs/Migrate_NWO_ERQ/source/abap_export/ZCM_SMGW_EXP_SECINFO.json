@@ -1,0 +1,1 @@
+{"OUTPUT": [{"TITLE": "Secinfo File", "DATA": [{"Data": "#VERSION=2"}, {"Data": "#"}, {"Data": "P USER=* USER-HOST=local HOST=local TP=*"}, {"Data": "P USER=* USER-HOST=local HOST=internal TP=*"}, {"Data": "P USER=* USER-HOST=internal HOST=local TP=*"}]}]}

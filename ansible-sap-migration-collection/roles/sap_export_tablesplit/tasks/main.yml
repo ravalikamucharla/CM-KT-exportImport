@@ -1,0 +1,6 @@
+---      
+- name: Export Table Split
+  include_tasks: "export_table_split_{{ os_type }}.yml"
+  tags: 
+    - table_split
+    - retry_table_split

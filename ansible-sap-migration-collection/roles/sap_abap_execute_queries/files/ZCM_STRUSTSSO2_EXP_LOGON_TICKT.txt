@@ -1,0 +1,107 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_STRUSTSSO2_EXP_LOGON_TICKT               *
+* Title               :  Login Ticket export                          *
+* Purpose             :  To export Logon Ticket details of STRUSTSSO2 *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* STRUSTSSO2                                                          *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TWPSSO2ACL                X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-24-2021  Initial   Soumya Ray   Local       To export Logon Ticket*
+*                                               details of STRUSTSSO2 *
+*02-20-2022  V001      Soumya Ray   Local       To pass no data found *
+*                                               in case of no data    *
+*---------------------------------------------------------------------*
+REPORT zcm_strustsso2_exp_logon_tickt.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep     TYPE c VALUE '|'       LENGTH 1,
+             lc_export  TYPE c VALUE 'EXPORT'  LENGTH 6,
+             lc_null    TYPE c VALUE 'NULL'    LENGTH 4,
+             lc_title   TYPE c VALUE
+             'Access Control List(ACL)'        LENGTH 24,
+             lc_system  TYPE c VALUE 'System'  LENGTH 6,
+             lc_client  TYPE c VALUE 'Cl.'     LENGTH 3,
+             lc_certsub TYPE c VALUE
+             'Certificate Subject'             LENGTH 19,
+             lc_ninput  TYPE c VALUE
+             'No input passed'                 LENGTH 15,
+             lc_naction TYPE c VALUE
+             'Incorrect input'                 LENGTH 20, "+V001
+             lc_nodata  TYPE c VALUE
+             'No data found'                   LENGTH 30. "+V001
+
+  DATA:ls_output     TYPE tab512,
+       ls_input      TYPE tab512,
+       lv_action     TYPE string,
+       ls_twpsso2acl TYPE twpsso2acl,
+       lt_twpsso2acl TYPE STANDARD TABLE OF twpsso2acl.
+
+  CLEAR: ls_output, ls_input, lv_action, ls_twpsso2acl.
+  FREE: lt_twpsso2acl.
+
+  ls_output = lc_title. "Title
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+  "Read input passed
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_ninput."No input passed
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+  CASE lv_action.
+    WHEN lc_export. "EXPORT
+      "Select Workplace Single Sign-On 2 Access Control List
+      SELECT * FROM twpsso2acl
+      INTO TABLE  lt_twpsso2acl.
+      IF sy-subrc NE 0.
+        ls_output = lc_nodata. "No Data
+        APPEND ls_output TO lt_output.
+        RETURN.
+      ENDIF.
+      "Coloumn heading
+      CONCATENATE lc_system lc_client lc_certsub INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+
+      LOOP AT lt_twpsso2acl INTO ls_twpsso2acl.
+
+        IF ls_twpsso2acl-dn_subject IS INITIAL.
+          ls_twpsso2acl-dn_subject = lc_null.
+        ENDIF.
+
+        CONCATENATE ls_twpsso2acl-wps_sysid
+        ls_twpsso2acl-wps_mandt ls_twpsso2acl-dn_subject
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR :ls_output, ls_twpsso2acl.
+      ENDLOOP.
+      FREE: lt_twpsso2acl.
+
+    WHEN OTHERS.
+      ls_output = lc_naction.
+      APPEND ls_output TO lt_output.
+  ENDCASE.
+  "To replace blank value in middle fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

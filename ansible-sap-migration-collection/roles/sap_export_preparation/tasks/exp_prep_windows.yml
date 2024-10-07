@@ -1,0 +1,225 @@
+---
+- name: Enable insecure guest logons
+  win_regedit:
+    path: HKLM:\Software\Policies\Microsoft\Windows\Lanmanworkstation
+    name: "AllowInsecureGuestAuth"
+    data: "1"
+    type: dword
+  tags: exp_prep
+
+- name: Enable backconnectionhostnames
+  win_regedit:
+    path: HKLM:\System\CurrentControlSet\Control\Lsa\MSV1_0
+    name: "BackConnectionHostNames"
+    data: ["{{ hostname }}","{{ hostname }}.azsqlha.cloudcoe.local"]
+    type: MultiString
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- name: Enable DisableStrictNameChecking
+  win_regedit:
+      path: HKLM:\SYSTEM\CurrentControlSet\Services\lanmanserver\parameters
+      name: "DisableStrictNameChecking"
+      data: "1"
+      type: dword
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- name: Enable firewall for Domain, Public and Private profiles
+  win_firewall:
+    state: disabled
+    profiles:
+    - Domain
+    - Private
+    - Public
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: Stopping all services and starting ascs and db
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    file_path:
+      - mssql_db_actions.py
+  set_fact:
+    path_start_stop: "{{ lookup('first_found', file_path) }}"
+  delegate_to: localhost
+  tags: exp_prep
+
+- debug:
+    var: path_start_stop
+  delegate_to: localhost
+  tags: exp_prep
+
+- command: python3 {{path_start_stop}} --hostname="{{ hostvars[groups['target_db'][0]].ansible_host }}" --username="azsqlha\cloudcoe" --password="P@ssw0rd1234" --loginMechanism="_NULL" --pemFile="_NULL" --isSudoUser="True" --dbSid="{{ sid|upper }}" --dbInstance="{{ instance_number }}" --action="START" --osType="{{ params.import.os_type }}" --ascs_instance="{{ ascs_instance_number }}"
+  register: result
+  delegate_to: localhost
+  tags: exp_prep
+
+- debug: var=result
+  delegate_to: localhost
+  tags: exp_prep
+
+- name: Delete old logs files
+  win_file:
+    path: "C:\\Program Files\\sapinst_instdir"
+    state: absent
+  tags: exp_prep
+
+- win_file:
+    path: "C:\\Users\\cloudcoe\\.sapinst"
+    state: absent
+  tags: exp_prep
+
+- name: check for additional install items
+  win_shell: (Get-Childitem –Path E:\SilentInstall\EXPORT\NetWeaver75\ABAP\ -Include *LABEL*.ASC -Recurse | Select-Object -Property Directory -unique).Directory.FullName
+  register: sap_exports_folders
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- debug:
+    var: sap_exports_folders
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- name: main | set installation directory facts
+  set_fact:
+    sybase_zip_path: "{{ sybase_software_path.stdout_lines[0] }}"
+  when: sybase is defined
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- name: create sapinst.params
+  template:
+    src: export_prep_windows.j2
+    dest: "E:\\{{ role }}_prep_{{hostname}}.params"
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: set sapinst command line arguments
+  set_fact:
+    win_sap_install_arguments: >-
+      SAPINST_INPUT_PARAMETERS_URL=E:\{{ role }}_prep_{{ hostname }}.params
+      SAPINST_CWD=E:\{{ role }}_prep_Logs
+      SAPINST_EXECUTE_PRODUCT_ID={{ params.product_ids.export_prep}}
+      SAPINST_USE_HOSTNAME={{ hostname }}
+      SAPINST_SKIP_DIALOGS=true
+      SAPINST_START_GUISERVER=true
+      SAPINST_START_GUI=true
+    win_sap_install_sapinst_path: "E:\\SilentInstall\\SWPM\\sapinst.exe"
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- debug: var=win_sap_install_arguments
+
+- name: validate the required win_sap_install_arguments variable
+  assert:
+    that:
+      - win_sap_install_arguments is defined
+      - win_sap_install_arguments | length
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: validate that the path to sapinst.exe has been passed
+  assert:
+    that:
+      - win_sap_install_sapinst_path is defined
+      - win_sap_install_sapinst_path is regex('^.+sapinst.exe$')
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: stat the sapinst.exe path
+  win_stat:
+    path: "{{ win_sap_install_sapinst_path }}"
+  register: win_sap_install_sapinst_stat
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: validate that the sapinst.exe file exists
+  assert:
+    that:
+      - win_sap_install_sapinst_stat.stat.exists
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+  # due to a known error the sap installation can fail in the initial attempt
+  # however a subsequent installation can be successfully performed
+  # based on the actions of the first installation attempt
+  # therefor ignore_errors on install attempt one
+- name: install sap
+  vars:
+    ansible_become_user: "{{ ansible_user }}"
+    ansible_become_pass: "{{ ansible_password }}"
+  win_sap_install:
+    arguments: "{{ win_sap_install_arguments }}"
+    checks: "{{ win_sap_install_checks }}"
+    delay: "{{ win_sap_install_delay }}"
+    path: "{{ win_sap_install_sapinst_path }}"
+    sleep: "{{ win_sap_install_sleep }}"
+    timeout: "{{ win_sap_install_timeout }}"
+  register: win_sap_inst
+  become: yes
+  # become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+  # register: export_expre
+  async: 3600
+  poll: 0
+
+- name: Export Preparation | Export Preparation Status Checking
+  async_status:
+     jid: "{{ win_sap_inst.ansible_job_id }}"
+  register: job_result_win_sap_inst
+  until: job_result_win_sap_inst.finished
+  retries: 2000
+  delay: 10
+  tags: exp_prep
+
+- name: debug win_sap_inst
+  debug:
+    var: win_sap_inst
+    verbosity: "{{ verbosity_level }}"
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- name: fail if the installation failed other than the known issue
+  fail:
+    msg: "SAP installation failed"
+  when:
+    - win_sap_inst is failed
+    - win_sap_inst.msg != 'The sapinst process was forcibly stopped'
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: exp_prep
+
+- debug:
+    var: export_expre
+  tags: 
+    - exp_prep
+    - retry_exp_prep

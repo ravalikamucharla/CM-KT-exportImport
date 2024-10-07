@@ -1,0 +1,278 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_DBCO_EXP_CONNECTION_INFO                 *
+* Title               :  Capture DBCO connection information          *
+* Purpose             :  To capture DBCO connection information and   *
+*                        run connection test                          *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DBCO                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* DBCON                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*02-16-2021  Initial  Soumya Ray   Local       Capture DBCO connection*
+*                                              information            *
+*03-30-2022  V001      Soumya Ray   Local      To correct the message *
+*                                            in case of no data, wrong*
+*                                              input and remove inline*
+*                                              declarations           *
+*---------------------------------------------------------------------*
+
+REPORT zcm_dbco_exp_connection_info.
+
+CLASS lcl_test_connection DEFINITION.
+  PUBLIC SECTION.
+* The functionality in standard report 'ADBC_TEST_CONNECTION' is
+* replaced with the method. So that we can avoid submiting the standard
+*  report inside loop.
+    METHODS adbc_test_connection
+      IMPORTING
+        iv_conname TYPE dbcon_name
+      EXPORTING
+        ev_result  TYPE string.
+ENDCLASS.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS : lc_sep      TYPE c VALUE '|'               LENGTH 1,
+              lc_export   TYPE c VALUE 'EXPORT'          LENGTH 20,
+              lc_ninput   TYPE c VALUE 'No input passed' LENGTH 15,
+              lc_msg_head TYPE c VALUE
+              'DBCO connection information'              LENGTH 36,
+              lc_dbconn   TYPE c VALUE 'Db connection'   LENGTH 13,
+              lc_dbconnm  TYPE c VALUE
+              'Connection log'                           LENGTH 14,
+*    Begin of changes in V001
+              lc_nodata   TYPE c VALUE
+              'No data found'                            LENGTH 40,
+              lc_naction  TYPE c VALUE
+              'Incorrect input'                          LENGTH 23,
+              lc_null     TYPE c VALUE 'NULL'            LENGTH 4.
+*    End of changes in V001
+
+  DATA: ls_output          TYPE tab512,
+        ls_input           TYPE tab512,
+        lv_action          TYPE string,
+        ls_dbcon           TYPE dbcon,
+        ls_prefinal        TYPE string,
+        ls_log             TYPE string,
+        lt_dbcon           TYPE STANDARD TABLE OF dbcon,
+        lo_test_connection TYPE REF TO lcl_test_connection.
+
+  CLEAR: ls_output, ls_dbcon, ls_prefinal, ls_log.
+  FREE lt_dbcon.
+
+* Heading of the script
+  ls_output = lc_msg_head. "DBCO connection information and test
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output, lv_action.
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    ls_output = lc_ninput. "No input passed
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output. "+V001
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export. "EXPORT
+
+* Select all entries from DBCON table
+      SELECT * FROM dbcon INTO TABLE lt_dbcon.
+      IF sy-subrc EQ 0.
+*  Instansiate the object
+        CREATE OBJECT lo_test_connection.
+*  Sub heading of the dbco information
+        CONCATENATE lc_dbconn    lc_sep  "Db connection name
+        lc_dbconnm INTO ls_output. "Db connection
+        APPEND ls_output TO lt_output.
+        CLEAR  ls_output.
+
+        LOOP AT lt_dbcon INTO ls_dbcon.
+
+*  Connection test for database. The appropriate output message that
+* informs about the success or failure is exported to memory
+          CALL METHOD lo_test_connection->adbc_test_connection
+            EXPORTING
+              iv_conname = ls_dbcon-con_name
+            IMPORTING
+              ev_result  = ls_log.
+
+*    Begin of changes in V001
+          IF ls_log IS INITIAL.
+            ls_log = lc_null.
+          ENDIF.
+*    End of changes in V001
+
+          CONCATENATE ls_dbcon-con_name lc_sep ls_log
+          INTO ls_prefinal. "Data
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_dbcon, ls_output, ls_log.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_nodata."No data in table DBCON
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+    WHEN OTHERS.
+      ls_output = lc_naction."Incorrect input command
+      APPEND ls_output TO lt_output.
+  ENDCASE.
+  "To replace blank value in middle fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.
+*&--------------------------------------------------------------------*
+*& Class (Implementation) lcl_test_connection
+*&--------------------------------------------------------------------*
+*&The functionality in standard report 'ADBC_TEST_CONNECTION' is      *
+*&replaced with the method. So that we can avoid submiting the        *
+*&standard report inside loop.                                        *
+*&--------------------------------------------------------------------*
+CLASS lcl_test_connection IMPLEMENTATION.
+
+  METHOD adbc_test_connection.
+
+    CONSTANTS:lc_fcode_connect    TYPE c VALUE 'CO' LENGTH 2,
+              lc_fcode_disconnect TYPE c VALUE 'DI' LENGTH 2,
+              lc_connection       TYPE c VALUE
+              'Connection'                          LENGTH 10,
+              lc_opened           TYPE c VALUE
+              'successfully opened.'                LENGTH 20,
+              lc_closed           TYPE c VALUE
+              'closed'                              LENGTH 6,
+              lc_nopen            TYPE c VALUE
+              'Could not open connection'           LENGTH 30,
+              lc_stop             TYPE c VALUE '.'  LENGTH 1,
+              lc_ndefined         TYPE c VALUE
+              'is not defined in DBCON'             LENGTH 30,
+              lc_sqlerror         TYPE c VALUE
+              'sql error'                           LENGTH 9,
+              lc_occured1         TYPE c VALUE
+              'occured:'                            LENGTH 8,
+              lc_occured2         TYPE c VALUE
+              'occured.'                            LENGTH 8,
+              lc_dbierror         TYPE c VALUE
+              'DBI error'                           LENGTH 10,
+              lc_tracefl          TYPE c VALUE
+              'See trace file for further info:'    LENGTH 50,
+              lc_devw             TYPE c VALUE
+               'dev_w'                              LENGTH 5.
+
+    DATA:lv_sql_code TYPE i,
+         lv_sqlcode  TYPE string,
+         lv_sqlmsg   TYPE dbsqlmsg,
+         lv_conda    TYPE x LENGTH 80,
+         lv_sharable TYPE c,
+         lv_msgline  TYPE string,
+         lv_sysubrc  TYPE c LENGTH 4,
+         lv_devfile  TYPE c LENGTH 10,
+         lv_wpidx    TYPE wpinfo-wp_index.
+
+    CLEAR: lv_sql_code,lv_sqlcode, lv_conda,
+    lv_sharable, lv_msgline, lv_wpidx,lv_sysubrc, ev_result.
+
+* connect test for DB
+    CALL 'C_DB_FUNCTION' ID 'FUNCTION' FIELD 'DB_SQL'
+    ID 'FCODE'    FIELD lc_fcode_connect
+    ID 'CONNAME'  FIELD iv_conname
+    ID 'CONDA'    FIELD lv_conda
+    ID 'SHARABLE' FIELD lv_sharable
+    ID 'SQLCODE'  FIELD lv_sql_code
+    ID 'SQLMSG'   FIELD lv_sqlmsg.
+
+    IF sy-subrc EQ 0. "connection successfully established
+      "Connection', con_name, 'successfully opened.'.
+      CONCATENATE lc_connection iv_conname lc_opened
+      INTO lv_msgline SEPARATED BY space.
+      CONCATENATE ev_result lv_msgline  INTO ev_result.
+      CLEAR: lv_msgline.
+* disconnect DB after connection test
+      CALL 'C_DB_FUNCTION' ID 'FUNCTION' FIELD 'DB_SQL'
+      ID 'FCODE'    FIELD lc_fcode_disconnect
+      ID 'CONNAME'  FIELD iv_conname
+      ID 'CONDA'    FIELD lv_conda
+      ID 'SHARABLE' FIELD lv_sharable
+      ID 'SQLCODE'  FIELD lv_sql_code.
+      IF sy-subrc EQ 0.
+        "'Connection', con_name, 'closed'.
+        CONCATENATE lc_connection iv_conname lc_closed
+        INTO lv_msgline SEPARATED BY space.
+        CONCATENATE ev_result lv_msgline INTO ev_result.
+        CLEAR: lv_msgline.
+      ENDIF.
+    ELSE.
+      lv_sysubrc = sy-subrc. " SY-SUBRC value is type casted to string
+      CONDENSE lv_sysubrc.
+      lv_sqlcode = lv_sql_code.
+
+      "'Could not open connection', con_name, '.'
+      CONCATENATE lc_nopen iv_conname lc_stop
+      INTO lv_msgline SEPARATED BY space."Message details
+      CONCATENATE ev_result lv_msgline
+      INTO ev_result. "Concatenate of DB name and Msg
+      CLEAR: lv_msgline.
+
+      CASE lv_sysubrc.
+        WHEN 1.
+          "'sql error', sqlerr_ref->sql_code, 'occured:'
+          CONCATENATE lc_sqlerror lv_sqlcode lc_occured1
+          INTO lv_msgline SEPARATED BY space."Message details
+          "Concatenate of DB name and Msg
+          CONCATENATE ev_result lv_msgline INTO ev_result.
+          CLEAR: lv_msgline.
+          "sqlerr_ref->sql_message
+          CONCATENATE ev_result lv_sqlmsg
+          INTO ev_result. "Concatenate of DB name and Msg
+          RETURN.
+
+        WHEN 10.
+          "con_name, 'is not defined in DBCON'.
+          CONCATENATE iv_conname lc_ndefined
+          INTO lv_msgline SEPARATED BY space."Message details
+          CONCATENATE ev_result lv_msgline
+          INTO ev_result. "Concatenate of DB name and Msg
+          CLEAR: lv_msgline.
+          RETURN.
+        WHEN OTHERS.
+* get the number of the current WP and append it to 'dev_w'
+          lv_devfile = lc_devw.
+          CALL FUNCTION 'TH_GET_OWN_WP_NO'
+            IMPORTING
+              wp_index = lv_wpidx.
+          lv_devfile+5 = lv_wpidx.
+
+          "DBI error', sqlerr_ref->internal_error, 'occured.'
+          CONCATENATE lc_dbierror lv_sysubrc lc_occured2
+          INTO lv_msgline SEPARATED BY space."Message details
+          CONCATENATE ev_result lv_msgline
+          INTO ev_result."Concatenate of DB name and Msg
+          CLEAR: lv_msgline.
+
+          "'See trace file for further info: no of work process'
+          CONCATENATE lc_tracefl lv_devfile
+          INTO lv_msgline SEPARATED BY space.
+          CONCATENATE ev_result lv_msgline INTO ev_result.
+          CLEAR: lv_devfile, lv_msgline.
+          RETURN.
+      ENDCASE.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.

@@ -1,0 +1,11 @@
+---
+
+- name: rsync export
+  include_tasks: export.yml
+  when: mode == 'export'
+
+- name: rsync export
+  include_tasks: export.yml
+  when: mode == 'import'
+
+  

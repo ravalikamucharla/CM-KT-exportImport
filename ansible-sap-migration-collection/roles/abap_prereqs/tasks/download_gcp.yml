@@ -1,0 +1,8 @@
+- name: download | download softwares
+  command: gsutil -m cp -r gs://{{ item.url }}* {{ item.dest }}
+  args:
+    chdir: "/usr/local/sap"
+  with_items:
+    - "{{ downloads_path }}"
+  tags:
+    - download

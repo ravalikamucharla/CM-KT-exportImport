@@ -1,0 +1,2 @@
+Result of OS command : sapwebdisp|-version
+No data found

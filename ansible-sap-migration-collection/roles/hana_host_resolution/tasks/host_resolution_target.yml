@@ -1,0 +1,75 @@
+- name: Create a sql folder
+  file:
+    path: "/tmp/global_hostres.sql"
+    state: touch
+    mode: '777'
+
+- name: check if the path is present
+  become_method: sudo
+  become: yes 
+  stat: 
+      path: "/usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/global.ini_bak"
+  register: st
+
+- name: take backup of global ini file
+  become_method: sudo
+  become: yes 
+  copy:
+    src: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/global.ini
+    dest: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/global.ini_bak
+    remote_src: yes
+  when: not st.stat.exists
+
+- name: Inserting host resolution query in global.ini file
+  lineinfile:
+    path: /tmp/global_hostres.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('global.ini', 'SYSTEM') SET ('system_replication_communication', 'listeninterface') = '{{ host_resolution.target_host.value }}';
+
+- name: Inserting host resolution query in global.ini file if value is .global
+  lineinfile:
+    path: /tmp/global_hostres.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('global.ini', 'SYSTEM') SET ('system_replication_hostname_resolution', '{{ item.ip }}') = '{{ item.hostname }}';
+  with_items: "{{ host_resolution.source_host.entries }}"
+  when:  (topology == 'NONHA' or topology == 'DR') and host_resolution.target_host.value == '.global'
+
+- name: Inserting host resolution query in global.ini file if value is .global
+  lineinfile:
+    path: /tmp/global_hostres.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('global.ini', 'SYSTEM') SET ('system_replication_hostname_resolution', '{{ item.ip }}') = '{{ item.hostname }}';
+  with_items: 
+    - "{{ host_resolution.source_host.entries }}"
+    - "{{ host_resolution.target_host.entries }}"
+  when: 
+    - host_resolution.target_host.value == '.internal'
+
+- name: execute the sql query 
+  command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_target.key_name | default('BACKUP') }} -I /tmp/global_hostres.sql'
+  async: 12000
+  poll: 10
+  register: output
+  when: target_primary.mode == "hdbuserstorekey"
+
+- debug: 
+    var: output
+  when: target_primary.mode == "hdbuserstorekey"
+
+- name: set fact 
+  block:
+    - set_fact:
+        tenant_db: "{{ sid | upper }}"
+
+    - set_fact:
+        db_name: "{{ hana_db_name | default(tenant_db) }}"
+  when: target_primary.mode == "user"
+
+- name: execute the sql query 
+  command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/global_hostres.sql'
+  async: 12000
+  poll: 10
+  register: output_user
+  when: target_primary.mode == "user"
+
+- name: delete sql file
+  file:
+    path: /tmp/global_hostres.sql
+    state: absent

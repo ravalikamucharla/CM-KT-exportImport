@@ -1,0 +1,42 @@
+---
+
+- name: unchar MIGTIME.sar
+  shell: /usr/sap/sapinst/SWPM/sapcar.exe -xvf /usr/sap/sapinst/SWPM/COMMON/INSTALL/MIGTIME.SAR 
+  args:
+    chdir: "{{ install_dir_path }}"
+  register: extracted_files
+
+- debug: 
+    var: extracted_files
+
+- name: xml and html format of imort time 
+  shell: ./export_time.sh -xml -html
+  args:
+    chdir: "{{ install_dir_path_src }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.source.java_home_path }}"
+  register: xml_html_output
+
+- debug: 
+    var: xml_html_output
+
+- name: create folder
+  file:
+    path: "../xml"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the xml file 
+  fetch: 
+    src: "{{ install_dir_path_src }}/export_time.xml"
+    dest: "../xml/export_time.xml"
+    flat: yes
+
+- name: fetching the xml file 
+  fetch: 
+    src: "{{ install_dir_path_src }}/export_time.html"
+    dest: "../xml/export_time.html"
+    flat: yes
+

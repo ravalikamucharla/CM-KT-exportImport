@@ -1,0 +1,418 @@
+---
+#tasks file for sap-abap-postmigration
+
+- name: Copy abap post-migration script files
+  copy:
+    src: "../files/"
+    dest: "{{ abap_scripts_path }}"
+    mode: '0755'
+
+- name: Validating source and target data, establish connection and updating target SAP system with updated data(sap_align_configuration).
+  sap_align_configuration: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    updatecols: "{{ item.updatecols | default('[]') }}" 
+    uniquecols: "{{ item.unique_columns }}" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+  with_items: "{{ abap_post_migration_list }}"
+  register: output
+
+- name: set source and target aas details
+  vars:
+    concatinated_input: "join('_', [hostname, sid, instance_name, instance_no])"
+  set_fact: 
+    spad_aas_source: "{{ smlg_rz12_spad_source | to_json | from_json | map('json_query', concatinated_input) | join(',') }}"
+    spad_aas_target: "{{ smlg_rz12_spad_target | to_json | from_json | map('json_query', concatinated_input) | join(',') }}"
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_spad == "yes"
+
+- name: Validating source and target SPAD data for pas, establish connection and updating target SAP system with updated data(sap_spad).
+  sap_spad: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "Output devices are not assigned to any spool server in source system" 
+    updateval: "ALL" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "ZCM_SPAD_UPD_OPDEVICE_SERVER.txt" 
+    instancename: "['{{ hostname }}_{{ target.sap.sid }}_{{ instance_number }}']" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/ZCM_SPAD_EXP_OPDEVICE_SERVERS.json" 
+    targetvalues: "{{ abap_export_path }}ZCM_SPAD_EXP_OPDEVICE_SERVERS.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_pas_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_pas_{{ target.sap.instance_numbers.pas }}"
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_spad == 'no'
+  register: output_spad_pas
+
+- name: Validating source and target SPAD data for pas and aas, establish connection and updating target SAP system with updated data(sap_spad).
+  sap_spad: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "Output devices are not assigned to any spool server in source system" 
+    updateval: "ALL" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "ZCM_SPAD_UPD_OPDEVICE_SERVER.txt" 
+    instancename: "['{{ hostname }}_{{ target.sap.sid }}_{{ instance_number }}']" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/ZCM_SPAD_EXP_OPDEVICE_SERVERS.json" 
+    targetvalues: "{{ abap_export_path }}ZCM_SPAD_EXP_OPDEVICE_SERVERS.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_pas_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_pas_{{ target.sap.instance_numbers.pas }}"
+    source_aas_info: "{{ spad_aas_source }}"
+    target_aas_info: "{{ spad_aas_target }}"
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_spad == 'yes'
+  register: output_spad_aas
+
+- name: set source and target aas details
+  vars:
+    concatinated_input: "join('_', [hostname, sid, instance_no])"
+  set_fact: 
+    aas_info_source: "{{ smlg_rz12_spad_source | to_json | from_json | map('json_query', concatinated_input) | join(',') }}"
+    aas_info_target: "{{ smlg_rz12_spad_target | to_json | from_json | map('json_query', concatinated_input) | join(',') }}"
+  when: 
+    - source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined 
+    - multiple_instance_smlg == "yes" or multiple_instance_rz12 == "yes" or multiple_instance_strust == "yes"
+
+- name: Validating source and target certificate data for ascs and pas, establish connection and updating target SAP system with updated data( (sap_certificates_export)
+  sap_certificates_export: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "ZCM_STRUST_IMP_PSE_CERTIFICATE.txt"
+    message: "PSE's are not configured in source system"  
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/ZCM_STRUST_EXP_CERT.json" 
+    targetvalues: "{{ abap_export_path }}ZCM_STRUST_EXP_CERT.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_{{ target.sap.instance_numbers.pas }}" 
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_strust == "no"
+  register: output_ssl
+
+- name:  Validating source and target certificate data, establish connection and updating target SAP system with updated data( (sap_certificates_export)
+  sap_certificates_export: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "ZCM_STRUST_IMP_PSE_CERTIFICATE.txt"
+    message: "PSE's are not configured in source system"  
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/ZCM_STRUST_EXP_CERT.json" 
+    targetvalues: "{{ abap_export_path }}ZCM_STRUST_EXP_CERT.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_{{ target.sap.instance_numbers.pas }}"
+    source_aas_info: "{{ aas_info_source }}"
+    target_aas_info: "{{ aas_info_target }}"
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_strust == "yes"
+  register: output_ssl
+
+- name: Validating source & target RFC groups data when 'pas' is defined, establish connection and updating target SAP system with updated data(sap_rfc_groups).
+  sap_rfc_groups: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_{{ target.sap.instance_numbers.pas }}" 
+    message: "{{ item.message }}" 
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_rz12 == "no"
+  with_items: 
+    - "{{ abap_post_migration_rfc_groups }}"
+  register: output_rfc
+
+- name: Validating source & target RFC groups data when 'pas' and 'aas' is defined, establish connection and updating target SAP system with updated data(sap_rfc_groups).
+  sap_rfc_groups: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_{{ target.sap.instance_numbers.pas }}" 
+    message: "{{ item.message }}" 
+    source_aas_info: "{{ aas_info_source }}"
+    target_aas_info: "{{ aas_info_target }}"
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_rz12 == "yes"
+  with_items: 
+    - "{{ abap_post_migration_rfc_groups }}"
+  register: output_rfc
+
+- name: Validating source & target smlg data when 'pas' is defined, establish connection and updating target SAP system with updated data(sap_logon_group_smlg)
+  sap_logon_group_smlg: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    instancename: "['{{ hostname }}_{{ target.sap.sid }}_{{ instance_number }}']" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_{{ target.sap.instance_numbers.pas }}" 
+  with_items:
+      - "{{ abap_post_migration_smlg | default([]) }}"
+  register: output_smlg
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_smlg == "no"
+
+- name: Validating source & target smlg data when 'pas' and 'aas' is defined, establish connection and updating target SAP system with updated data(sap_logon_group_smlg)
+  sap_logon_group_smlg: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    instancename: "['{{ hostname }}_{{ target.sap.sid }}_{{ instance_number }}']" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    target_info: "{{ groups['target_pas'][0] }}_{{ target.sap.sid }}_{{ target.sap.instance_numbers.pas }}"
+    source_aas_info: "{{ aas_info_source }}"
+    target_aas_info: "{{ aas_info_target }}"
+  with_items:
+      - "{{ abap_post_migration_smlg | default([]) }}"
+  register: output_smlg
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_smlg == "yes"
+  
+- name: Validating source & target httpurlloc data, establish connection and updating target SAP system with updated data(sap_httpurlloc).
+  sap_httpurlloc: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    updatecols: "[{'HOST':'{{ hostname }}','APPLICATN':'{{ hostvars[groups['target_ascs'][0]].ansible_host | default(virtual_hostname) }}'}]" 
+    uniquecols: "{{ item.unique_columns }}" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+  with_items:
+      - "{{ abap_post_migration_httpurlloc }}"
+  register: output_httpurlloc
+
+- name: Validating source & target RZ21 data when pas is defined, establish connection and updating target SAP system with updated data(sap_rz21_segment).
+  sap_rz21_segment: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues: "{{ abap_export_path }}{{ (item.name | splitext)[0] }}.json"
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}" 
+    instancename: "['{{ hostname }}_{{ target.sap.sid }}_{{ instance_number }}']"
+  with_items:
+      - "{{ abap_post_migration_rz21 }}"
+  register: output_rz21_pas
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_rz21 == "no"
+
+- name: Validating source & target RZ21 data when pas and aas is defined, establish connection and updating target SAP system with updated data(sap_rz21_segment).
+  sap_rz21_segment: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues: "{{ abap_export_path }}{{ (item.name | splitext)[0] }}.json" 
+    source_info: "{{ groups['source_pas'][0] }}_{{ source.sap.sid }}_{{ source.sap.instance_numbers.pas }}"
+    source_aas_info: "{{ aas_info_source }}"
+    instancename: "['{{ hostname }}_{{ target.sap.sid }}_{{ instance_number }}']"
+  with_items:
+      - "{{ abap_post_migration_rz21 }}"
+  register: output_rz21_aas
+  when: source.sap.instance_numbers.pas is defined and target.sap.instance_numbers.pas is defined and multiple_instance_rz21 == "yes"
+
+- name: Validating source & target RZ04 data, establish connection and updating target SAP system with updated data(sap_rz04).
+  sap_rz04: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+  with_items:
+      - "{{ abap_post_migration_rz04 }}"
+  register: output_rz04
+
+- name: Validating source & target RZ04 data, establish connection and updating target SAP system with updated data(sap_rz04_later)
+  sap_rz04_later: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    message: "{{ item.message }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json"
+  with_items:
+      - "{{ abap_post_migration_rz04 }}"
+  register: output_rz04_later
+
+- name: Validating source & target sm19 data, establish connection and updating target SAP system with updated data(sm19_update)
+  sm19_update: 
+    hostip: "{{ hostip }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.restore_script }}" 
+    sourcevalues_list: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json" 
+    targetvalues_list: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json" 
+    uniquecols_list: "{{ item.unique_columns }}" 
+    message: "{{ item.message }}"
+  with_items:
+      - "{{ abap_post_migration_sm19 }}"
+  register: output_sm19
+
+- name: Establish connection and getting outputs from target SAP installed System (sap_pyrfc)
+  sap_pyrfc: 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    sncpartnername: "{{ sncpartner_name }}"
+    message: "{{ item.message | default('NA') | default() }}" 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.name }}" 
+    outputspath: "{{ abap_export_path }}" 
+    inputparams: "{{ item.input_params }}"
+  with_items:
+    - "{{ abap_post_migration_rz21 }}"
+    - "{{ abap_post_migration_sap_pyrfc }}"
+
+- name: Validating source & target AL11 data, establish connection and updating target SAP system with updated data(AL11)
+  AL11: 
+    username: "{{ user }}"
+    password: "{{ password }}" 
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "ZCM_AL11_UPD_SAP_DIRECTORY.txt" 
+    sourcevalues: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/{{ (item.export_script | splitext)[0] }}.json"
+    targetvalues: "{{ abap_export_path }}{{ (item.export_script | splitext)[0] }}.json" 
+    input_params_source: "{{ AL11.source_dir_params }}" 
+    input_params_target: "{{ AL11.target_dir_params }}" 
+    server_list_source: "{{ AL11.source_hostname }}" 
+    server_list_target: "{{ AL11.target_hostname }}" 
+    message: "NA"
+  with_items: 
+    - "{{ abap_post_migration_al11 }}"
+  register: AL11
+
+- name: SMQR and SMQS update activate scheduler
+  SMQR_SMQS_activate_scheduler:
+    username: "{{ user }}"
+    password: "{{ password }}" 
+    hostname: "{{ hostname }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}"
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.name }}" 
+    inputparam: "{{ item.input }}"
+    message: "{{ item.message | default('NA') | default() }}"
+  with_items: "{{ abap_smqr_smqs_update }}"
+  register: smqs
+
+# - name: setting path for exclusion list
+#   vars: 
+#     file_path:
+#      - exclusion.txt
+#     set_fact:
+#       exclusion_list_path: "{{ lookup('first_found', file_path) }}"
+#   delegate_to: localhost
+#   when: profile_parameter.required == 'yes'
+
+# - name: profile parameter update 
+#   sap_profile_update: 
+#     username: "{{ user }}" 
+#     password: "{{ password }}" 
+#     hostname: "{{ hostname }}" 
+#     hostip: "{{ hostip }}" 
+#     instance: "{{ instance_number }}" 
+#     client: "{{ client }}" 
+#     group: "{{ group }}" 
+#     abappath: "{{ abap_scripts_path }}" 
+#     abapscript: ZCM_RZ10_UPD_PROFILEPARA_UPD.txt 
+#     inclusion_param: "{{ profile_parameter.inclusion_parameters }}" 
+#     sourcevalues: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/ZCM_RZ10_EXP_PROFILEPARA_UPD.json" 
+#     targetvalues: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/target/abap_export/ZCM_RZ10_EXP_PROFILEPARA_UPD.json" 
+#     exclude_vars_file: "{{ exclusion_list_path }}"
+#   register: output_profile_update
+#   when: profile_parameter.required == 'yes'
+

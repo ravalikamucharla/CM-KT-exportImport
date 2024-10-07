@@ -1,0 +1,817 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SM52_EXP_STATUS_740_752                 *
+* Title               :   Export VMC Status & Server List             *
+* Purpose             :   This report is used to export VMC Status    *
+*                         and Server List                             *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM52/RSM52000_ALV                                                   *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*                                                                     *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*02-16-2021  Initial  Ruchir Kamble Local       To Export VMC Status &*
+*                                               Server List           *
+*12-07-2021  V001     Yasaswini K               Adding title to output*
+*                                               of second table       *
+*07-25-2022  V002  Soumya/Yasaswini  Local    To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sytem     *
+*06-16-2023  V003     Ashwini K P    Local   To check if VMC status is*
+*                                            active or no             *
+*---------------------------------------------------------------------*
+REPORT zcm_sm52_exp_status_740_752.
+
+" Code has been referred from standard report RSM52000_ALV
+" Subroutine used
+" VMC Status    - build_vmc_state
+" Server List   - build_list
+
+LOAD-OF-PROGRAM.
+
+  TYPES: BEGIN OF gty_vmc_state,
+           state(255),
+         END OF gty_vmc_state.
+
+  TYPES: BEGIN OF gty_vmc_list,
+           vminfo            TYPE vminfo,
+           type(10),
+           wp(10),
+           state(15),
+           used_mb(10),
+           debug_state(12),
+           profile_state(10),
+           debug_port(6),
+           sgc_state(30),
+           last_used_time(8),
+           cpu_time(15),
+         END OF gty_vmc_list.
+
+  TYPES: gtt_vmc_state TYPE STANDARD TABLE OF gty_vmc_state,
+         gtt_vmc_list  TYPE STANDARD TABLE OF gty_vmc_list.
+
+
+CLASS lcl_vmc DEFINITION FINAL.
+
+  PUBLIC SECTION.
+    METHODS
+      get_status
+        EXPORTING lt_vmc_state TYPE gtt_vmc_state
+                  lt_vm_list   TYPE gtt_vmc_list.
+
+ENDCLASS.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'               LENGTH 1,
+             lc_export    TYPE c VALUE 'EXPORT'          LENGTH 6,
+             lc_status    TYPE c VALUE 'Status'          LENGTH 6,
+             lc_title     TYPE c VALUE 'VMC Overview'    LENGTH 15,
+             lc_title1    TYPE c VALUE 'VMC List'        LENGTH 15,
+             lc_vm        TYPE c VALUE 'VM'              LENGTH 2,
+             lc_time      TYPE c VALUE 'Time'            LENGTH 4,
+             lc_wp        TYPE c VALUE 'WP'              LENGTH 2,
+             lc_type      TYPE c VALUE 'Type'            LENGTH 4,
+             lc_user      TYPE c VALUE 'User'            LENGTH 4,
+             lc_program   TYPE c VALUE 'Program'         LENGTH 7,
+             lc_cpu       TYPE c VALUE 'CPU'             LENGTH 3,
+             lc_memory    TYPE c VALUE 'Memory'          LENGTH 6,
+             lc_debug     TYPE c VALUE 'Debugging'       LENGTH 9,
+             lc_port      TYPE c VALUE 'Port'            LENGTH 4,
+             lc_profiling TYPE c VALUE 'Profiling'       LENGTH 9,
+             lc_sgc_state TYPE c VALUE 'SGCState'        LENGTH 8,
+* Begin of changes in V002
+             lc_noinput   TYPE c VALUE
+             'No input passed'                           LENGTH 20,
+             lc_input     TYPE c VALUE 'Incorrect input' LENGTH 15,
+             lc_err_msg   TYPE c VALUE 'No data found'   LENGTH 20.
+* End of changes in V002
+
+  DATA: ls_input      TYPE tab512,
+        ls_output     TYPE tab512,
+        lv_action     TYPE char6,
+        lv_vmhandle   TYPE char10,
+        lt_vmc_state  TYPE STANDARD TABLE OF gty_vmc_state,
+        ls_vmc_state  TYPE gty_vmc_state,
+        lt_vm_list    TYPE STANDARD TABLE OF gty_vmc_list,
+        ls_vm_list    TYPE gty_vmc_list,
+        lv_vmc_active TYPE i,     "+V003
+        lo_vmc        TYPE REF TO lcl_vmc.
+
+* Begin of changes in V002
+  " Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of changes in V002
+
+  " Clearing variable
+  CLEAR: ls_input, lv_action, lv_vmhandle.
+
+  " Reading input and get data
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V002
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V002
+
+  CASE lv_action.
+
+    WHEN lc_export.             " If action is EXPORT
+
+      FREE: lt_output[].                       "+V002
+
+* Begin of changes V003
+      CALL FUNCTION 'VMC_GET_STATE'
+        IMPORTING
+          vmc_active = lv_vmc_active.
+
+      IF lv_vmc_active = 0.
+
+        " Title
+        ls_output = lc_title.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding heading to the output
+        ls_output = lc_status.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        MESSAGE s063(14) INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding empty space to the output
+        ls_output = space.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding title to the output
+        ls_output = lc_title1.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        MESSAGE s063(14) INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSE.
+* End of changes V003
+
+        CREATE OBJECT lo_vmc.
+
+        " Calling method to get VMC status
+        CALL METHOD lo_vmc->get_status
+          IMPORTING
+            lt_vmc_state = lt_vmc_state
+            lt_vm_list   = lt_vm_list.
+
+        IF lt_vmc_state IS NOT INITIAL.
+
+          " Adding title to the output
+          ls_output = lc_title.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          " Adding heading to the output
+          ls_output = lc_status.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_vmc_state INTO ls_vmc_state.
+            IF ls_vmc_state IS NOT INITIAL.
+              ls_output = ls_vmc_state.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+            ENDIF.
+          ENDLOOP.
+
+        ELSE.
+
+          " Adding heading to the output
+          ls_output = lc_status.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          " No data found
+          ls_output = lc_err_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+*Begin of changes V001
+        " Adding empty space to the output
+        ls_output = space.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding title to the output
+        ls_output = lc_title1.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+*End of changes V001
+
+        IF lt_vm_list IS NOT INITIAL.
+
+          " Adding headings to the output
+          CONCATENATE lc_vm         lc_sep
+                      lc_time       lc_sep
+                      lc_wp         lc_sep
+                      lc_type       lc_sep
+                      lc_status     lc_sep
+                      lc_user       lc_sep
+                      lc_program    lc_sep
+                      lc_cpu        lc_sep
+                      lc_memory     lc_sep
+                      lc_debug      lc_sep
+                      lc_port       lc_sep
+                      lc_profiling  lc_sep
+                      lc_sgc_state
+                      INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_vm_list INTO ls_vm_list.
+
+            lv_vmhandle = ls_vm_list-vminfo-vm_handle.
+
+            CONDENSE: lv_vmhandle, ls_vm_list-used_mb,
+                      ls_vm_list-cpu_time.
+
+* Begin of changes V002
+            IF ls_vm_list-sgc_state IS INITIAL.
+              ls_vm_list-sgc_state = 'NULL'.
+            ENDIF.
+* End of changes V002
+
+            CONCATENATE lv_vmhandle                 lc_sep
+                        ls_vm_list-last_used_time   lc_sep
+                        ls_vm_list-wp               lc_sep
+                        ls_vm_list-type             lc_sep
+                        ls_vm_list-state            lc_sep
+                        ls_vm_list-vminfo-vm_user   lc_sep
+                        ls_vm_list-vminfo-vm_appl   lc_sep
+                        ls_vm_list-cpu_time         lc_sep
+                        ls_vm_list-used_mb          lc_sep
+                        ls_vm_list-debug_state      lc_sep
+                        ls_vm_list-debug_port       lc_sep
+                        ls_vm_list-profile_state    lc_sep
+                        ls_vm_list-sgc_state
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_vm_list, ls_output, lv_vmhandle.
+
+          ENDLOOP.
+        ELSE.
+
+          "No data found
+          ls_output = lc_err_msg. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+      ENDIF. "+V003
+
+      " To add Null value into blank spaces
+      DO.
+        REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+        IN TABLE lt_output WITH '|NULL|'.
+        FIND '||' IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT.
+        ENDIF.
+      ENDDO.
+* Begin of changes in V002
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+* End of changes in V002
+  ENDCASE.
+
+  FREE: lt_vmc_state, lt_vm_list.
+ENDFORM.
+
+CLASS lcl_vmc IMPLEMENTATION.
+
+  METHOD get_status.
+
+    FREE: lt_vmc_state, lt_vm_list.
+
+    CONSTANTS:
+      lc_0        TYPE c VALUE '0'                        LENGTH 1,
+      lc_1        TYPE c VALUE '1'                        LENGTH 1,
+      lc_2        TYPE c VALUE '2'                        LENGTH 1,
+      lc_amp      TYPE c VALUE '&'                        LENGTH 1,
+      lc_00       TYPE c VALUE '00'                       LENGTH 2,
+      lc_10       TYPE c VALUE '10'                       LENGTH 2,
+      lc_60       TYPE c VALUE '60'                       LENGTH 2,
+      lc_1000     TYPE c VALUE '1000'                     LENGTH 4,
+      lc_9999     TYPE c VALUE '9999'                     LENGTH 4,
+      lc_1048576  TYPE c VALUE '1048576'                  LENGTH 7,
+      lc_txt010   TYPE c VALUE 'Servlet'                  LENGTH 7,
+      lc_txt011   TYPE c VALUE 'RFC'                      LENGTH 3,
+      lc_txt012   TYPE c VALUE 'Auto Java'                LENGTH 10,
+      lc_txt013   TYPE c VALUE 'Java Test'                LENGTH 10,
+      lc_txt014   TYPE c VALUE 'Template'                 LENGTH 10,
+      lc_txt021   TYPE c VALUE 'Starting up'              LENGTH 15,
+      lc_txt022   TYPE c VALUE 'Stopping'                 LENGTH 15,
+      lc_txt023   TYPE c VALUE 'Running'                  LENGTH 10,
+      lc_txt024   TYPE c VALUE 'Waiting'                  LENGTH 8,
+      lc_txt025   TYPE c VALUE 'In Pool'                  LENGTH 7,
+      lc_txt026   TYPE c VALUE 'Unused'                   LENGTH 6,
+      lc_txt027   TYPE c VALUE 'Wants to Lock'            LENGTH 20,
+      lc_txt028   TYPE c VALUE 'Private'                  LENGTH 7,
+      lc_txt031   TYPE c VALUE 'Inactive'                 LENGTH 8,
+      lc_txt032   TYPE c VALUE 'Started'                  LENGTH 8,
+      lc_txt033   TYPE c VALUE 'Waiting'                  LENGTH 8,
+      lc_txt034   TYPE c VALUE 'Active'                   LENGTH 6,
+      lc_txt035   TYPE c VALUE 'Stopping'                 LENGTH 10,
+      lc_txt036   TYPE c VALUE 'Reserved'                 LENGTH 10,
+      lc_txt232   TYPE c VALUE 'Neutral'                  LENGTH 7,
+      lc_txt233   TYPE c VALUE 'Should Contribute'        LENGTH 20,
+      lc_txt234   TYPE c VALUE 'Must Contribute'          LENGTH 20,
+      lc_txt235   TYPE c VALUE 'Contributing'             LENGTH 15,
+      lc_txt236   TYPE c VALUE 'Has Contributed'          LENGTH 20,
+      lc_txt237   TYPE c VALUE 'Waiting'                  LENGTH 8,
+      lc_txt204   TYPE c VALUE 'VMC is active'            LENGTH 15,
+      lc_txt206   TYPE c VALUE
+      'Startup debugging is active'                       LENGTH 35,
+      lc_txt207   TYPE c VALUE
+      'Startup debugging is not active'                   LENGTH 40,
+      lc_txt208   TYPE c VALUE
+      'Startup debugging is initialized but not active'   LENGTH 60,
+      lc_txt209   TYPE c VALUE 'VMC is not loaded'        LENGTH 20,
+      lc_txt215   TYPE c VALUE 'Optimized Build'          LENGTH 20,
+      lc_txt216   TYPE c VALUE 'Debug Build'              LENGTH 15,
+      lc_txt227   TYPE c VALUE
+      'VMC was reset & times; last reset was on &, &'     LENGTH 50,
+      lc_txt228   TYPE c VALUE 'VMC Kernel Version: &'    LENGTH 25,
+      lc_txt239   TYPE c VALUE
+      'VMC is not active but it is loaded'                LENGTH 40,
+      lc_txt251   TYPE c VALUE
+      'Shared GC is not active'                           LENGTH 25,
+      lc_txt252   TYPE c VALUE
+      'Shared GC is active, VMs should contribute'        LENGTH 50,
+      lc_txt253   TYPE c VALUE
+      'Shared GC is active, VMs have to contribute'       LENGTH 50,
+      lc_txt256   TYPE c VALUE
+      'Debug proxy is not active'                         LENGTH 40,
+      lc_txt407   TYPE c VALUE
+      'Shared lock statistics are active'                 LENGTH 35,
+      lc_txt254   TYPE c VALUE
+      'Shared GC is active, all non-referenced objects will be released'
+                                                          LENGTH 80,
+      lc_txt258   TYPE c VALUE
+      'The external profiling timer is active and is running with PID &'
+                                                          LENGTH 100,
+      lc_txt257i  TYPE c VALUE
+      'The debug proxy is active and is running with PID'
+                                                          LENGTH 60,
+      lc_txt257ii TYPE c VALUE
+      '& and listening to port &'                         LENGTH 40.
+
+    CONSTANTS: lc_dp_vmc_not_active          TYPE sy-index VALUE 0,
+               lc_dp_vmc_active              TYPE sy-index VALUE 1,
+               lc_dp_vmc_enabled             TYPE sy-index VALUE 2,
+               lc_dp_vmc_sgc_inactive        TYPE sy-index VALUE 0,
+               lc_dp_vmc_sgc_contributing    TYPE sy-index VALUE 1,
+               lc_dp_vmc_sgc_force_contr     TYPE sy-index VALUE 2,
+               lc_dp_vmc_sgc_reclaiming      TYPE sy-index VALUE 3,
+               lc_dp_vmc_opt_build           TYPE sy-index VALUE 1,
+               lc_dp_vmc_web                 TYPE sy-index VALUE 0,
+               lc_dp_vmc_rem                 TYPE sy-index VALUE 1,
+               lc_dp_vmc_autojava            TYPE sy-index VALUE 2,
+               lc_dp_vmc_test                TYPE sy-index VALUE 3,
+               lc_dp_vmc_template            TYPE sy-index VALUE 4,
+               lc_dp_vmc_hold_for_lock       TYPE sy-index VALUE 7,
+               lc_dp_vmc_initialize          TYPE sy-index VALUE 1,
+               lc_dp_vmc_delete              TYPE sy-index VALUE 2,
+               lc_dp_vmc_running             TYPE sy-index VALUE 3,
+               lc_dp_vmc_waiting             TYPE sy-index VALUE 4,
+               lc_dp_vmc_pooled              TYPE sy-index VALUE 5,
+               lc_dp_vmc_sleeping            TYPE sy-index VALUE 6,
+               lc_dp_vmc_reserved            TYPE sy-index VALUE 8,
+               lc_dp_vmc_private             TYPE sy-index VALUE 9,
+               lc_dp_vm_dbg_state_not_active TYPE sy-index VALUE 1,
+               lc_dp_vm_dbg_state_starting   TYPE sy-index VALUE 3,
+               lc_vm_dbg_state_wait_for_dbg  TYPE sy-index VALUE 4,
+               lc_vm_dbg_state_debugger_att  TYPE sy-index VALUE 5,
+               lc_dp_vm_dbg_state_stopping   TYPE sy-index VALUE 6,
+               lc_dp_vmc_sgc_s_neutral       TYPE sy-index VALUE 0,
+               lc_dp_vmc_sgc_s_should_cont   TYPE sy-index VALUE 1,
+               lc_dp_vmc_sgc_s_must_cont     TYPE sy-index VALUE 2,
+               lc_dp_vmc_sgc_s_is_cont       TYPE sy-index VALUE 3,
+               lc_dp_vmc_sgc_s_has_cont      TYPE sy-index VALUE 4,
+               lc_vm_get_compilation_info    TYPE x VALUE 39,
+               lc_vm_get_act_mtx             TYPE x VALUE 19,
+               lc_vmc_debug_proxy_state      TYPE x VALUE 35,
+               lc_vmc_get_ext_timer_state    TYPE x VALUE 37.
+
+    DATA:lv_vmc_active              TYPE i,
+         lv_vmc_startup_debugging   TYPE i,
+         lv_vmc_sgc_phase           TYPE i,
+         lv_vmc_mtx_stat            TYPE i,
+         lv_vmc_build_type          TYPE i,
+         lv_vmc_build_info          TYPE vm_build_info,
+         lv_vmc_restart_date        TYPE d,
+         lv_vmc_restart_time        TYPE t,
+         lv_vmc_restart_count       TYPE i,
+         lv_c_vmc_restart_count(10),
+         lv_kernel_version          TYPE i,
+         lv_c_kernel_version(10),
+         lv_proxy_active            TYPE i,
+         lv_proxy_pid               TYPE i,
+         lv_c_proxy_pid(10),
+         lv_proxy_port              TYPE i,
+         lv_c_proxy_port(10),
+         lv_ext_timer_active        TYPE i,
+         lv_ext_timer_pid           TYPE i,
+         lv_c_ext_timer_pid(10),
+         lv_scratch(20),
+         lv_chour(4),
+         lv_cmin(2),
+         lv_csec(2),
+         lv_cmsec(3),
+         lv_used_mb                 TYPE vm_int64,
+         lv_compilation             TYPE i,
+         lv_hour                    TYPE sy-index,
+         lv_min                     TYPE sy-index,
+         lv_sec                     TYPE sy-index,
+         lv_msec                    TYPE sy-index,
+         lt_vm_tabl                 TYPE TABLE OF vminfo,
+         ls_vm_tabl                 TYPE vminfo,               "+V001
+         ls_vmc_state               TYPE gty_vmc_state,
+         ls_vm_list                 TYPE gty_vmc_list.
+
+    " Clearing variables
+    CLEAR:  lv_vmc_active,
+            lv_vmc_build_type,
+            lv_vmc_build_info,
+            lv_vmc_mtx_stat,
+            lv_vmc_startup_debugging,
+            lv_vmc_sgc_phase,
+            lv_vmc_restart_count,
+            lv_vmc_restart_date,
+            lv_vmc_restart_time.
+
+    " FM to get VMC data
+    CALL FUNCTION 'VMC_GET_STATE'
+      IMPORTING
+        vmc_active        = lv_vmc_active
+        vmc_build_type    = lv_vmc_build_type
+        vmc_build_info    = lv_vmc_build_info
+        vmc_mtx_stat      = lv_vmc_mtx_stat
+        vmc_debugging     = lv_vmc_startup_debugging
+        vmc_sgc_phase     = lv_vmc_sgc_phase
+        vmc_restart_count = lv_vmc_restart_count
+        vmc_restart_date  = lv_vmc_restart_date
+        vmc_restart_time  = lv_vmc_restart_time.
+
+    " To check VMC status
+    CASE lv_vmc_active.
+      WHEN lc_dp_vmc_not_active.
+        ls_vmc_state-state = lc_txt209.
+
+      WHEN lc_dp_vmc_enabled.
+        ls_vmc_state-state = lc_txt239.
+
+      WHEN lc_dp_vmc_active.
+        ls_vmc_state-state = lc_txt204.
+
+      WHEN OTHERS.
+        ls_vmc_state-state = lc_txt209.
+    ENDCASE.
+
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    IF lv_vmc_restart_count > lc_0.
+
+      CLEAR: lv_scratch, lv_c_vmc_restart_count.
+
+      ls_vmc_state-state = lc_txt227.
+      lv_c_vmc_restart_count = lv_vmc_restart_count.
+
+      REPLACE lc_amp IN ls_vmc_state-state
+      WITH lv_c_vmc_restart_count.
+
+      lv_scratch = lv_vmc_restart_date.
+      REPLACE lc_amp WITH lv_scratch INTO ls_vmc_state-state.
+
+      lv_scratch = lv_vmc_restart_time.
+      REPLACE lc_amp WITH lv_scratch INTO ls_vmc_state-state.
+
+      CONDENSE ls_vmc_state-state.
+      APPEND ls_vmc_state TO lt_vmc_state.
+      CLEAR ls_vmc_state.
+    ENDIF.
+
+    " Check SGC state
+    CASE lv_vmc_sgc_phase.
+      WHEN lc_dp_vmc_sgc_inactive.
+        ls_vmc_state-state = lc_txt251.
+      WHEN lc_dp_vmc_sgc_contributing.
+        ls_vmc_state-state = lc_txt252.
+      WHEN lc_dp_vmc_sgc_force_contr.
+        ls_vmc_state-state = lc_txt253.
+      WHEN lc_dp_vmc_sgc_reclaiming.
+        ls_vmc_state-state = lc_txt254.
+    ENDCASE.
+
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    " display mtx stat state
+    IF lv_vmc_mtx_stat <> lc_0.
+      ls_vmc_state-state = lc_txt407.
+      APPEND ls_vmc_state TO lt_vmc_state.
+      CLEAR ls_vmc_state.
+    ENDIF.
+
+    " startup debugging
+    IF lv_vmc_startup_debugging = lc_1.
+      ls_vmc_state-state = lc_txt208.
+    ELSEIF lv_vmc_startup_debugging = lc_2.
+      ls_vmc_state-state = lc_txt206.
+    ELSE.
+      ls_vmc_state-state = lc_txt207.
+    ENDIF.
+
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    " build info
+    ls_vmc_state-state = '& &'.
+    IF lv_vmc_build_type = lc_dp_vmc_opt_build.
+      ls_vmc_state-state = lc_txt215.
+    ELSE.
+      ls_vmc_state-state = lc_txt216.
+    ENDIF.
+
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    ls_vmc_state-state = lv_vmc_build_info.
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    " vmc kernel version
+    ls_vmc_state-state = lc_txt228.
+
+    " FM to get Kernel version
+    CALL FUNCTION 'VMC_GET_KERNEL_VERSION'
+      IMPORTING
+        kernel_version = lv_kernel_version.
+
+    CLEAR lv_c_kernel_version.
+    lv_c_kernel_version = lv_kernel_version.
+    REPLACE lc_amp IN ls_vmc_state-state WITH lv_c_kernel_version.
+
+    CONDENSE ls_vmc_state-state.
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    " vmc debug proxy state
+    CLEAR: lv_proxy_active, lv_proxy_pid, lv_proxy_port.
+
+    CALL 'ThVmInfo' ID 'OPCODE' FIELD lc_vmc_debug_proxy_state
+          ID 'PROXY_ACTIVE' FIELD lv_proxy_active
+          ID 'PROXY_PID' FIELD lv_proxy_pid
+          ID 'PROXY_PORT' FIELD lv_proxy_port.
+
+    IF lv_proxy_active = lc_0.
+      ls_vmc_state-state = lc_txt256.
+    ELSE.
+
+      CLEAR lv_c_proxy_pid.
+
+      lv_c_proxy_pid = lv_proxy_pid.
+      ls_vmc_state-state = |{ lc_txt257i } { lc_txt257ii }|.
+
+      REPLACE lc_amp IN ls_vmc_state-state WITH lv_c_proxy_pid.
+      IF lv_proxy_port = -1.
+        REPLACE lc_amp IN ls_vmc_state-state WITH '?'.
+      ELSE.
+
+        CLEAR lv_c_proxy_port.
+        lv_c_proxy_port = lv_proxy_port.
+        REPLACE lc_amp IN ls_vmc_state-state WITH lv_c_proxy_port.
+      ENDIF.
+
+      CONDENSE ls_vmc_state-state.
+    ENDIF.
+    APPEND ls_vmc_state TO lt_vmc_state.
+    CLEAR ls_vmc_state.
+
+    " vmc ext timer state
+    CLEAR: lv_ext_timer_active, lv_ext_timer_pid.
+
+    CALL 'ThVmInfo' ID 'OPCODE' FIELD lc_vmc_get_ext_timer_state
+          ID 'EXT_TIMER_ACTIVE' FIELD lv_ext_timer_active
+          ID 'EXT_TIMER_PID' FIELD lv_ext_timer_pid.
+
+    IF lv_ext_timer_active <> lc_0.
+      ls_vmc_state-state = lc_txt258.
+
+      REPLACE lc_amp IN ls_vmc_state-state WITH lv_c_ext_timer_pid.
+
+      CONDENSE ls_vmc_state-state.
+      APPEND ls_vmc_state TO lt_vmc_state.
+      CLEAR ls_vmc_state.
+    ENDIF.
+
+    " 1 is active & 0 is inactive
+    IF lv_vmc_active EQ 1.
+
+      " Fm to get VMC data
+      CALL FUNCTION 'VMC_INFO'
+        TABLES
+          vmlist = lt_vm_tabl.
+
+      IF lt_vm_tabl IS NOT INITIAL .
+
+        LOOP AT lt_vm_tabl INTO ls_vm_tabl.
+
+          ls_vm_list-vminfo = ls_vm_tabl.
+
+          " get lock info
+          IF ls_vm_tabl-vm_state = lc_dp_vmc_hold_for_lock OR
+             ls_vm_tabl-vm_locks > 0.
+
+            CALL 'ThVmInfo' ID 'OPCODE' FIELD lc_vm_get_act_mtx
+                            ID 'VM_HANDLE' FIELD ls_vm_tabl-vm_handle.
+          ENDIF.
+
+          " get compilation info
+          lv_compilation = 0.
+          CALL 'ThVmInfo' ID 'OPCODE' FIELD lc_vm_get_compilation_info
+                          ID 'VM_HANDLE' FIELD ls_vm_tabl-vm_handle
+                          ID 'COMPILATION' FIELD lv_compilation.
+
+          CASE ls_vm_tabl-vm_type.
+            WHEN lc_dp_vmc_web.
+              ls_vm_list-type = lc_txt010.
+            WHEN lc_dp_vmc_rem.
+              ls_vm_list-type = lc_txt011.
+            WHEN lc_dp_vmc_autojava.
+              ls_vm_list-type = lc_txt012.
+            WHEN lc_dp_vmc_test.
+              ls_vm_list-type = lc_txt013.
+            WHEN lc_dp_vmc_template.
+              ls_vm_list-type = lc_txt014.
+          ENDCASE.
+
+          IF ls_vm_tabl-wp_number <> -1 .
+            ls_vm_list-wp = ls_vm_tabl-wp_number.
+          ENDIF.
+
+          " Check VMC State
+          CASE ls_vm_tabl-vm_state.
+            WHEN lc_dp_vmc_initialize.
+              ls_vm_list-state = lc_txt021.
+            WHEN lc_dp_vmc_delete.
+              ls_vm_list-state = lc_txt022.
+            WHEN lc_dp_vmc_running.
+              ls_vm_list-state = lc_txt023.
+            WHEN lc_dp_vmc_waiting.
+              ls_vm_list-state = lc_txt024.
+            WHEN lc_dp_vmc_pooled.
+              ls_vm_list-state = lc_txt025.
+            WHEN lc_dp_vmc_sleeping.
+              ls_vm_list-state = lc_txt026.
+            WHEN lc_dp_vmc_hold_for_lock.
+              ls_vm_list-state = lc_txt027.
+            WHEN lc_dp_vmc_reserved.
+              ls_vm_list-state = lc_txt036.
+            WHEN lc_dp_vmc_private.
+              ls_vm_list-state = lc_txt028.
+          ENDCASE.
+
+          " cpu in format hhhh:mm:ss.mmmm
+          ls_vm_tabl-vm_cpu = ls_vm_tabl-vm_cpu DIV lc_1000.
+          lv_msec = ls_vm_tabl-vm_cpu MOD lc_1000.
+          ls_vm_tabl-vm_cpu = ls_vm_tabl-vm_cpu DIV lc_1000.
+          lv_sec = ls_vm_tabl-vm_cpu MOD lc_60.
+          ls_vm_tabl-vm_cpu = ls_vm_tabl-vm_cpu DIV lc_60.
+          lv_min = ls_vm_tabl-vm_cpu MOD lc_60.
+          ls_vm_tabl-vm_cpu = ls_vm_tabl-vm_cpu DIV lc_60.
+          lv_hour = ls_vm_tabl-vm_cpu MOD lc_60.
+
+          " cast to strings.
+          IF lv_min < lc_10.
+            WRITE lv_min  TO lv_cmin+1(1) RIGHT-JUSTIFIED.
+            WRITE lc_0  TO lv_cmin+0(1).
+          ELSE.
+            WRITE lv_min TO lv_cmin+0(2) RIGHT-JUSTIFIED.
+          ENDIF.
+
+          IF lv_sec < lc_10.
+            WRITE lv_sec  TO lv_csec+1(1) RIGHT-JUSTIFIED.
+            WRITE lc_0  TO lv_csec+0(1).
+          ELSE.
+            WRITE lv_sec TO lv_csec+0(2) RIGHT-JUSTIFIED.
+          ENDIF.
+
+          IF lv_msec < lc_10.
+            WRITE lv_msec  TO lv_cmsec+2(1) RIGHT-JUSTIFIED.
+            WRITE lc_00 TO lv_cmsec+0(2).
+          ELSEIF lv_msec < 100.
+            WRITE lv_msec  TO lv_cmsec+1(2) RIGHT-JUSTIFIED.
+            WRITE lc_0  TO lv_cmsec+0(1).
+          ELSE.
+            WRITE lv_msec  TO lv_cmsec+0(3) RIGHT-JUSTIFIED.
+          ENDIF.
+
+          IF lv_hour > lc_9999.
+            lv_chour = '****'.
+          ELSE.
+            lv_chour = lv_hour.
+          ENDIF.
+
+          CONCATENATE lv_chour lv_cmin lv_csec INTO lv_scratch
+            SEPARATED BY ':'.
+          CONCATENATE lv_scratch lv_cmsec INTO lv_scratch
+            SEPARATED BY '.'.
+          WRITE lv_scratch TO ls_vm_list-cpu_time RIGHT-JUSTIFIED.
+
+          " display memory in mb
+          lv_used_mb = ls_vm_tabl-vm_used_bytes DIV lc_1048576.
+          ls_vm_list-used_mb = lv_used_mb.
+
+          " Check Debugging state
+          CASE ls_vm_tabl-vm_debug_state.
+            WHEN lc_dp_vm_dbg_state_not_active.
+              ls_vm_list-debug_state = lc_txt031.
+            WHEN lc_dp_vm_dbg_state_starting.
+              ls_vm_list-debug_state = lc_txt032.
+            WHEN lc_vm_dbg_state_wait_for_dbg.
+              ls_vm_list-debug_state = lc_txt033.
+            WHEN lc_vm_dbg_state_debugger_att.
+              ls_vm_list-debug_state = lc_txt034.
+            WHEN lc_dp_vm_dbg_state_stopping.
+              ls_vm_list-debug_state = lc_txt035.
+          ENDCASE.
+
+          IF ls_vm_tabl-vm_debug_port <> -1.
+            ls_vm_list-debug_port = ls_vm_tabl-vm_debug_port.
+          ELSE.
+            ls_vm_list-debug_port = ' '.
+          ENDIF.
+
+          IF ls_vm_tabl-vm_used_time <> ' '.
+
+            WRITE ls_vm_tabl-vm_used_time TO
+            ls_vm_list-last_used_time
+            USING EDIT MASK '__.__.__'.
+          ELSE.
+            ls_vm_tabl-vm_used_time = ' '.
+          ENDIF.
+
+          CLEAR lv_scratch.
+          CASE ls_vm_tabl-vm_sgc_state.
+            WHEN lc_dp_vmc_sgc_s_neutral.
+              lv_scratch = lc_txt232.
+            WHEN lc_dp_vmc_sgc_s_should_cont.
+              lv_scratch = lc_txt233.
+            WHEN lc_dp_vmc_sgc_s_must_cont.
+              lv_scratch = lc_txt234.
+            WHEN lc_dp_vmc_sgc_s_is_cont.
+              lv_scratch = lc_txt235.
+            WHEN lc_dp_vmc_sgc_s_has_cont.
+              lv_scratch = lc_txt236.
+          ENDCASE.
+
+          IF ls_vm_tabl-vm_sgc_waiting <> lc_0.
+            CONCATENATE lv_scratch ', ' lc_txt237 INTO lv_scratch.
+          ENDIF.
+          ls_vm_list-sgc_state = lv_scratch.
+
+          APPEND ls_vm_list TO lt_vm_list.
+          CLEAR: ls_vm_tabl, ls_vm_list, lv_scratch.
+
+        ENDLOOP.
+
+        " Sorting server list in Ascending order by vmhandle
+        SORT lt_vm_list ASCENDING BY vminfo-vm_handle.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.

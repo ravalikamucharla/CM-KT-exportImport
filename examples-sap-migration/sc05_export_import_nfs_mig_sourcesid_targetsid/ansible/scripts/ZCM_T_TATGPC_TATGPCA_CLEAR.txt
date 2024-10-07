@@ -1,0 +1,171 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_T_TATGPC_TATGPCA_CLEAR                   *
+* Title               :  Delete entries of TATGPC and TATGPCA         *
+* Purpose             :  To delete entries of TATGPC and TATGPCA      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XX                                                                  *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TATGPC                   X                                          *
+* TATGPCA                  X                                          *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-30-2021  Initial   Soumya Ray   Local         To delete entries of*
+*                                                 TATGPC and TATGPCA  *
+*09-22-2022  V001      Soumya Ray   Local         To pass 'No data fou*
+*                                                 nd' in case of no   *
+*                                                 data in system      *
+*---------------------------------------------------------------------*
+REPORT zcm_t_tatgpc_tatgpca_clear.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_colon     TYPE c VALUE ':',
+             lc_delete    TYPE c VALUE 'DELETE'          LENGTH 6,
+             lc_head      TYPE c VALUE
+             'Clear TATGPC and TATGPCA entries'          LENGTH 50,
+             lc_noinput   TYPE c VALUE
+             'No input passed'                           LENGTH 20,
+             lc_inc_input TYPE c VALUE
+             'Incorrect input'                           LENGTH 20,
+             lc_entriesno TYPE c VALUE
+             'Entries deleted from table'                LENGTH 26,
+             lc_enqueue   TYPE c VALUE
+             'table failed to lock'                      LENGTH 50,
+             lc_mode      TYPE dd26e-enqmode   VALUE    'E',
+             lc_tatgpc    TYPE tabname VALUE 'TATGPC',
+             lc_tatgpca   TYPE tabname VALUE 'TATGPCA',
+* Begin of changes in V001
+             lc_nodatagpc TYPE c VALUE
+             'No data found in TATGPC table'             LENGTH 30,
+             lc_nodatapca TYPE c VALUE
+             'No data found in TATGPCA table'            LENGTH 30.
+* End of changes in V001
+
+  DATA: ls_output  TYPE tab512,
+        lv_count   TYPE string,
+        lv_action  TYPE string,
+        ls_input   TYPE tab512,
+        lt_tatgpc  TYPE STANDARD TABLE OF tatgpc,
+        lt_tatgpca TYPE STANDARD TABLE OF tatgpca.
+
+  ls_output = lc_head.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_delete. "Delete
+      " Select entries from TATGPC table
+      " for count of entries deleted
+      SELECT * FROM tatgpc INTO TABLE lt_tatgpc.
+
+      IF sy-subrc = 0.
+*-------------Entries of TATGPC table delete---------------------*
+*   FM to enqueue the TATGPC table
+        CALL FUNCTION 'ENQUEUE_E_TABLE'
+          EXPORTING
+            mode_rstable   = lc_mode
+            tabname        = lc_tatgpc
+          EXCEPTIONS
+            foreign_lock   = 1
+            system_failure = 2
+            OTHERS         = 3.
+        IF sy-subrc <> 0. " Table is not locked
+          CONCATENATE lc_tatgpc lc_enqueue INTO ls_output
+          SEPARATED BY space. " Msg to denote lock of table failed
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ELSE.
+*     Delete if TATGPC has any entry.
+          DELETE FROM tatgpc.
+          DESCRIBE TABLE lt_tatgpc  LINES lv_count.
+          CONCATENATE lc_entriesno lc_tatgpc lc_colon lv_count
+          INTO ls_output SEPARATED BY space.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, lv_count.
+
+*     FM to dequeue the TATGPC table
+          CALL FUNCTION 'DEQUEUE_E_TABLE'
+            EXPORTING
+              mode_rstable = lc_mode
+              tabname      = lc_tatgpc.
+        ENDIF.
+* Begin of changes in V001
+      ELSE.
+        " No data found
+        ls_output = lc_nodatagpc.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+* End of changes in V001
+      ENDIF.
+*----------------------------------------------------------------*
+*-------------Entries of TATGPC table delete---------------------*
+      " Select entries from TATGPCA table
+      " for count of entries deleted
+      SELECT * FROM tatgpca INTO TABLE lt_tatgpca.
+
+      IF sy-subrc = 0.
+*   FM to enqueue the TATGPCA table
+        CALL FUNCTION 'ENQUEUE_E_TABLE'
+          EXPORTING
+            mode_rstable   = lc_mode
+            tabname        = lc_tatgpca
+          EXCEPTIONS
+            foreign_lock   = 1
+            system_failure = 2
+            OTHERS         = 3.
+        IF sy-subrc <> 0. " Table is not locked
+          CONCATENATE lc_tatgpca lc_enqueue INTO ls_output
+          SEPARATED BY space. " Msg to denote lock of table failed
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ELSE.
+*     Delete if TATGPC has any entry.
+          DELETE FROM tatgpca.
+          DESCRIBE TABLE lt_tatgpca  LINES lv_count.
+          CONCATENATE lc_entriesno lc_tatgpca lc_colon lv_count
+          INTO ls_output SEPARATED BY space.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, lv_count.
+
+*     FM to dequeue the TATGPC table
+          CALL FUNCTION 'DEQUEUE_E_TABLE'
+            EXPORTING
+              mode_rstable = lc_mode
+              tabname      = lc_tatgpca.
+        ENDIF.
+* Begin of changes in V001
+      ELSE.
+        " No data found
+        ls_output = lc_nodatapca.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+* End of changes in V001
+      ENDIF.
+*----------------------------------------------------------------*
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+ENDFORM.

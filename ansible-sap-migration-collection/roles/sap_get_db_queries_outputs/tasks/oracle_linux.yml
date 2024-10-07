@@ -1,0 +1,113 @@
+- set_fact:
+    login: "{{ login_mechanism | default('sudo') }}"
+
+- name: Create an empty file
+  file:
+     path: "/tmp/{{ item.name }}.sql"
+     state: touch
+     mode: 0777
+  with_items:
+     - "{{ oracle_queries }}"
+     - "{{ oracle_queries_txt }}"
+
+- name: Insert oracle queries in sql file
+  lineinfile:
+     path: /tmp/{{ item.name }}.sql
+     line: "{{ item.query }}"
+  with_items:
+     - "{{ oracle_queries }}"
+     - "{{ oracle_queries_txt }}"
+
+- name: Insert exit; to sql file
+  lineinfile:
+     path: "/tmp/{{ item.name }}.sql"
+     line: exit;
+  with_items:
+     - "{{ oracle_queries }}"
+     - "{{ oracle_queries_txt }}"
+
+- name: Copy oracle scripts from local to target node
+  copy:
+    src: "../files/get_oracle_tablespace.sql"
+    dest: "/tmp/"
+    mode: '0777'
+
+- set_fact:
+    ora_sid: "{{ sid | lower }}adm"
+
+- set_fact:
+    ora_user: "{{ oracle_user | default(ora_sid) }}"
+
+-  name: Execute oracle queries
+   shell: '{{ login }} su - {{ ora_user }}  -c "sqlplus -s / as sysdba @/tmp/{{ item.name }}.sql"'
+   register: output
+   args:
+     executable: /bin/bash
+   with_items:
+      - "{{ oracle_queries }}"
+   loop_control:
+      index_var: index   
+
+- debug: 
+    var: output
+
+-  name: Execute oracle queries
+   shell: '{{ login }} su - {{ sid | lower }}adm -c "sqlplus -s / as sysdba @/tmp/{{ item.name }}.sql"'
+   register: output_txt
+   args:
+     executable: /bin/bash
+   with_items:
+      - "{{ oracle_queries_txt }}"
+      - "{{ oracle_queries_files }}"
+   loop_control:
+      index_var: index   
+
+- name: Write oracle outputs in json format
+  template: 
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.json'
+  become: yes
+  delegate_to: localhost
+  with_items:
+     - "{{ oracle_queries }}" 
+  loop_control:
+      index_var: index
+  when:
+  - item.name == output.results[index].item.name
+
+- name: Write oracle outputs in text format
+  template:
+    src: "oracle_queries.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.txt'
+  become: yes
+  delegate_to: localhost
+  with_items:
+     - "{{ oracle_queries_txt }}"
+     - "{{ oracle_queries_files }}"
+  loop_control:
+      index_var: index
+  when: 
+  - item.name == output_txt.results[index].item.name
+
+- name: Execute command to get list of top lobs
+  shell:
+   " awk '/CHUNK/&&c++>0 {next} 1' get_list_of_top_lob_outputs.txt|awk '/OWNER/&&c++>0 {next} 1'|awk '/TABLE_NAME/&&c++>0 {next} 1'|sed '/^-/d'|sed '/^$/d'|sed '0~3G' | tee get_list_of_top_lob_outputs.txt "
+  args:
+    chdir: '{{ db_export_path }}{{ db_type }}'
+  delegate_to: localhost
+
+- name: Execute command to get list of top tables
+  shell: 
+   " awk '/CHUNK/&&c++>0 {next} 1' get_list_of_top_tables_outputs.txt|awk '/OWNER/&&c++>0 {next} 1'|awk '/TABLE_NAME/&&c++>0 {next} 1'|awk '/NVL/&&c++>0 {next} 1'|sed '/^-/d'|sed '/^$/d'|sed '0~3G' | tee get_list_of_top_tables_outputs.txt "
+  args:
+    chdir: '{{ db_export_path }}{{ db_type }}'
+  delegate_to: localhost
+
+- name: Delete sql files on the remote target
+  file:
+     path: /tmp/{{ item.name }}.sql
+     state: absent
+  with_items:
+     - "{{ oracle_queries }}"
+     - "{{ oracle_queries_txt }}" 
+     - "{{ oracle_queries_files }}"

@@ -1,0 +1,134 @@
+- set_fact:
+    unregister_dbname: "{{ site_id | default(rep_target_db) }}"
+
+- name: main | stop hana
+  include_role:
+    name: sap_db_start_stop
+    tasks_from: stop.yml
+  when: replication.take_over_params.required == 'no'
+
+- name: status check
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_state"
+  async: 12000
+  poll: 3
+  register: output_state
+
+# Display status before takeover  
+- debug:
+    var: output_state
+
+- name: copy side_id.j2 file to the target system
+  block:
+    - name: template the sql file
+      template:
+        src: "site_id.j2"
+        dest: "/tmp/site_id.sql"
+      delegate_to: "{{ primary_host }}"
+
+    - name: Change permission of sql file
+      file:
+        path: "/tmp/site_id.sql"
+        mode: "777"
+      delegate_to: "{{ primary_host }}"
+  when: unregister_db is not defined
+
+- name: Executing sql command to get site_id with user name and password
+  block:
+    - name: execute the sql query 
+      vars:
+        tenant_db: "{{ sid | upper }}"
+        hana_db_name: "{{ source.sap.db.hana_db_name }}" 
+        source_db_user: "{{ source.sap.db.db_user }}"
+        source_db_password: "{{ passwords.db.source }}"
+      command: sudo su - {{ sid | lower }}adm -c 'hdbsql -i {{ instance_number }} -d {{ hana_db_name | default(tenant_db) }} -u {{ source_db_user }} -p "{{ source_db_password }}" -I /tmp/site_id.sql'
+      async: 12000
+      poll: 10
+      register: site_id
+      delegate_to: "{{ primary_host }}"
+
+    - name: On secondary system unregister the secondary system
+      command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_unregister --id={{ site_id.stdout_lines[1] }}"
+      async: 12000
+      poll: 3
+      register: unregister
+
+    - name: check if unregister is successful
+      debug: 
+        var: unregister
+
+  when: 
+    - unregister_db is not defined 
+    - hsr_source.mode == "user" 
+
+- name: Executing sql command to get site_id with hdbuserstore key
+  block:
+    - name: execute the sql query 
+      command: sudo su - {{ sid | lower }}adm -c 'hdbsql -U {{ hdbuserstore_key_source.key_name | default('BACKUP') }} -I /tmp/site_id.sql'
+      async: 12000
+      poll: 10
+      register: site_id_key
+      delegate_to: "{{ primary_host }}"
+
+    - name: On secondary system unregister the secondary system
+      command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_unregister --id={{ site_id_key.stdout_lines[1] }}"
+      async: 12000
+      poll: 3
+      register: unregister_ouput
+
+    - name: check if unregister is successful
+      debug: 
+        var: unregister_ouput
+  when: 
+    - unregister_db is not defined
+    - hsr_source.mode == "hdbuserstorekey"
+
+- name: Delete the sql file
+  file:
+    path: "/tmp/site_id.sql"
+    state: absent
+  delegate_to: "{{ primary_host }}"
+  when: unregister_db is not defined
+
+- name: unregister the secondary system
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_unregister --name={{ unregister_db }}"
+  async: 12000
+  poll: 3
+  register: output
+  when: unregister_db is defined
+
+- name: check if unregister is successful
+  debug: 
+    var: output
+  when: unregister_db is defined
+
+- name: status check after unregister
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_state"
+  async: 12000
+  poll: 3
+  register: output_state
+
+#Display status after unregister  
+- debug:
+    var: output_state
+
+- name: Disable
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_disable"
+  async: 12000
+  poll: 3
+  register: output_disable
+
+#Display disable status 
+- debug:
+    var: output_disable
+    
+- name: status check after disable
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_state"
+  async: 12000
+  poll: 3
+  register: output_state
+  
+#status check after disable
+- debug:
+    var: output_state
+
+- command: sleep 20

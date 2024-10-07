@@ -1,0 +1,5 @@
+[{% for win_service in win_service_outputs.stdout_lines -%}
+{%- if loop.index >= 3 and loop.index <= loop.length-3  %}
+ {"win_service_name": "{{ win_service | replace("   ","") }}"},
+{%- endif %}
+{% endfor %}]

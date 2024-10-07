@@ -1,0 +1,9 @@
+- name:  Full sync
+  command: sudo su - {{ sid|lower }}adm -c "hdbnsutil -sr_fullsync --enable"
+  async: 12000
+  poll: 10
+  register: full_sync
+  delegate_to: "{{ primary_host }}"
+
+- debug:
+    var: full_sync

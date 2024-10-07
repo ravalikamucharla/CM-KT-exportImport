@@ -1,0 +1,17 @@
+---
+- name: checking the status 
+  command: sudo su - {{ sid | lower }}adm -c "sapcontrol -nr {{ instance_number }} -function GetSystemInstanceList"
+  register: instance_list
+
+# To display the status of start and stop db with getsysteminstancelist
+- debug: 
+    var: instance_list
+
+- name: checking the status 
+  command: sudo su - {{ sid | lower }}adm -c "sapcontrol -nr {{ instance_number }} -function GetProcessList"
+  failed_when: "process_list.rc not in [0,1,2,3,4,5,6,7,8,9,10]"
+  register: process_list
+
+#To display the status of start and stop with getprocesslist
+- debug: 
+    var: process_list

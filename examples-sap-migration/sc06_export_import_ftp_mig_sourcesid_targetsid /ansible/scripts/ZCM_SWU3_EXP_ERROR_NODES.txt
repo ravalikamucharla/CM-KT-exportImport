@@ -1,0 +1,362 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SWU3_EXP_ERROR_NODES                    *
+* Title               :   Export errored nodes from SWU3              *
+* Purpose             :   This report is used to check and display    *
+*                     :   all errored nodes of SWU3                   *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SWU3                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-16-2021  Initial  Ashwini B G   Local       To check and display  *
+*                                               all errored nodes of  *
+*                                               SWU3                  *
+*09-08-2022  V001     Yasaswini K   Local      To add no data found   *
+*                                              changes                *
+*---------------------------------------------------------------------*
+REPORT zcm_swu3_exp_error_nodes.
+
+FORM get_config
+              TABLES lt_input STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c VALUE '|'                   LENGTH 1,
+             lc_compo      TYPE c VALUE 'SAP_BASIS'           LENGTH 9,
+             lc_act_exp    TYPE c VALUE 'EXPORT'              LENGTH 6,
+             lc_msg        TYPE c VALUE
+             'List of SWU3 error nodes'                       LENGTH 80,
+*  Begin of changes in V001
+             lc_no_input   TYPE c VALUE 'No input passed'     LENGTH 20,
+             lc_msg_nodata TYPE string
+                                  VALUE 'No data found',
+*  End of changes in V001
+             lc_inc_input  TYPE c VALUE 'Incorrect input'     LENGTH 20,
+             lc_icon       TYPE c VALUE '@02@'                LENGTH 4,
+             lc_error      TYPE c VALUE 'Error'               LENGTH 5,
+             lc_status     TYPE c VALUE 'Status'              LENGTH 6,
+             lc_main_node  TYPE c VALUE 'MainNode'            LENGTH 8,
+             lc_sub_node   TYPE c VALUE 'SubNode'             LENGTH 7.
+
+  TYPES: BEGIN OF lty_nodes_tab,
+           class      TYPE seoclsname,
+           object     TYPE REF TO cl_swf_cst_treebase,
+           parent     TYPE seoclsname,
+           parent_obj TYPE REF TO cl_swf_cst_treebase,
+           component  TYPE dlvunit,
+           pos        TYPE swfcpos,
+         END OF lty_nodes_tab,
+
+         BEGIN OF lty_roots,
+           class TYPE seoclsname,
+           pos   TYPE swfcpos,
+         END OF lty_roots,
+
+         BEGIN OF lty_node,
+           class     TYPE seoclsname,
+           node_name TYPE  text80,
+           status    TYPE char10,
+         END OF lty_node,
+
+         BEGIN OF lty_final,
+           main_node TYPE text80,
+           sub_node  TYPE text80,
+           status    TYPE char10,
+         END OF lty_final.
+
+  DATA: lt_swfctask     TYPE STANDARD TABLE OF swfctask,
+        ls_swfctask     TYPE swfctask,
+        lo_obj          TYPE REF TO if_swf_cst_task,
+        ls_input        TYPE tab512,
+        ls_output       TYPE tab512,
+        lv_action       TYPE char6,
+        lv_viewclass    TYPE i,
+        lt_objects      TYPE STANDARD TABLE OF lty_nodes_tab,
+        lo_objects      TYPE lty_nodes_tab,
+        lo_swf_treebase TYPE REF TO cl_swf_cst_treebase,
+        lt_roots        TYPE STANDARD TABLE OF lty_roots,
+        ls_roots        TYPE lty_roots,
+        lt_node         TYPE STANDARD TABLE OF lty_node,
+        ls_node         TYPE lty_node,
+        ls_node1        TYPE lty_node,
+        lv_title        TYPE text80,
+        lv_state_icon   TYPE char10,
+        lv_tabix        TYPE sy-tabix,
+        lt_final        TYPE STANDARD TABLE OF lty_final,
+        ls_final        TYPE lty_final.
+
+  FREE: lt_output.
+
+  " Title
+  ls_output = lc_msg.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Read the input values from Python
+  CLEAR: ls_input.
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    " No input given
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_act_exp. "EXPORT
+
+* Under the pre-migration activities, SWU3 nodes which are in
+* error status are exported to Python.
+* This data is displayed in transaction SWU3.
+
+* Below code is copied from standard include RSWF_CST_AUTOCUST
+
+      " Get the task for component SAP_BASIS
+      FREE: lt_swfctask.
+      SELECT *
+        FROM swfctask
+        INTO TABLE lt_swfctask
+        WHERE component = lc_compo.
+      IF sy-subrc NE 0.
+*        MESSAGE e015(swf_cst) INTO ls_output.     "-V001
+        ls_output = lc_msg_nodata.                 "+V001
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+        RETURN.
+      ENDIF.
+
+      SORT:lt_swfctask BY parent_obj ASCENDING
+                          relpos     ASCENDING.
+
+      FREE: lt_objects,lt_roots.
+
+      " Read and create objects
+      CLEAR: ls_swfctask.
+      LOOP AT lt_swfctask INTO ls_swfctask.
+
+        CREATE OBJECT lo_obj TYPE (ls_swfctask-cust_obj).
+
+        IF lo_obj IS BOUND.
+          CLEAR: lv_viewclass.
+          CALL METHOD lo_obj->get_viewclass
+            IMPORTING
+              viewclass = lv_viewclass.
+        ENDIF.
+
+        CASE lv_viewclass.
+
+          WHEN 0.                     " activity
+            CREATE OBJECT lo_objects-object TYPE cl_swf_cst_treeobj
+              EXPORTING
+                i_object    = lo_obj
+                i_use       = 0
+                i_classname = ls_swfctask-cust_obj
+                i_component = ls_swfctask-component.
+
+          WHEN 1.                    " parent or pure text
+            CREATE OBJECT lo_objects-object TYPE cl_swf_cst_treetext
+              EXPORTING
+                i_object    = lo_obj
+                i_use       = 1
+                i_classname = ls_swfctask-cust_obj
+                i_component = ls_swfctask-component.
+
+
+          WHEN 2.                    " text with check
+            CREATE OBJECT lo_objects-object TYPE cl_swf_cst_treetext
+              EXPORTING
+                i_object    = lo_obj
+                i_use       = 2
+                i_classname = ls_swfctask-cust_obj
+                i_component = ls_swfctask-component.
+
+
+          WHEN 3.                    " activity without auto activity
+            CREATE OBJECT lo_objects-object TYPE cl_swf_cst_treeobj
+              EXPORTING
+                i_object    = lo_obj
+                i_use       = 3
+                i_classname = ls_swfctask-cust_obj
+                i_component = ls_swfctask-component.
+
+          WHEN 4.                        "auto activity without activity
+            CREATE OBJECT lo_objects-object TYPE cl_swf_cst_treeobj
+              EXPORTING
+                i_object    = lo_obj
+                i_use       = 4
+                i_classname = ls_swfctask-cust_obj
+                i_component = ls_swfctask-component.
+
+          WHEN OTHERS.
+            CLEAR: lo_obj.
+
+        ENDCASE.
+
+        " Fill with all the node details
+        lo_objects-class     = ls_swfctask-cust_obj.
+        lo_objects-component = ls_swfctask-component.
+        lo_objects-parent    = ls_swfctask-parent_obj.
+        lo_objects-pos       = ls_swfctask-relpos.
+
+        " Get the main node details
+        IF ls_swfctask-parent_obj IS INITIAL.
+          ls_roots-class = lo_objects-class.
+          ls_roots-pos   = ls_swfctask-relpos.
+          APPEND ls_roots TO lt_roots.
+          CLEAR: ls_roots.
+        ENDIF.
+
+        APPEND lo_objects TO lt_objects.
+        CLEAR: ls_swfctask,lo_objects.
+      ENDLOOP.
+
+      SORT:lt_roots BY pos ASCENDING.
+
+* Nested-loops cannot be avoided and parallel cursor
+* technique also cannot be applied as the sort sequence
+* required for both tables are different
+      CLEAR: ls_roots.
+      " Main loop for main nodes
+      LOOP AT lt_roots INTO ls_roots.
+        CLEAR: lo_objects.
+        READ TABLE lt_objects INTO lo_objects
+        WITH KEY class = ls_roots-class.
+        IF sy-subrc EQ 0.
+
+          lo_swf_treebase = lo_objects-object.
+
+          IF lo_swf_treebase IS BOUND.
+            CLEAR: lv_title.
+            CALL METHOD lo_swf_treebase->get_title
+              IMPORTING
+                e_title = lv_title.    " Explanatory node text
+
+            CLEAR: lv_state_icon.
+            CALL METHOD lo_swf_treebase->get_state
+              IMPORTING
+                e_state_icon = lv_state_icon. "Error or Success icon
+          ENDIF.
+
+          " Tak main node entry
+          IF lv_state_icon IS INITIAL.
+            ls_node-class     = lo_objects-class.
+            ls_node-node_name = lv_title.
+            ls_node-status    = space.
+            APPEND ls_node TO lt_node.
+            CLEAR: ls_node.
+            " Take error entry
+          ELSEIF lv_state_icon EQ lc_icon.
+            ls_node-class     = lo_objects-class.
+            ls_node-node_name = lv_title.
+            ls_node-status    = lc_error. " Error text
+            APPEND ls_node TO lt_node.
+            CLEAR: ls_node.
+          ENDIF.
+
+        ENDIF.
+
+        " Loop for sub-nodes
+        CLEAR: lo_objects.
+        LOOP AT lt_objects INTO lo_objects
+        WHERE parent EQ ls_roots-class.
+
+
+          lo_swf_treebase = lo_objects-object.
+
+          IF lo_swf_treebase IS BOUND.
+            CLEAR: lv_title.
+            CALL METHOD lo_swf_treebase->get_title
+              IMPORTING
+                e_title = lv_title.    " Explanatory text
+
+            CLEAR: lv_state_icon.
+            CALL METHOD lo_swf_treebase->get_state
+              IMPORTING
+                e_state_icon = lv_state_icon. "Error or Success icon
+          ENDIF.
+
+          " Take only error entry
+          IF lv_state_icon EQ lc_icon.
+            ls_node-class     = lo_objects-parent.
+            ls_node-node_name = lv_title.
+            ls_node-status = lc_error. " Error text
+            APPEND ls_node TO lt_node.
+            CLEAR: ls_node.
+          ENDIF.
+          CLEAR: lo_objects.
+        ENDLOOP.
+        CLEAR: ls_roots.
+      ENDLOOP.
+
+      " Re-arranging the output parallel cursor technique is applied
+      FREE: lt_final.
+
+      CLEAR: ls_roots.
+      LOOP AT lt_roots INTO ls_roots.
+        CLEAR: ls_node.
+        " Check if atleast one sub-node is in error
+        READ TABLE lt_node INTO ls_node
+        WITH KEY class  = ls_roots-class
+                 status = lc_error.
+        IF sy-subrc EQ 0.
+          " Read sub-nodes into final table
+          CLEAR: lv_tabix,ls_node.
+          lv_tabix = sy-tabix.
+          LOOP AT lt_node INTO ls_node FROM lv_tabix.
+            IF ls_node-class NE ls_roots-class.
+              EXIT.
+            ENDIF.
+            CLEAR: ls_node1.
+            " Read main node name into final table
+            READ TABLE lt_node INTO ls_node1
+            WITH KEY class  = ls_roots-class
+                     status = space.
+            IF sy-subrc EQ 0.
+              ls_final-main_node = ls_node1-node_name. " Main Node
+            ENDIF.
+            ls_final-sub_node = ls_node-node_name. "Sub Node
+            ls_final-status = ls_node-status. "Status
+            APPEND ls_final TO lt_final.
+            CLEAR: ls_final.
+          ENDLOOP.
+        ELSE.
+          CONTINUE.
+        ENDIF.
+        CLEAR: ls_roots.
+      ENDLOOP.
+
+      " Heading column
+      CONCATENATE  lc_main_node lc_sub_node lc_status INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      " Data for SWU3 error nodes
+      CLEAR: ls_final.
+      LOOP AT lt_final INTO ls_final.
+        CONCATENATE ls_final-main_node ls_final-sub_node
+        ls_final-status INTO ls_output
+        SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output,ls_final.
+      ENDLOOP.
+
+    WHEN OTHERS.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      RETURN.
+
+  ENDCASE.
+
+ENDFORM.

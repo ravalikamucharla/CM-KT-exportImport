@@ -1,0 +1,512 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_ST02_EXP_BUFFER_PARAMETERS              *
+* Title               :   Capture SAP Buffer Parameters               *
+* Purpose             :   This report is used to capture SAP Buffer   *
+*                         Parameters from ST02 during Cloud Migration *
+*                         for all instances of a system.              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* ST02                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*30-12-2020  Initial   Soumya Ray   Local        To capture SAP buffer*
+*                                                parameter of ST02    *
+*09-26-2022  V001      Soumya Ray   Local      To pass 'No data found'*
+*                                              in case of no data in  *
+*                                              system                 *
+*01-04-2023  V002      Soumya Ray  Local        Changes to make script*
+*                                          compatible to lower version*
+*---------------------------------------------------------------------*
+" This code has been referred from Standard Report RSTUNE50
+
+REPORT zcm_st02_exp_buffer_parameters.
+
+TABLES: tunehd64,
+        sapbufqual.
+
+TYPES: BEGIN OF yt_outtab.
+    INCLUDE STRUCTURE ccm_rstune50_01_alv.
+TYPES: buffer(10) TYPE c,
+       color      TYPE  slis_t_specialcol_alv,
+       instance   TYPE  string,
+       END OF yt_outtab.
+
+TYPES: BEGIN OF yt_rp_line .
+    INCLUDE STRUCTURE ccm_rstune50_02_alv.
+TYPES: color    TYPE  slis_t_specialcol_alv,
+       type(14) TYPE c,
+       END  OF yt_rp_line .
+
+DATA  BEGIN OF buffered_tables_64 OCCURS 0.
+INCLUDE STRUCTURE dbstatdec64.
+DATA  END   OF buffered_tables_64.
+
+DATA  BEGIN OF buffered_tables OCCURS 0.
+INCLUDE STRUCTURE dbstatdec.
+DATA  END   OF buffered_tables.
+
+DATA  BEGIN OF buffer_names OCCURS 12.
+INCLUDE STRUCTURE saptunebfn.
+DATA  END   OF buffer_names.
+
+DATA  BEGIN OF table_qualities OCCURS 0.
+INCLUDE STRUCTURE tabbufqual.
+DATA  END   OF table_qualities.
+
+DATA  BEGIN OF cc_info OCCURS 0.
+INCLUDE STRUCTURE ccstats.
+DATA  END   OF cc_info.
+
+DATA  BEGIN OF em_blocks OCCURS 0.
+INCLUDE STRUCTURE emcontext.
+DATA  END   OF em_blocks.
+
+DATA  BEGIN OF alloc_procedure_dia OCCURS 5.
+INCLUDE STRUCTURE memalloc.
+DATA  END   OF alloc_procedure_dia.
+
+DATA  BEGIN OF alloc_procedure_nondia OCCURS 5.
+INCLUDE STRUCTURE memalloc.
+DATA  END   OF alloc_procedure_nondia.
+
+DATA  BEGIN OF modes OCCURS 20.
+INCLUDE STRUCTURE memmodetab.
+DATA  END   OF modes.
+
+DATA  BEGIN OF mode_history OCCURS 20.
+INCLUDE STRUCTURE memmodetab.
+DATA  END   OF mode_history.
+
+##no_text
+CONSTANTS: lc_sep       TYPE c VALUE '|'                LENGTH 1,
+           lc_pxa       TYPE c VALUE 'PXA'              LENGTH 3,
+           lc_cua       TYPE c VALUE 'CUA'              LENGTH 3,
+           lc_otr       TYPE c VALUE 'OTR'              LENGTH 3,
+           lc_esm       TYPE c VALUE 'ESM'              LENGTH 3,
+           lc_list      TYPE c VALUE 'LIST'             LENGTH 4,
+           lc_menu      TYPE c VALUE 'MENU'             LENGTH 4,
+           lc_ttab      TYPE c VALUE 'TTAB'             LENGTH 4,
+           lc_ftab      TYPE c VALUE 'FTAB'             LENGTH 4,
+           lc_sntb      TYPE c VALUE 'SNTB'             LENGTH 4,
+           lc_irbd      TYPE c VALUE 'IRBD'             LENGTH 4,
+           lc_pres      TYPE c VALUE 'PRES'             LENGTH 4,
+           lc_cale      TYPE c VALUE 'CALE'             LENGTH 4,
+           lc_tabl      TYPE c VALUE 'TABL'             LENGTH 4,
+           lc_exim      TYPE c VALUE 'EXIM'             LENGTH 4,
+           lc_extm      TYPE c VALUE 'EXTM'             LENGTH 4,
+           lc_rpcs      TYPE c VALUE 'RPCS'             LENGTH 4,
+           lc_sntab     TYPE c VALUE 'SNTAB'            LENGTH 5,
+           lc_eibuf     TYPE c VALUE 'EIBUF'            LENGTH 5,
+           lc_tablp     TYPE c VALUE 'TABLP'            LENGTH 5,
+           lc_tables    TYPE c VALUE 'Tables'           LENGTH 6,
+           lc_cal       TYPE c VALUE 'Calender'         LENGTH 8,
+           lc_screen    TYPE c VALUE 'Screen'           LENGTH 6,
+           lc_buffer    TYPE c VALUE 'Buffer'           LENGTH 6,
+           lc_prog      TYPE c VALUE 'program'          LENGTH 7,
+           lc_shntab    TYPE c VALUE 'ShortNTAB'        LENGTH 10,
+           lc_hitratio  TYPE c VALUE 'HitRatio'         LENGTH 10,
+           lc_alloc     TYPE c VALUE 'AllocKB'          LENGTH 10,
+           lc_freesp    TYPE c VALUE 'FreespKB'         LENGTH 10,
+           lc_freekb    TYPE c VALUE 'FreeSp'           LENGTH 10,
+           lc_dirsize   TYPE c VALUE 'DirSize'          LENGTH 10,
+           lc_freeent   TYPE c VALUE 'FreeDirEnt'       LENGTH 20,
+           lc_freedir   TYPE c VALUE 'FreeDir'          LENGTH 25,
+           lc_swaps     TYPE c VALUE 'Swaps'            LENGTH 5,
+           lc_dbaccs    TYPE c VALUE 'DBAccs'           LENGTH 10,
+           lc_ntab      TYPE c VALUE 'NametabNTAB'      LENGTH 20,
+           lc_inirec    TYPE c VALUE 'Initialrecords'   LENGTH 25,
+           lc_tabdef    TYPE c VALUE 'Tabledefinition'  LENGTH 25,
+           lc_shm       TYPE c VALUE 'ExpImpSHM'        LENGTH 20,
+           lc_expimp    TYPE c VALUE 'Exportimport'     LENGTH 20,
+           lc_field_def TYPE c VALUE 'Fielddefinition'  LENGTH 30,
+           lc_title     TYPE c VALUE 'TuneSummary'      LENGTH 20,
+           lc_ninput    TYPE c VALUE 'No input given'   LENGTH 20,
+           lc_naction   TYPE c VALUE 'Input incorrect'  LENGTH 20,
+           lc_instance  TYPE c VALUE 'Instance'         LENGTH 10,
+           lc_err_msg   TYPE c VALUE 'No data found'    LENGTH 30."+V001
+
+DATA:ls_output         TYPE tab512,
+     ls_input          TYPE tab512,
+     lv_action         TYPE char20,
+     lv_line_cmd       LIKE sy-ucomm,
+     lv_server         LIKE rfcdes-rfcdest,
+     lv_page           LIKE rlpg_stat,
+     lt_outtab         TYPE STANDARD TABLE OF yt_outtab,
+     ls_outtab         TYPE yt_outtab,
+     ls_rp_line        TYPE  yt_rp_line,
+     lt_buffer_stat    LIKE tunehdwq
+                         OCCURS 12 WITH HEADER LINE,
+     lt_buffer_stat_64 LIKE tunehdwq64
+                         OCCURS 12 WITH HEADER LINE,
+     lv_name           TYPE char30,
+     lv_hitratio       TYPE char10,
+     lv_alloc_size     TYPE char10,
+     lv_free_size      TYPE char10,
+     lv_free_size_p    TYPE char10,
+     lv_max_objcts     TYPE char10,
+     lv_free_dir       TYPE char10,
+     lv_free_dir_p     TYPE char10,
+     lv_max_swapped    TYPE char10,
+     lv_db_access      TYPE char10,
+*  Begin of changes in V002
+     lt_serverlist     TYPE STANDARD TABLE OF msxxlist,
+     ls_serverlist     TYPE msxxlist.
+*  End of changes in V002
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  "Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CALL FUNCTION 'TH_SERVER_LIST'
+    TABLES
+      list           = lt_serverlist
+    EXCEPTIONS
+      no_server_list = 1
+      OTHERS         = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_list.
+
+      LOOP AT lt_serverlist INTO ls_serverlist.
+        lv_server = ls_serverlist-name. "+V002
+
+        " Server name passed
+        CALL FUNCTION 'SAPTUNE_GET_SUMMARY_STATISTIC'
+          EXPORTING
+            destination                    = lv_server
+          TABLES
+            buffer_statistic               = lt_buffer_stat
+            buffer_statistic_64            = lt_buffer_stat_64
+            table_statistic                = buffered_tables
+            table_statistic_64             = buffered_tables_64
+            buffer_names                   = buffer_names
+            table_qualities                = table_qualities
+            cursor_cache_info              = cc_info
+            extended_memory_active_context = em_blocks
+            alloc_procedure_dia            = alloc_procedure_dia
+            alloc_procedure_nondia         = alloc_procedure_nondia
+            internal_external_modes_memory = modes
+            mode_memory_history            = mode_history
+          EXCEPTIONS
+            no_authorization               = 1
+            OTHERS                         = 2.
+        IF sy-subrc EQ 0.
+          PERFORM write_main_list.
+
+          CLEAR:
+          lv_server, ls_outtab, ls_serverlist,
+          lv_line_cmd, lv_page,lv_name, lv_hitratio, ls_rp_line,
+          lv_free_size, lv_free_size_p, lv_max_objcts,lv_db_access,
+          lv_free_dir, lv_free_dir_p, lv_max_swapped, lv_alloc_size.
+
+          FREE:lt_buffer_stat, lt_buffer_stat_64, buffered_tables,
+          buffered_tables_64,buffer_names,table_qualities, cc_info,
+          em_blocks, alloc_procedure_dia, alloc_procedure_nondia,modes,
+          mode_history.
+        ENDIF.
+      ENDLOOP.
+
+      IF lt_outtab IS NOT INITIAL.
+
+        "Adding heading to the output
+        CONCATENATE lc_instance lc_sep
+        lc_buffer   lc_sep
+        lc_hitratio lc_sep
+        lc_alloc    lc_sep
+        lc_freesp   lc_sep
+        lc_freekb   lc_sep
+        lc_dirsize  lc_sep
+        lc_freeent  lc_sep
+        lc_freedir  lc_sep
+        lc_swaps    lc_sep
+        lc_dbaccs
+        INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT lt_outtab INTO ls_outtab.
+          lv_name        = ls_outtab-name.
+          lv_hitratio    = ls_outtab-hitratio.
+          lv_alloc_size  = ls_outtab-alloc_size.
+          lv_free_size   = ls_outtab-free_size.
+          lv_free_size_p = ls_outtab-free_size_p.
+          lv_max_objcts  = ls_outtab-max_objcts.
+          lv_free_dir    = ls_outtab-free_dir.
+          lv_free_dir_p  = ls_outtab-free_dir_p.
+          lv_max_swapped = ls_outtab-max_swapped.
+          lv_db_access   = ls_outtab-db_access.
+
+          CONCATENATE ls_outtab-instance lc_sep
+          lv_name        lc_sep
+          lv_hitratio    lc_sep
+          lv_alloc_size  lc_sep
+          lv_free_size   lc_sep
+          lv_free_size_p lc_sep
+          lv_max_objcts  lc_sep
+          lv_free_dir    lc_sep
+          lv_free_dir_p  lc_sep
+          lv_max_swapped lc_sep
+          lv_db_access
+          INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: lv_name,lv_hitratio,lv_alloc_size,lv_free_size,
+          lv_free_size_p,lv_max_objcts,lv_free_dir_p,
+          ls_outtab, ls_output, lv_max_swapped.
+        ENDLOOP.
+
+      ELSE.
+        " Unable to read data
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+    WHEN OTHERS.
+      ls_output = lc_naction.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+ENDFORM.                    "get_config
+
+FORM write_main_list.
+
+  lv_line_cmd = lc_menu. HIDE lv_line_cmd.
+
+  lv_line_cmd = lc_ttab.
+  HIDE lv_line_cmd.
+  MOVE lv_server TO ls_outtab-instance.
+  MOVE lc_ntab TO  ls_outtab-name.
+  APPEND ls_outtab TO lt_outtab.
+  CLEAR ls_outtab.
+
+  PERFORM write_main_line USING lc_ttab.
+
+  lv_line_cmd = lc_ftab. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_ftab.
+
+  lv_line_cmd = lc_sntb. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_sntab.
+
+  lv_line_cmd = lc_irbd. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_irbd.
+
+  CLEAR ls_outtab.
+
+  lv_line_cmd = lc_pxa. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_pxa.
+
+  lv_line_cmd = lc_cua. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_cua.
+
+  lv_line_cmd = lc_pres. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_pres.
+
+  lv_line_cmd = lc_cale. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_cale.
+
+  lv_line_cmd = lc_otr. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_otr.
+
+  CLEAR ls_outtab.
+  MOVE lv_server TO ls_outtab-instance.
+  MOVE lc_tables TO  ls_outtab-name.
+  APPEND ls_outtab TO lt_outtab.
+  CLEAR ls_outtab.
+
+  lv_line_cmd = lc_menu. HIDE lv_line_cmd.
+
+  lv_line_cmd = lc_tabl. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_tabl.
+
+  CLEAR ls_outtab.
+
+  lv_line_cmd = lc_exim. HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_eibuf.
+
+  lv_line_cmd = lc_esm.  HIDE lv_line_cmd.
+  PERFORM write_main_line USING lc_esm.
+
+  lv_line_cmd = lc_extm.
+
+  PERFORM write_rp_line USING lv_page.
+  lv_line_cmd = lc_rpcs. HIDE lv_line_cmd.
+
+
+ENDFORM.                    "write_main_list
+
+FORM write_main_line USING buffer.
+
+
+  DATA: free_size LIKE tunehd64-avail_size,
+        free_dir  LIKE tunehd64-max_objcts.
+  DATA: free_size_p TYPE p DECIMALS 2, "percentages
+        free_dir_p  LIKE free_size_p.
+  DATA: max_swapped TYPE abap_msize.
+
+  READ TABLE lt_buffer_stat WITH KEY name = buffer.
+  IF sy-subrc EQ 0.
+    READ TABLE lt_buffer_stat_64 WITH KEY name = buffer.
+    IF sy-subrc <> 0.
+      MOVE-CORRESPONDING lt_buffer_stat TO lt_buffer_stat_64.
+    ENDIF.
+  ENDIF.
+
+  MOVE lv_line_cmd TO ls_outtab-buffer.
+  IF lv_line_cmd = lc_ttab.
+    MOVE lc_tabdef TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_ftab.
+    MOVE lc_field_def TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_sntb.
+    MOVE lc_shntab TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_irbd.
+    MOVE lc_inirec TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_pxa.
+    MOVE lc_prog TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_cua.
+    MOVE lc_cua TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_pres.
+    MOVE lc_screen TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_cale.
+    MOVE lc_cal TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_otr.
+    MOVE lc_otr TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd  = lc_tabl.
+    MOVE lc_buffer TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_exim.
+    MOVE lc_expimp TO  ls_outtab-name.
+  ENDIF.
+  IF lv_line_cmd = lc_esm.
+    MOVE lc_shm TO  ls_outtab-name.
+  ENDIF.
+
+  IF sy-subrc <> 0.
+    MOVE-CORRESPONDING lt_buffer_stat TO lt_buffer_stat_64.
+  ENDIF.
+
+  MOVE-CORRESPONDING lt_buffer_stat TO tunehd64.
+  MOVE-CORRESPONDING lt_buffer_stat TO sapbufqual.
+  IF tunehd64-frame_size = 0.            "buffer doesn't use frames
+    free_size   = tunehd64-avail_size - tunehd64-used_space.
+  ELSE.
+    free_size   = ( ( tunehd64-avail_size * 1024 )  -  "-> bytes
+    ( tunehd64-alloc_frms * tunehd64-frame_size ) ) / 1024.
+  ENDIF.
+  IF ( buffer NE lc_tabl  ) AND
+  ( buffer NE lc_tablp ) AND
+  ( buffer NE lc_ftab  ) AND
+  ( buffer NE lc_ttab  ) AND
+  ( buffer NE lc_sntab ) AND
+  ( buffer NE lc_irbd  ).
+    free_dir    = tunehd64-max_objcts - tunehd64-act_objcts.
+  ELSE.
+    free_dir    = tunehd64-max_objcts - tunehd64-con_objcts.
+  ENDIF.
+  IF tunehd64-avail_size NE 0.
+    free_size_p = free_size * 100 / tunehd64-avail_size.
+  ELSE.
+    free_size_p = 0.
+  ENDIF.
+  free_dir_p  = free_dir  * 100 / tunehd64-max_objcts.
+
+  MOVE: sapbufqual-hitratio TO ls_outtab-hitratio,
+  tunehd64-alloc_size TO ls_outtab-alloc_size.
+
+  IF free_size <= 0.
+
+    MOVE: free_size TO ls_outtab-free_size,
+    free_size_p TO ls_outtab-free_size_p.
+
+  ELSE.
+
+    MOVE: free_size TO ls_outtab-free_size,
+    free_size_p TO ls_outtab-free_size_p.
+
+  ENDIF.
+
+  MOVE tunehd64-max_objcts TO ls_outtab-max_objcts.
+
+  IF free_dir <= 0.
+
+    MOVE: free_dir TO ls_outtab-free_dir,
+    free_dir_p TO ls_outtab-free_dir_p.
+
+  ELSE.
+
+    MOVE: free_dir TO ls_outtab-free_dir,
+    free_dir_p TO ls_outtab-free_dir_p.
+
+  ENDIF.
+  max_swapped = tunehd64-swap.
+  IF max_swapped < tunehd64-swap_frame.
+    max_swapped = tunehd64-swap_frame.
+  ENDIF.
+  IF max_swapped > 0.
+
+    MOVE max_swapped TO ls_outtab-max_swapped.
+
+  ELSE.
+
+    MOVE max_swapped TO ls_outtab-max_swapped.
+
+  ENDIF.
+  MOVE lv_server TO ls_outtab-instance.
+  MOVE tunehd64-db_access TO ls_outtab-db_access.
+  APPEND ls_outtab TO lt_outtab.
+  CLEAR ls_outtab.
+
+ENDFORM.                    "write_main_line
+
+FORM write_rp_line USING area STRUCTURE rlpg_stat.
+  DATA  lv_percentage(5) TYPE p DECIMALS 2.
+
+  lv_percentage = 100 * area-curr_used / area-area_size.
+
+  IF lv_percentage >= 85.
+
+    MOVE lv_percentage TO ls_rp_line-percentage.
+
+  ELSE.
+
+    MOVE lv_percentage TO ls_rp_line-percentage.
+
+  ENDIF.
+
+  MOVE: area-curr_used TO  ls_rp_line-curr_used,
+  area-max_used  TO  ls_rp_line-max_used,
+  area-area_shm  TO  ls_rp_line-area_shm,
+  area-file_size TO  ls_rp_line-file_size.
+
+ENDFORM.                    "write_rp_line

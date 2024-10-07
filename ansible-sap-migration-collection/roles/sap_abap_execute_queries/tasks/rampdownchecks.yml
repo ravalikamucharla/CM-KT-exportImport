@@ -1,0 +1,52 @@
+- name: establish connection and getting output from SAP installed System
+  sap_pyrfc: 
+    username: "{{ user }}" 
+    password: "{{ password }}"
+    sncpartnername: "{{ sncpartner_name }}"
+    hostname: "{{ hostname }}" 
+    hostip: "{{ hostip }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.name }}" 
+    outputspath: "{{ abap_export_path }}" 
+    inputparams: "{{ item.input_params | default('EXPORT') }}"
+  with_items:
+     - "{{ abap_pre_migration_list[sap_type | lower] | default([]) }}"
+     - "{{ abap_pre_migration_list[db_type | lower] | default([]) }}"
+  register: output
+  async: 3600
+  poll: 0
+
+- name: checking the job status running in background
+  async_status:
+     jid: "{{ output.results[index].ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 2000
+  delay: 10
+  with_items:
+     - "{{ abap_pre_migration_list[sap_type | lower] | default([]) }}"
+     - "{{ abap_pre_migration_list[db_type | lower] | default([]) }}"
+  loop_control:
+      index_var: index
+  when:
+     - (item.name) == output.results[index].item.name
+
+- name: Timestamp Capture
+  json_write: stage={{ stage }}
+  register: timestamp_output
+
+- name: Copy timestamp file to outputs folder
+  copy:
+    src: "/cm_sap_migration/ExecutionTiming_{{ stage }}.json"
+    dest: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/"
+    owner: "{{ cloudmigrate_server_sudo_user }}"
+    group: "{{ cloudmigrate_server_sudo_user_group }}"
+    mode: '0644'
+
+- name: Remove file
+  file:
+    path: "/cm_sap_migration/ExecutionTiming_{{ stage }}.json"
+    state: absent

@@ -1,0 +1,11 @@
+- name: main | folder creation
+  become_method: sudo
+  become: yes
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root')}}"
+    group: "{{ item.group | default('root')}}"
+    mode: "{{ item.mode | default ('777') }}"
+    recurse: yes
+  loop: "{{ folders }}"

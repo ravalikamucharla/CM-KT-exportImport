@@ -1,0 +1,12 @@
+---
+- name: Export prep
+  include_tasks: "export_prep_linux.yml"
+  tags: 
+    - exp_prep
+    - retry_exp_prep
+  when: os_type == "linux"
+
+- name: Export prep
+  include_tasks: "export_prep_windows.yml"
+  tags: exp_prep
+  when: os_type == "windows"

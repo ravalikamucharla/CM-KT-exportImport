@@ -1,0 +1,13 @@
+[{% if output.results[index].stdout_lines|length == 1 %}
+     {
+         "FREQUENCY_OF_BACKUP_IN_MIN": "",
+         "OCCURENCES": "",
+         "STATUS": ""
+     }
+ {% else %}
+     {
+         "FREQUENCY_OF_BACKUP_IN_MIN": "{{ output.results[index].stdout_lines[1].split(',')[0] }}",
+         "OCCURENCES": "{{ output.results[index].stdout_lines[1].split(',')[1] }}",
+         "STATUS": {{ output.results[index].stdout_lines[1].split(',')[2] }}
+     }
+{% endif %}]

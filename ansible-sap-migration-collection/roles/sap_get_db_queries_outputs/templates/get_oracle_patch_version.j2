@@ -1,0 +1,20 @@
+[{
+    "DESCRIPTION": "{{ output.results[index].stdout_lines[5] }}",
+    "ACTION": "{{ output.results[index].stdout_lines[6].split("\t\t")[0] | trim }}",
+    "ACTION_DATE": "{{ output.results[index].stdout_lines[6].split("\t\t")[-1] | trim }}"
+},
+{
+    "DESCRIPTION": "{{ output.results[index].stdout_lines[5] }}",
+    "ACTION": "{{ output.results[index].stdout_lines[9].split("\t\t")[0] | trim }}",
+    "ACTION_DATE": "{{ output.results[index].stdout_lines[9].split("\t\t")[-1] | trim }}"
+},
+{
+    "DESCRIPTION": "{{ output.results[index].stdout_lines[5] }}",
+    "ACTION": "{{ output.results[index].stdout_lines[12].split("\t\t")[0] | trim }}",
+    "ACTION_DATE": "{{ output.results[index].stdout_lines[12].split("\t\t")[-1] | trim }}"
+},
+{
+    "DESCRIPTION": "{{ output.results[index].stdout_lines[5] }}",
+    "ACTION": "{{ output.results[index].stdout_lines[20].split("\t\t")[0] | trim }}",
+    "ACTION_DATE": "{{ output.results[index].stdout_lines[20].split("\t\t")[-1] | trim }}"
+}]

@@ -1,0 +1,256 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_T_TAORA_IAORA_CHK_CONSTNCY              *
+* Title               :   Logical Systems                             *
+* Purpose             :   To check consistency of entries between     *
+*                         TAORA and IAORA tables and display the      *
+*                         inconsistent entry                          *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TAORA                     X                                         *
+* IAORA                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version      Author   TR#/Local         Description      *
+*---------------------------------------------------------------------*
+*10-01-2020  Initial   Soumya Ray  Local        To check consistency  *
+*                                               between TAORA & IAORA *
+*09-21-2022  V001      Soumya Ray  Local        To remove the inline  *
+*                                               declarations          *
+*---------------------------------------------------------------------*
+REPORT zcm_t_taora_iaora_chk_constncy.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES ft_input  STRUCTURE tab512
+                      ft_output STRUCTURE tab512.
+
+  CONSTANTS: lc_export    TYPE c VALUE 'EXPORT'              LENGTH 6,
+             lc_head      TYPE string
+             VALUE 'Consistencycheckoftaora&iaora',
+             lc_msg       TYPE c VALUE 'Consistent'          LENGTH 10,
+* Begin of changes in V001
+             lc_noinput   TYPE c VALUE 'No input given'      LENGTH 20,
+             lc_inc_input TYPE c VALUE 'Incorrect input'     LENGTH 20.
+* End of changes in V001
+
+  DATA: ls_output   TYPE tab512,
+        ls_taora    TYPE taora,
+        ls_iaora    TYPE iaora,
+* Begin of changes in V001
+        ls_input    TYPE tab512,
+        lv_action   TYPE string,
+        lv_taora    TYPE i,
+        lv_iaora    TYPE i,
+        lt_taora    TYPE STANDARD TABLE OF taora,
+        lt_iaora    TYPE STANDARD TABLE OF iaora.
+
+  CLEAR: ls_output, ls_input, lv_action, lv_taora, lv_iaora.
+  FREE: lt_taora, lt_iaora.
+* End of changes in V001
+
+  READ TABLE ft_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO ft_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+  CASE lv_action.
+    WHEN lc_export.
+      SELECT * FROM  taora
+      INTO TABLE lt_taora.
+
+      SELECT * FROM  iaora
+      INTO TABLE lt_iaora.
+
+      DESCRIBE TABLE lt_taora LINES lv_taora.
+      DESCRIBE TABLE lt_iaora LINES lv_iaora.
+*  Logic to check inconsistency in tabart and tabspace data of
+*      TAORA and IAORA table
+      IF lv_taora LT lv_iaora.
+        LOOP AT lt_iaora INTO ls_iaora.
+          READ TABLE lt_taora INTO ls_taora
+          WITH KEY tabart = ls_iaora-tabart
+          tabspace =  ls_iaora-tabspace.
+          IF sy-subrc EQ 0.
+*         Entries are deleted from internal table
+*            if the entries are consistent.
+            DELETE lt_taora
+            WHERE tabart = ls_iaora-tabart .
+            DELETE lt_iaora
+            WHERE tabart = ls_iaora-tabart .
+          ENDIF.
+          CLEAR:ls_iaora,ls_taora.
+        ENDLOOP.
+      ELSE.
+        LOOP AT lt_taora INTO ls_taora.
+          READ TABLE lt_iaora INTO ls_iaora
+          WITH KEY tabart = ls_taora-tabart
+          tabspace =  ls_taora-tabspace.
+          IF sy-subrc EQ 0.
+*    Entries are deleted from internal table
+*            if the entries are consistent.
+            DELETE lt_taora
+            WHERE tabart = ls_taora-tabart .
+            DELETE lt_iaora
+            WHERE tabart = ls_taora-tabart .
+          ENDIF.
+          CLEAR:ls_iaora,ls_taora.
+        ENDLOOP.
+      ENDIF.
+      CLEAR: ls_output.
+      ls_output = lc_head.
+      APPEND ls_output TO ft_output.
+      CLEAR: ls_output, lv_taora, lv_iaora.
+
+      DESCRIBE TABLE lt_taora LINES lv_taora.
+      DESCRIBE TABLE lt_iaora LINES lv_iaora.
+
+      IF lv_taora EQ '' AND lv_iaora EQ ''.
+        ls_output = lc_msg. " Consistent msg is displayed .
+        APPEND ls_output TO ft_output.
+      ELSE.
+        PERFORM read_data TABLES ft_output
+          lt_taora
+          lt_iaora.
+      ENDIF.
+
+      PERFORM null_check TABLES  ft_output.
+
+* Begin of changes in V001
+    WHEN OTHERS.
+    " Incorrect input
+    ls_output = lc_inc_input.
+    APPEND ls_output TO ft_output.
+    CLEAR ls_output.
+* End of changes in V001
+  ENDCASE.
+ENDFORM.
+
+FORM end_null_check  CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+  off = strlen( ls_string ) - 1
+  len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+    INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+FORM null_check  TABLES   lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.
+
+FORM read_data  TABLES   lt_output STRUCTURE tab512
+                         it_taora STRUCTURE taora
+                         it_iaora STRUCTURE iaora .
+
+  CONSTANTS: lc_tabart     TYPE char10 VALUE 'Tabart',
+             lc_tabspace   TYPE char10 VALUE 'Tabspace',
+             lc_pctinc     TYPE char10 VALUE 'Pctinc',
+             lc_ofreelist  TYPE char10 VALUE 'Ofreelist',
+             lc_ofreegroup TYPE char10 VALUE 'Ofreegroup',
+             lc_opctfree   TYPE char10 VALUE 'Opctfree',
+             lc_opctused   TYPE char10 VALUE 'Opctused',
+             lc_sep        TYPE c VALUE '|'              LENGTH 1,
+* Begin of changes in V001
+             lc_iaora      TYPE c VALUE 'IAORA'          LENGTH 5,
+             lc_taora      TYPE c VALUE 'TAORA'          LENGTH 5,
+             lc_msg        TYPE c VALUE 'No data found'  LENGTH 30.
+* End of changes in V001
+
+  DATA: ls_output   TYPE tab512,
+        ls_prefinal TYPE string,
+* Begin of changes in V001
+        ls_iaora    TYPE iaora,
+        ls_taora    TYPE taora.
+* End of changes in V001
+
+
+  ls_output = lc_taora.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+  READ TABLE it_taora INDEX 1.
+  IF sy-subrc <> 0.
+    ls_output = lc_msg.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+  ELSE.
+    CONCATENATE lc_tabart lc_sep
+    lc_tabspace  lc_sep
+    lc_pctinc  lc_sep
+    lc_ofreelist  lc_sep
+    lc_ofreegroup  lc_sep
+    lc_opctfree lc_sep
+    lc_opctused INTO ls_output.
+    APPEND ls_output TO lt_output.
+
+    LOOP AT it_taora INTO ls_taora.
+      CONCATENATE ls_taora-tabart lc_sep
+      ls_taora-tabspace  lc_sep
+      ls_taora-pctinc  lc_sep
+      ls_taora-ofreelist  lc_sep
+      ls_taora-ofreegroup  lc_sep
+      ls_taora-opctfree lc_sep
+      ls_taora-opctused INTO ls_prefinal.
+      PERFORM end_null_check CHANGING ls_prefinal.
+      ls_output = ls_prefinal.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+    ENDLOOP.
+  ENDIF.
+
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+  ls_output = lc_iaora.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE it_iaora INDEX 1.
+  IF sy-subrc <> 0.
+    ls_output = lc_msg.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+  ELSE.
+    CONCATENATE lc_tabart lc_sep
+    lc_tabspace  lc_sep
+    lc_pctinc  lc_sep
+    lc_ofreelist  lc_sep
+    lc_opctfree INTO ls_output.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+    LOOP AT it_iaora INTO ls_iaora.
+      CONCATENATE ls_iaora-tabart lc_sep
+      ls_iaora-tabspace  lc_sep
+      ls_iaora-pctinc  lc_sep
+      ls_iaora-ofreelist  lc_sep
+      ls_iaora-opctfree INTO ls_prefinal.
+      PERFORM end_null_check CHANGING ls_prefinal.
+      ls_output = ls_prefinal.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+    ENDLOOP.
+  ENDIF.
+
+ENDFORM.

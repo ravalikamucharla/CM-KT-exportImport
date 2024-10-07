@@ -1,0 +1,150 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_R_BTCTRNS_REL_SUSPND_JOBS                *
+* Title               :  Suspend and Resume Jobs                      *
+* Purpose             :  Reports BTCTRNS1 and BTCTRNS2 will be execute*
+*                        to suspend and resume background jobs resp   *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version     Author         TR#/Local     Description     *
+*---------------------------------------------------------------------*
+*09-22-2020  Initial   Fathima Hussain  Local        To suspend and   *
+*                                                    resume background*
+*                                                    jobs             *
+*09-12-2022  V001      Soumya Ray       Local        To pass no data  *
+*                                                    found in case no *
+*                                                    data in system   *
+*---------------------------------------------------------------------*
+
+REPORT zcm_r_btctrns_rel_suspnd_jobs.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS :
+* Begin of changes in V001
+              lc_msgtitle  TYPE c VALUE 'Messagetitle'     LENGTH 20,
+              lc_inc_input TYPE c VALUE 'Incorrect input'  LENGTH 20,
+              lc_noinput   TYPE c VALUE 'No input given'   LENGTH 20,
+              lc_no_data   TYPE c VALUE 'No data found'    LENGTH 20.
+* End of changes in V001
+
+  DATA: ls_input  TYPE tab512,
+        ls_output TYPE tab512,
+        lv_action TYPE char20,
+        BEGIN OF lt_ascilist OCCURS 0 ,
+          line(200),
+        END OF lt_ascilist,
+        ls_ascilist TYPE char200,
+        lt_list     TYPE STANDARD TABLE OF abaplist.
+
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    ls_output = lc_msgtitle.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN 'SUSPEND'.  "BTCTRNS1
+      SUBMIT btctrns1 AND RETURN EXPORTING LIST TO MEMORY.
+
+      ls_output = 'SuspendJobs'.
+      APPEND ls_output TO lt_output.
+
+    WHEN 'RESUME'.   "BTCTRNS2
+      SUBMIT btctrns2 AND RETURN EXPORTING LIST TO MEMORY.
+
+      ls_output = 'ResumeJobs'.
+      APPEND ls_output TO lt_output.
+
+    WHEN OTHERS.
+*  Begin of changes in V001
+      ls_output = lc_msgtitle.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      RETURN.
+*  End of changes in V001
+  ENDCASE.
+
+  CALL FUNCTION 'LIST_FROM_MEMORY'
+    TABLES
+      listobject = lt_list
+    EXCEPTIONS
+      not_found  = 1
+      OTHERS     = 2.
+  IF sy-subrc EQ 0.
+
+    CALL FUNCTION 'LIST_TO_ASCI'
+      TABLES
+        listasci           = lt_ascilist
+        listobject         = lt_list
+      EXCEPTIONS
+        empty_list         = 1
+        list_index_invalid = 2
+        OTHERS             = 3.
+
+*   Begin of changes in V001
+    IF lt_ascilist IS INITIAL.
+      ls_output = lc_msgtitle.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      ls_output = lc_no_data.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      RETURN.
+    ENDIF.
+*   End of changes in V001
+
+    ls_output = 'Result'.
+    APPEND ls_output TO lt_output.
+
+    LOOP AT lt_ascilist INTO ls_ascilist.
+      IF ls_ascilist IS INITIAL.
+        ls_ascilist = 'NULL'.
+      ENDIF.
+      ls_output = ls_ascilist.
+      APPEND ls_output TO lt_output.
+    ENDLOOP.
+* Begin of changes in V001
+  ELSE.
+    FREE:lt_output.
+    ls_output = lc_msgtitle.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+
+    ls_output = lc_no_data.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+* End of changes in V001
+
+  ENDIF.
+
+ENDFORM.

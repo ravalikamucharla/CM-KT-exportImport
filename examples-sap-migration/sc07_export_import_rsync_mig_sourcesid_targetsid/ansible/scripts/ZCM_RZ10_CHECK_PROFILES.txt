@@ -1,0 +1,111 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_RZ10_CHECK_PROFILES                     *
+* Title               :   Check Profiles from active servers          *
+* Purpose             :   This report is used to Check Profiles from  *
+*                         active servers in RZ10 during Cloud         *
+*                         Migration                                   *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RZ10                                                                *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-28-2021  Initial   Ruchir Kamble  Local   To Check Profiles from  *
+*                                             active servers in RZ10  *
+*05-23-2022  V001      Soumya Ray   Local     To pass no data found in*
+*                                             case of no data         *
+*---------------------------------------------------------------------*
+
+REPORT zcm_rz10_check_profiles.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_export    TYPE c VALUE 'EXPORT'            LENGTH 6,
+    lc_msg       TYPE c VALUE 'Message'           LENGTH 7,
+    lc_title     TYPE c VALUE
+    'Display Profile Check Log'                   LENGTH 30,
+    lc_inc_input TYPE c VALUE 'Incorrect input'   LENGTH 20,
+    lc_noinput   TYPE c VALUE 'No input given'    LENGTH 20,
+    lc_err_msg   TYPE c VALUE
+    'No data found'                               LENGTH 20. "+V001
+
+  DATA: ls_input    TYPE tab512,
+        ls_output   TYPE tab512,
+        lv_action   TYPE char6,
+        lt_protocol TYPE STANDARD TABLE OF tpfckprot,
+        ls_protocol TYPE tpfckprot.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, lv_action, ls_protocol.
+
+  FREE: lt_output, lt_protocol.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Reading input from python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      " FM to check profiles of active servers
+      CALL FUNCTION 'PFL_CHECK_ACTIVE_SRV_PROFILES'
+        TABLES
+          protocol = lt_protocol.
+
+      IF lt_protocol IS NOT INITIAL.
+
+        " Adding heading to the output
+        ls_output = lc_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Constructing output to the user
+        LOOP AT lt_protocol INTO ls_protocol.
+          IF ls_protocol-entry IS NOT INITIAL.
+            ls_output = ls_protocol-entry.
+            APPEND ls_output TO lt_output.
+          ENDIF.
+          CLEAR: ls_output, ls_protocol.
+        ENDLOOP.
+
+      ELSE.
+        " Check profiles of active servers failed
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.

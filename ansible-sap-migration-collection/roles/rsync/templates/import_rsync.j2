@@ -1,0 +1,45 @@
+#!/bin/bash
+if [ $# -ne 3 ]; then
+echo "USAGE: $0 ImportDirectory ContainerName SasToken"
+echo "Example: $0 {{ imp_dir }} {{ container_url }} {{ sas_token }}"
+exit 2
+fi
+
+imp_dir=$1
+container_url=$2
+sas_token=$3
+
+cd "{{ imp_dir }}"
+[[ -f export_statistics.properties ]] && echo 'Nothing to do' && exit
+
+set +o histexpand
+trap exit SIGINT
+
+while true; do
+sgns=$(azcopy list "{{ container_url }}?{{ sas_token }}" | grep SGN | awk '{print $2}' | cut -d "." -f 1)
+# Copy initial files, excluding any that match the pattern of signal files.
+if [[ -z "${sgns}" ]]; then
+# Export monitor hasn't started, but sync LABELIDX.ASC and DDL files, etc.
+azcopy sync "{{ container_url }}?{{ sas_token }}" . --recursive --exclude-pattern='*.SGN' --exclude-path='export_statistics.properties'
+else
+sgns_pat=$(echo ${sgns} | tr ' ' '|')
+azcopy sync "{{ container_url }}?{{ sas_token }}" . --recursive --exclude-pattern='.*(${sgns_pat}).*'
+fi
+
+mkdir -p SGN
+for sgn in ${sgns}; do
+[[ ${sgn} = export_statistics ]] && continue
+[[ -f SGN/${sgn}.SGN ]] && continue
+azcopy sync "{{ container_url }}?{{ sas_token }}" ABAP --recursive --exclude-pattern='(?!.*\b${sgn}\b).*' && \
+touch SGN/${sgn}.SGN
+done
+
+IMPORT_CHECK=$(azcopy list "{{ container_url }}/export_statistics.properties?{{ sas_token }}" | wc -l)
+if [ ${IMPORT_CHECK} -eq 3 ]; then
+# Final rsync to catch all remaining files.
+azcopy sync "{{ container_url }}?{{ sas_token }}" . --recursive --exclude-pattern='*.SGN' --exclude-path='export_statistics.properties'
+azcopy sync "{{ container_url }}?{{ sas_token }}" . --recursive
+break
+fi
+sleep 30
+done

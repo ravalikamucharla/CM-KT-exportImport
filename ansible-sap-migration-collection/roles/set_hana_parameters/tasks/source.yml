@@ -1,0 +1,61 @@
+---
+- name: Create a sql folder
+  file:
+    path: "/tmp/service_ini.sql"
+    state: touch
+    mode: '777'
+  delegate_to: "{{ primary_host }}"
+
+- name: take backup of global and indexserver ini files
+  become_method: sudo
+  become: yes 
+  copy:
+    src: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/{{ item }}
+    dest: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/{{ item }}_bak
+    remote_src: yes
+  loop:
+    - global.ini
+    - indexserver.ini
+  delegate_to: "{{ primary_host }}"
+
+- name: Inserting query in respective service.sql file
+  lineinfile:
+    path: /tmp/service_ini.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('{{ item.service_ini }}', 'SYSTEM') SET ('{{ item.set_mode }}', '{{ item.parameter }}') = '{{ item.value }}';
+  with_items: "{{ hana_parameters.hana_params_change_source.params }}"
+  delegate_to: "{{ primary_host }}"
+
+- name: execute the sql query 
+  command: sudo su - {{ sid | lower }}adm -c 'hdbsql -U {{ hdbuserstore_key_source.key_name | default('BACKUP') }} -I /tmp/service_ini.sql'
+  async: 12000
+  poll: 10
+  register: output
+  delegate_to: "{{ primary_host }}"
+  when: hsr_source.mode == "hdbuserstorekey"
+
+- debug: 
+    var: output
+  when: hsr_source.mode == "hdbuserstorekey"
+
+- name: set fact 
+  block:
+    - set_fact:
+        tenant_db: "{{ sid | upper }}"
+
+    - set_fact:
+        db_name: "{{ hana_db_name | default(tenant_db) }}"
+
+    - name: execute the sql query 
+      command: sudo su - {{ sid | lower }}adm -c 'hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/service_ini.sql'
+      async: 12000
+      poll: 10
+      register: output_user
+      delegate_to: "{{ primary_host }}"
+  when: hsr_source.mode == "user"
+
+- name: delete sql file
+  file:
+    path: /tmp/service_ini.sql
+    state: absent
+  delegate_to: "{{ primary_host }}"
+  

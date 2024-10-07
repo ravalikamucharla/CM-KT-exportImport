@@ -1,0 +1,6 @@
+---
+
+- hosts: localhost
+  tags: prereq
+  roles:
+    - abap_prereqs

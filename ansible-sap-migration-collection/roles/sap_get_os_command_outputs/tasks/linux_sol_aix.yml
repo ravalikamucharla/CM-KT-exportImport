@@ -1,0 +1,183 @@
+---  
+- name: To check if ports are open to run os scripts | linux
+  command: nc -vz {{ hostip }} 22
+  register: port_status_linux
+  delegate_to: localhost
+
+- name: Display message if port is not open
+  debug:
+    msg: "22 Port is not open"
+  when: port_status_linux.stderr is search('No route to host')
+
+- name: Display message if port is open
+  debug:
+    msg: "22 Port is open" 
+  when: port_status_linux.stderr is search('Connected') 
+
+- set_fact:
+    login: "{{ login_mechanism | default('sudo') }}"
+  
+- name: Write OS version data
+  template:
+      src: os_version.j2
+      dest: '{{ os_export_path }}{{ ansible_os_family}}/os_version_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for validate cpu
+  shell: "psrinfo | wc -l"
+  register: psrinfo_output
+  when: os_type == "solaris"
+
+- name: Write OS memory
+  template:
+      src: capture_memory.j2
+      dest: '{{ os_export_path }}{{ ansible_os_family}}/capture_memory_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for validate cpu
+  command: "lscpu"
+  register: lscpu_output
+  when: os_type == "linux"
+
+- name: AIX commands
+  block:
+  - name: Execute command for CPU info
+    shell: "lparstat -i"
+    register: psrinfo_output
+
+  - name: Execute command for disk layout
+    shell: "lspv" 
+    register: disk_layout_outputs
+  when: os_type == "aix"
+
+- name: Compose lscpu data
+  template:
+     src: validate_cpu.j2
+     dest: "{{ item }}"
+  loop:
+  - '{{ os_export_path }}{{ ansible_os_family}}/validate_cpu_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for disk layout
+  command: "df -h"
+  register: disk_layout_outputs
+  when: os_type == "linux" or os_type == "solaris"
+
+- name: Compose disk layout data
+  template:
+     src: disk_layout.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/disk_layout_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Fetch java version
+  command: "java -version"
+  register: java_version_outputs
+  when: sap_type == 'java'
+
+- name: Compose java version data
+  template:
+     src: java_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/java_version_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+  when: sap_type == 'java'
+
+- name: Execute command for web dispatcher kernel version
+  command: '{{ login }} su - {{ sid |lower }}adm -c "sapwebdisp pf=/usr/sap/{{ webdisp_sid |upper }}/W{{ instance_number }}/{{ webdisp_sid |upper }}_W{{ instance_number }}_{{ ansible_hostname }} -version"'
+  register: wd_kernel_version_outputs
+
+- name: Compose web dispatcher kernel version data
+  template:
+     src: web_dispatcher_kernel_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/wd_kernel_version_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for Check Webdispatcher Backend Connectivity
+  command: '{{ login }} su - {{ sid |lower }}adm -c "sapwebdisp pf=/sapmnt/{{ webdisp_sid | upper }}/profile/{{ webdisp_sid | upper }}_W{{ instance_number }}_{{ ansible_hostname }} -checkconfig"'
+  register: wd_backend_connectivity_outputs
+
+- name: Compose web dispatcher kernel version data
+  template:
+     src: web_dispatcher_backend_connectivity_outputs.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/wd_backend_connectivity_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for r3load version
+  command: '{{ login }} su - {{ sid |lower }}adm -c "R3load -version"'
+  register: r3load_outputs
+
+- name: Compose r3load version data
+  template:
+     src: r3load_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/r3load_version_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for ulimit
+  shell: "ulimit -a"
+  register: ulimit_outputs
+  args:
+    executable: bash
+  failed_when:
+      - ulimit_outputs.failed
+      - not (ulimit_outputs.stderr.find("Command not found."))
+
+- name: Compose ulimit data
+  template:
+     src: ulimit.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/ulimit_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: capture etc hosts and services files
+  fetch:
+     src: "{{ item }}"
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/'
+     flat: yes
+  loop:
+     - /etc/hosts
+     - /etc/services
+
+- name: Host Agent Version
+  command: sudo su -c "./saphostexec -version"
+  args:
+    chdir: /usr/sap/hostctrl/exe
+  register: Hostagent_output
+
+- name: Compose Host Agent Version
+  template:
+     src: host_agent_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/HostAgentVersion_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: DAA Version
+  command: grep -i patch {{ DAA_path | default('/usr/sap/DAA') }}/SMDA{{ DAA_instance_number }}/work/dev_smdagent
+  register: DAA_output
+- debug: var=DAA_output
+
+- name: Compose DAA version
+  template:
+     src: daa_version.j2
+     dest: '{{ os_export_path }}{{ ansible_os_family}}/DAA_{{ ansible_hostname }}.json'
+  delegate_to: localhost
+
+- name: Execute command for extracting the PSE informaton
+  shell: '{{ login }} su - {{ sid|lower }}adm -c "sapgenpse get_my_name -p /usr/sap/{{ sid | upper }}/{{ pse_cert_path | default("D") }}{{ pse_cert_instance_number }}/sec/SAPSSLS.pse"'
+  register: psl_output
+  when: "'db' not in group_names"
+
+- name: Write PSE informaton
+  template:
+      src: pse_information.j2
+      dest: '{{ os_export_path }}{{ ansible_os_family}}/pse_information_{{ ansible_hostname }}.txt'
+  delegate_to: localhost
+  when: "'db' not in group_names"
+
+- name: Execute command for certificate list
+  shell: sudo su - {{ sid|lower }}adm -c "sapgenpse maintain_pk -l -p /usr/sap/{{ sid | upper }}/{{ pse_cert_path | default('D') }}{{ pse_cert_instance_number }}/sec/SAPSSLC.pse"
+  register: cirtl_output
+  when: "'db' not in group_names"
+
+- name: Write Certification List
+  template:
+      src: certification_list.j2
+      dest: '{{ os_export_path }}{{ ansible_os_family}}/certification_list_{{ ansible_hostname }}.txt'
+  delegate_to: localhost
+  when: "'db' not in group_names"

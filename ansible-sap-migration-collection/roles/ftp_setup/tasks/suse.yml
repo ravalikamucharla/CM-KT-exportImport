@@ -1,0 +1,113 @@
+---
+- name: install ftp package if RHEL
+  command: sudo yum install -y vsftpd
+  tags: ftp  
+  delegate_to: "{{ groups['source_db'][0] }}" 
+
+- name: install ftp package
+  command: sudo zypper install -y vsftpd
+  tags: ftp
+
+- name: create user
+  shell: "useradd -c '{{ item.comment }}' -d {{ item.home }} -g {{ item.group }} -m -u {{ item.uid }} -s {{ item.shell | default ('/bin/bash') }} {{ item.name }}; echo {{ item.name }}:{{ item.password }} | /usr/sbin/chpasswd"
+  loop: "{{ ftp.usercreation }}"
+  tags: ftp
+  
+- name: take backup of existing config file
+  copy:
+    src: /etc/vsftpd.conf
+    dest: /etc/vsftpd.conf_bkp
+    remote_src: yes
+  tags: ftp
+
+- name: change the values
+  lineinfile:
+    dest: /etc/vsftpd.conf
+    regexp: '^{{ item.reg }}'
+    line: "{{ item.line }}"
+    state: present
+  loop: 
+    - { reg: '#local_umask=022' ,line: 'local_umask=000' }
+    - { reg: '#anon_umask=022' ,line: 'anon_umask=000' }
+    - { reg: '#seccomp_sandbox=NO', line: 'seccomp_sandbox=NO' }
+    - { reg: pasv_min_port=30000 ,line: 'pasv_min_port=40010' }
+    - { reg: pasv_max_port=30100, line: 'pasv_max_port=40050' }
+    - { reg: listen_ipv6=YES ,line: 'listen_ipv6=NO' }
+    - { reg: listen=NO, line: 'listen=YES' }
+    - { reg: anonymous_enable=YES ,line: 'anonymous_enable=NO' }
+    - { reg: '#chroot_local_user=YES', line: 'chroot_local_user=NO' }
+    - { reg: '#chroot_list_enable=YES',line: 'chroot_list_enable=NO' }
+    - { reg: '#ls_recurse_enable=YES', line: 'ls_recurse_enable=YES' }
+    - { reg: write_enable=NO, line: 'write_enable=YES' }
+    - { reg: '#chroot_list_file=/etc/vsftpd.chroot_list', line: 'chroot_list_file=/etc/vsftpd.chroot_list' }
+    - { reg: '#allow_root_squashed_chroot=YES', line: 'allow_root_squashed_chroot=YES' }
+    - { reg: '#ascii_download_enable=YES', line: 'ascii_download_enable=YES' }
+  tags: ftp
+
+- name: change the values
+  lineinfile:
+    dest: /etc/vsftpd/vsftpd.conf
+    regexp: '^{{ item.reg }}'
+    line: "{{ item.line }}"
+    state: present
+  loop: 
+    - { reg: '#local_umask=022' ,line: 'local_umask=000' }
+    - { reg: '#anon_umask=022' ,line: 'anon_umask=000' }
+    - { reg: '#seccomp_sandbox=NO', line: 'seccomp_sandbox=NO' }
+    - { reg: pasv_min_port=30000 ,line: 'pasv_min_port=40010' }
+    - { reg: pasv_max_port=30100, line: 'pasv_max_port=40050' }
+    - { reg: listen_ipv6=YES ,line: 'listen_ipv6=NO' }
+    - { reg: listen=NO, line: 'listen=YES' }
+    - { reg: anonymous_enable=YES ,line: 'anonymous_enable=NO' }
+    - { reg: '#chroot_local_user=YES', line: 'chroot_local_user=NO' }
+    - { reg: '#chroot_list_enable=YES',line: 'chroot_list_enable=NO' }
+    - { reg: '#ls_recurse_enable=YES', line: 'ls_recurse_enable=YES' }
+    - { reg: write_enable=NO, line: 'write_enable=YES' }
+    - { reg: '#chroot_list_file=/etc/vsftpd.chroot_list', line: 'chroot_list_file=/etc/vsftpd.chroot_list' }
+    - { reg: '#allow_root_squashed_chroot=YES', line: 'allow_root_squashed_chroot=YES' }
+    - { reg: '#ascii_download_enable=YES', line: 'ascii_download_enable=YES' }
+  tags: ftp  
+  delegate_to: "{{ groups['source_db'][0] }}" 
+
+- name: folder and file creation
+  file:
+    path: "{{ item.path }}"
+    state: "{{ item.state }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    recurse: "{{ item.recurse }}"
+    mode: "{{ item.mode | default ('755') }}"
+  loop: "{{ ftp.folders }}"
+  tags: ftp
+
+- name: add user to the created file
+  lineinfile: 
+      dest: "{{ ftp.user_file }}"
+      line: "{{ ftp.ftp_usr_name }}"
+  tags: ftp
+
+- name: adding parameters
+  lineinfile: 
+    dest: /etc/vsftpd.conf
+    line: |
+      userlist_file={{ ftp.user_file }}
+      userlist_deny=NO
+      user_sub_token=$USER
+      userlist_enable=YES
+      allow_writeable_chroot=YES
+      local_root={{ ftp.ftp_dir }}    
+  tags: ftp
+
+- name: Start vsftpd Service
+  service:
+    name: vsftpd
+    state: restarted
+  tags: ftp
+
+- name: Start vsftpd Service
+  service:
+    name: vsftpd
+    state: restarted
+  tags: ftp
+  delegate_to: "{{ groups['source_db'][0] }}" 
+

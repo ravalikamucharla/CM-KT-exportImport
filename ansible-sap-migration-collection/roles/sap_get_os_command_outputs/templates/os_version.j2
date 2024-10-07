@@ -1,0 +1,29 @@
+{
+{% if os_type != "windows" %}
+    "name": "{{  ansible_distribution }} {{ ansible_system }}",
+    "major_version": "{{ ansible_distribution_major_version }}",
+    "version": "{{ ansible_distribution_version }}",
+    "Release": "{{ ansible_distribution_release }}",
+{% endif %}
+{% if os_type == "linux" %}
+    "variety": "{{ ansible_distribution_file_variety }}" 
+{% endif %}
+{% if os_type == "solaris" or os_type == "aix" and ansible_distribution_file_variety is defined %}
+    "variety":"{{ ansible_distribution_file_variety }}"
+{% endif %}
+{% if os_type == "windows" %}
+    "hostname": "{{  ansible_facts.ip_addresses }}",
+    "os_family": "{{ ansible_facts.os_family }}",
+    "OS_name": "{{  ansible_facts.os_name }}",
+    "OS_version": "{{  ansible_facts.distribution_version }}",
+    "distribution": "{{  ansible_facts.distribution }}",
+    "distribution_major_version": "{{ ansible_facts.distribution_major_version }}",
+    "system_model": "{{ ansible_facts.product_name }}",
+    "system_manufacturer": "{{ ansible_facts.system_vendor }}",
+    "architecture": "{{ ansible_facts.architecture }}",
+    "bios_version": "{{ ansible_facts.bios_version }}",
+    "windir": "{{ ansible_facts.env.windir }}",
+    "memorytotal_mb": "{{ ansible_facts.memtotal_mb }}",
+    "windows_domain": "{{ ansible_facts.windows_domain }}"
+{% endif %}
+}

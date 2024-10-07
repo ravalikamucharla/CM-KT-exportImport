@@ -1,0 +1,7 @@
+[{
+ "name": "{{ output.results[index].stdout_lines[5].split()[0] }}",
+ "log_mode":"{{ output.results[index].stdout_lines[5].split()[1] }}",
+ "open_mode":"{{ output.results[index].stdout_lines[5].split()[2] }}",
+ "database_role":"{{ output.results[index].stdout_lines[5].split()[3] }}",
+ "platform_name":"{{ output.results[index].stdout_lines[6] }}"  
+}]

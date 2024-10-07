@@ -1,0 +1,382 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SMICM_CHK_HTTP_SMTP_HVER                *
+* Title               :   Check SMICM for http, smtp and port         *
+* Purpose             :   This report is to Check SMICM for http, smtp*
+*                         and port in SMICM during Cloud Migration    *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SMICM                                                               *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE     *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author         TR#/Local     Description       *
+*---------------------------------------------------------------------*
+*09-09-2020  Initial   Ruchir Kamble   Local     Check SMICM for http,*
+*                                                smtp and port        *
+*07-28-2022   V001     Soumya Ray     Local   To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sytem     *
+*---------------------------------------------------------------------*
+
+REPORT zcm_smicm_chk_http_smtp_hver.
+" This code is referred from Standard Report RSMONICM
+" Subroutine icman_read_icm_info
+" Refer type group ICON for icons
+" Using metadata to replace icons
+" Icons replaced in this report are ICON_CHECKED as lc_checked
+
+TYPES: BEGIN OF icm_sinfo_alv_t.
+    INCLUDE STRUCTURE icm_sinfo3.
+TYPES: number             TYPE icmservno.
+TYPES: selected           TYPE c.
+TYPES: line_col(3)        TYPE c.
+TYPES: timeouts(16)       TYPE c.
+TYPES: activestr(4)       TYPE c.
+TYPES: extbindstr(4)      TYPE c.
+TYPES: bindtohoststr(4)   TYPE c.
+TYPES: ristr(4)           TYPE c.
+TYPES: protname           TYPE icmprotnam.
+TYPES: END OF icm_sinfo_alv_t.
+
+CONSTANTS: lc_icm_runmode_emergency       TYPE i VALUE 1,
+           lc_icm_plugin_protocol_none    TYPE i VALUE -1,
+           lc_icm_plugin_protocol_http    TYPE i VALUE 1,
+           lc_icm_plugin_protocol_https   TYPE i VALUE 2,
+           lc_icm_plugin_protocol_nntp    TYPE i VALUE 3,
+           lc_icm_plugin_protocol_smtp    TYPE i VALUE 4,
+           lc_icm_plugin_protocol_ftp     TYPE i VALUE 5,
+           lc_icm_plugin_protocol_monitor TYPE i VALUE 6,
+           lc_icm_plugin_protocol_telnet  TYPE i VALUE 7,
+           lc_icm_plugin_protocol_lcom    TYPE i VALUE 8,
+           lc_icm_plugin_protocol_p4      TYPE i VALUE 9,
+           lc_icm_plugin_protocol_p4sec   TYPE i VALUE 10,
+           lc_icm_plugin_protocol_iiop    TYPE i VALUE 11,
+           lc_icm_plugin_protocol_iiopsec TYPE i VALUE 12,
+           lc_icm_plugin_protocol_enc     TYPE i VALUE 13,
+           lc_icm_plugin_protocol_proxy   TYPE i VALUE 14,
+           lc_icm_plugin_protocol_router  TYPE i VALUE 16,
+           lc_icm_plugin_prot_websocket   TYPE i VALUE 25,
+           lc_icm_plugin_prot_websockets  TYPE i VALUE 26,
+           lc_icm_plugin_protocol_tcp     TYPE i VALUE 29,
+           lc_icm_plugin_protocol_tcps    TYPE i VALUE 30,
+           lc_icm_plugin_protocol_h2      TYPE i VALUE 31,
+           lc_icm_plugin_protocol_h2c     TYPE i VALUE 33.
+
+CONSTANTS: lc_sep         TYPE c VALUE '|'                LENGTH 1,
+           lc_checked     TYPE c VALUE 'Active'           LENGTH 6,
+           lc_null        TYPE c VALUE 'NULL'             LENGTH 4,
+           lc_export      TYPE c VALUE 'EXPORT'           LENGTH 6,
+           lc_number      TYPE c VALUE 'No'               LENGTH 2,
+           lc_protocol    TYPE c VALUE 'Protocol'         LENGTH 8,
+           lc_service     TYPE c VALUE 'ServiceNamePort'  LENGTH 20,
+           lc_host_name   TYPE c VALUE 'HostName'         LENGTH 10,
+           lc_keep_alive  TYPE c VALUE 'KeepAlive'        LENGTH 12,
+           lc_timeout     TYPE c VALUE 'ProcTimeout'      LENGTH 12,
+           lc_actv        TYPE c VALUE 'Actv'             LENGTH 4,
+           lc_ext_bind    TYPE c VALUE 'ExternalBind'     LENGTH 14,
+           lc_address     TYPE c VALUE 'Addressbound'     LENGTH 14,
+           lc_acl_file    TYPE c VALUE 'ACLFile'          LENGTH 8,
+           lc_un_protocol TYPE c VALUE 'Unknown Protocol' LENGTH 20,
+           lc_title       TYPE c VALUE
+           'ICM Monitor Service Display'                  LENGTH 45,
+           lc_s041        TYPE c VALUE
+           'This action cannot be executed in emergency mode'
+                                                          LENGTH 60,
+* Begin of changes in V001
+           lc_noinput     TYPE c VALUE 'No input given'   LENGTH 20,
+           lc_inc_input   TYPE c VALUE 'Incorrect input'  LENGTH 20,
+           lc_err_msg     TYPE c VALUE
+           'No data found'                                LENGTH 20.
+* End of changes in V001
+
+DATA: ls_input              TYPE tab512,
+      ls_output             TYPE tab512,
+      lv_action             TYPE char20,
+      lv_err_code           LIKE sy-subrc,
+      lv_runmode            TYPE i,
+      icm_info_data         TYPE icm_info,
+      lv_number             TYPE char4,
+      lv_keepalive          TYPE char4,
+      lv_proc_timeout       TYPE char4,
+      lt_icm_serv_info_data TYPE icm_sinfo_alv_t
+                         OCCURS 10 WITH HEADER LINE.
+FIELD-SYMBOLS: <fs_serv> TYPE icm_sinfo_alv_t. "+V001
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  lv_action = ls_input.      " Action
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      PERFORM icman_read_icm_info TABLES lt_output
+      CHANGING lv_err_code.
+
+      IF lt_icm_serv_info_data IS NOT INITIAL.
+
+        " Adding headings to the output
+
+        CONCATENATE lc_number       lc_sep
+                    lc_protocol     lc_sep
+                    lc_service      lc_sep
+                    lc_host_name    lc_sep
+                    lc_keep_alive   lc_sep
+                    lc_timeout      lc_sep
+                    lc_actv         lc_sep
+                    lc_ext_bind     lc_sep
+                    lc_address      lc_sep
+                    lc_acl_file
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT lt_icm_serv_info_data
+          ASSIGNING <fs_serv>.
+
+          lv_number       =  <fs_serv>-number.
+          lv_keepalive    = <fs_serv>-keepalive.
+          lv_proc_timeout = <fs_serv>-proc_timeout.
+
+          IF <fs_serv>-extbindstr IS INITIAL.
+            <fs_serv>-extbindstr = lc_null.
+          ENDIF.
+
+          IF <fs_serv>-bindtohoststr IS INITIAL.
+            <fs_serv>-bindtohoststr = lc_null.
+          ENDIF.
+
+          IF <fs_serv>-aclfile IS INITIAL.
+            <fs_serv>-aclfile = lc_null.
+          ENDIF.
+
+          CONCATENATE lv_number               lc_sep
+                      <fs_serv>-protname      lc_sep
+                      <fs_serv>-service       lc_sep
+                      <fs_serv>-hostname      lc_sep
+                      lv_keepalive            lc_sep
+                      lv_proc_timeout         lc_sep
+                      <fs_serv>-activestr     lc_sep
+                      <fs_serv>-extbindstr    lc_sep
+                      <fs_serv>-bindtohoststr lc_sep
+                      <fs_serv>-aclfile
+                      INTO ls_output.
+          APPEND ls_output TO lt_output.
+
+        ENDLOOP.
+
+      ELSE.
+        " No data found
+        ls_output =  lc_err_msg.
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+  WHEN OTHERS.
+*   Begin of changes in V001
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*   End of changes in V001
+  ENDCASE.
+
+ENDFORM.
+
+FORM icman_read_icm_info TABLES lt_output
+                  CHANGING err_code LIKE sy-subrc.
+
+  DATA: BEGIN OF icm_servlist2 OCCURS 10.
+      INCLUDE STRUCTURE icm_sinfo2.
+  DATA: END OF icm_servlist2.
+
+  DATA: BEGIN OF icm_servlist OCCURS 10.
+      INCLUDE STRUCTURE icm_sinfo3.
+  DATA: END OF icm_servlist.
+
+  DATA: BEGIN OF icm_thrlist OCCURS 10.
+      INCLUDE STRUCTURE icm_thrlst.
+  DATA: END OF icm_thrlist.
+
+  DATA: rc   LIKE sy-subrc,
+        host TYPE string,
+        serv TYPE string.
+
+* Daten zuruecksetzen
+  CLEAR   icm_info_data.
+  CLEAR   lt_icm_serv_info_data.
+  REFRESH lt_icm_serv_info_data.
+
+* Im Emergencymodus nicht ausführen
+  IF lv_runmode = lc_icm_runmode_emergency.
+    ls_output =  lc_s041.
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+
+* ICM Statusinformationen lesen
+  CALL FUNCTION 'ICM_GET_INFO2'
+    IMPORTING
+      info_data   = icm_info_data
+    TABLES
+      servlist    = icm_servlist2
+      thrlist     = icm_thrlist
+      servlist3   = icm_servlist
+    EXCEPTIONS
+      icm_error   = 1
+      icm_timeout = 2
+      OTHERS      = 6.
+
+  rc = sy-subrc.
+
+  err_code = sy-subrc.
+
+* ICM Service Info auslesen
+  LOOP AT icm_servlist.
+    lt_icm_serv_info_data-number        = sy-tabix.
+    lt_icm_serv_info_data-protocol      = icm_servlist-protocol.
+    lt_icm_serv_info_data-keepalive     = icm_servlist-keepalive.
+    lt_icm_serv_info_data-proc_timeout  = icm_servlist-proc_timeout.
+    lt_icm_serv_info_data-vclient       = icm_servlist-vclient.
+    lt_icm_serv_info_data-service       = icm_servlist-service.
+    lt_icm_serv_info_data-hostname      = icm_servlist-hostname.
+    lt_icm_serv_info_data-aclfile       = icm_servlist-aclfile.
+    lt_icm_serv_info_data-bind_to_host  = icm_servlist-bind_to_host.
+    lt_icm_serv_info_data-usetls        = icm_servlist-usetls.
+
+    PERFORM icman_set_protname USING lt_icm_serv_info_data-protocol
+                             CHANGING lt_icm_serv_info_data-protname.
+
+*   virtuellen host dieses Services bestimmen
+    host = icm_servlist-hostname.
+    serv = icm_servlist-service.
+    CALL FUNCTION 'TH_GET_VIRT_HOST'
+      EXPORTING
+        protocol       = icm_servlist-protocol
+        host           = host
+        serv           = serv
+      IMPORTING
+        vindex         = lt_icm_serv_info_data-virt_host_idx
+      EXCEPTIONS
+        internal_error = 1
+        OTHERS         = 2.
+    IF sy-subrc <> 0.
+      lt_icm_serv_info_data-virt_host_idx = -1.
+    ENDIF.
+
+*   ist der service aktive
+    lt_icm_serv_info_data-active = icm_servlist-active.
+    IF lt_icm_serv_info_data-active = 'X'.
+      CLEAR lt_icm_serv_info_data-line_col.
+      lt_icm_serv_info_data-activestr = lc_checked.
+    ELSE.
+      lt_icm_serv_info_data-line_col = 'C30'.
+      lt_icm_serv_info_data-activestr = '    '.
+    ENDIF.
+
+*   extern gebunden
+    lt_icm_serv_info_data-extbind   = icm_servlist-extbind.
+    IF lt_icm_serv_info_data-extbind = 'X'.
+      lt_icm_serv_info_data-extbindstr = lc_checked.
+    ELSE.
+      lt_icm_serv_info_data-extbindstr = '    '.
+    ENDIF.
+
+*   bound to a specific IP address
+    lt_icm_serv_info_data-bind_to_host = icm_servlist-bind_to_host.
+    IF lt_icm_serv_info_data-bind_to_host = 'X'.
+      lt_icm_serv_info_data-bindtohoststr = lc_checked.
+    ELSE.
+      lt_icm_serv_info_data-bindtohoststr = '    '.
+    ENDIF.
+
+*   reverse invoke
+    lt_icm_serv_info_data-reverse_invoke = icm_servlist-reverse_invoke.
+    IF lt_icm_serv_info_data-reverse_invoke = 'X'.
+      lt_icm_serv_info_data-ristr = lc_checked.
+    ELSE.
+      lt_icm_serv_info_data-ristr = '    '.
+    ENDIF.
+
+    APPEND lt_icm_serv_info_data.
+  ENDLOOP.
+
+ENDFORM.
+
+FORM icman_set_protname USING    p_protocol TYPE icmproto
+                        CHANGING p_protname TYPE icmprotnam.
+
+  " translation for text elements is not necessary
+
+  CASE p_protocol.
+    WHEN lc_icm_plugin_protocol_none.
+      p_protname = 'Unbekanntes Protokoll'(169).
+    WHEN lc_icm_plugin_protocol_http.
+      p_protname = 'HTTP'.
+    WHEN lc_icm_plugin_protocol_https.
+      p_protname = 'HTTPS'.
+    WHEN lc_icm_plugin_protocol_nntp.
+      p_protname = 'NNTP'.
+    WHEN lc_icm_plugin_protocol_smtp.
+      p_protname = 'SMTP'.
+    WHEN lc_icm_plugin_protocol_ftp.
+      p_protname = 'FTP'.
+    WHEN lc_icm_plugin_protocol_monitor.
+      p_protname = 'INT SAP MONITOR'(156).
+    WHEN lc_icm_plugin_protocol_telnet.
+      p_protname = 'TELNET'.
+    WHEN lc_icm_plugin_protocol_lcom.
+      p_protname = 'LCOM'.
+    WHEN lc_icm_plugin_protocol_p4.
+      p_protname = 'P4'.
+    WHEN lc_icm_plugin_protocol_p4sec.
+      p_protname = 'P4SEC'.
+    WHEN lc_icm_plugin_protocol_iiop.
+      p_protname = 'IIOP'.
+    WHEN lc_icm_plugin_protocol_iiopsec.
+      p_protname = 'IIOPSEC'.
+    WHEN lc_icm_plugin_protocol_enc.
+      p_protname = 'ENQUEUE'.
+    WHEN lc_icm_plugin_protocol_proxy.
+      p_protname = 'Java Proxy'(165).
+    WHEN lc_icm_plugin_protocol_router.
+      p_protname = 'ROUTER'.
+    WHEN lc_icm_plugin_prot_websocket.
+      p_protname = 'WEBSOCKET'.
+    WHEN lc_icm_plugin_prot_websockets.
+      p_protname = 'WEBSOCKETS'.
+    WHEN lc_icm_plugin_protocol_tcp.
+      p_protname = 'TCP'.
+    WHEN lc_icm_plugin_protocol_tcps.
+      p_protname = 'TCPS'. "no translation necessary
+    WHEN lc_icm_plugin_protocol_h2.
+      p_protname = 'h2'. "no translation necessary
+    WHEN lc_icm_plugin_protocol_h2c.
+      p_protname = 'h2c'. "no translation necessary
+    WHEN OTHERS.
+      p_protname = lc_un_protocol.
+  ENDCASE.
+ENDFORM.

@@ -1,0 +1,1 @@
+{"OUTPUT": [{"TITLE": "Server state and alerts for operation modes", "DATA": [{"Operation mode": "DUMMY", "Server name": "dbora_NWO_00", "Services": "DVBS", "Status": "Active", "Configuration alerts": "Operation mode differs"}, {"Operation mode": "DUMMY", "Server name": "dbora_NWO_02", "Services": "DVBS", "Status": "Active", "Configuration alerts": "Operation mode differs"}]}]}

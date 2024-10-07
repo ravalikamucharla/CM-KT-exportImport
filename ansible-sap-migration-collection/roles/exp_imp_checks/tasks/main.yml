@@ -1,0 +1,9 @@
+---
+- name: create folders
+  file:
+    path: "{{output}}" #"{{ exp_imp_checks.checks_output_path }}"
+    state: directory
+  delegate_to: localhost
+
+- name: check 
+  include_tasks: "{{ mode }}.yml"

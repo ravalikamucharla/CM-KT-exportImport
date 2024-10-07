@@ -1,0 +1,551 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SYBASE_EXP_CURR_FREE_DBSIZ              *
+* Title               :   Current and free database size of SYBASE    *
+* Purpose             :   This report is used to get current and free *
+*                     :   database size from tcode DBACOCKPIT-> Space *
+*                     :   ->Databse during Cloud Migration of Sybase  *
+*                     :   system.                                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX               :     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-23-2020  Initial   Soumya Ray   Local         To fetch current and*
+*                                               free DB size in SYBASE*
+*09-22-2022  V001      Soumya Ray   Local         To remove inline dec*
+*                                                 -larations          *
+*---------------------------------------------------------------------*
+
+REPORT zcm_sybase_exp_curr_free_dbsiz.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                  LENGTH 1,
+             lc_export    TYPE c VALUE 'EXPORT'             LENGTH 6,
+             lc_head      TYPE string VALUE
+             'Current and free Database size',
+             lc_name      TYPE c VALUE 'Dbname'              LENGTH 10,
+             lc_totalsize TYPE c VALUE 'Currentsize(MB)'     LENGTH 30,
+             lc_freesize  TYPE c VALUE 'Freesize(MB)'        LENGTH 30,
+             lc_usedsize  TYPE c VALUE 'Usedsize(MB)'        LENGTH 30,
+* Begin of changes in V001
+             lc_noaction  TYPE c VALUE 'Incorrect input'     LENGTH 50,
+             lc_noinput   TYPE c VALUE 'No input given'      LENGTH 30.
+* End of changes in V001
+
+  TYPES : BEGIN OF ty_data,
+            name              TYPE    syst_sysid,
+            dbid              TYPE    c,
+            suser_name        TYPE    string,
+            suid              TYPE    c,
+            status            TYPE    string,
+            logptr            TYPE    string,
+            crdate            TYPE    db6tstamp,
+            dumptrdate        TYPE    db6tstamp,
+            status2           TYPE    string,
+            status3           TYPE    string,
+            status4           TYPE    string,
+            status5           TYPE    string,
+            encryption_status TYPE    char3,
+            durability        TYPE    char10,
+            assigned_mb       TYPE    char4,
+            vdevno            TYPE    string,
+            in_drop           TYPE    string,
+            mixedlog          TYPE    char2,
+            suspect_pages     TYPE    char2,
+            bgcolor           TYPE    char2,
+            suspect_db        TYPE    char2,
+            log_free_pgs      TYPE    string,
+            log_free_mb       TYPE    string,
+            log_total_mb      TYPE    string,
+            data_reserved_pct TYPE    string,
+            log_reserved_pct  TYPE    string,
+            data_assigned_mb  TYPE    string,
+            data_free_mb      TYPE    string,
+            aexp_enabled      TYPE    c,
+            aexp_enabled_icon TYPE    c,
+          END OF ty_data.
+
+  DATA: ls_output     TYPE tab512,
+        lt_data       TYPE TABLE OF ty_data,
+        ls_data       TYPE ty_data,
+        lv_sql_stmt   TYPE string,
+        lv_command    TYPE string,
+        lo_sql_stmt   TYPE REF TO  cl_sql_statement,
+        lv_result     TYPE string,
+        lo_res        TYPE REF TO data,
+        lo_sql_con    TYPE REF TO cl_sql_connection,
+        lo_sql_res    TYPE REF TO cl_sql_result_set,
+        lo_sql_excp   TYPE REF TO cx_sql_exception,
+        lt_database   TYPE db6_string_tab,
+        lv_datafree   TYPE i,
+        lv_dataassig  TYPE i,
+        lv_logfree    TYPE i,
+        lv_logassign  TYPE i,
+        lv_total_size TYPE string,
+        lv_free_size  TYPE string,
+        lv_used_size  TYPE string,
+* Begin of changes in V001
+        ls_database   TYPE string,
+        lv_msg        TYPE string,
+        ls_input      TYPE tab512,
+        lv_action     TYPE string,
+        lv_sas        TYPE SYST_SYSID,
+        lv_freemb     TYPE i,
+        lv_totalsize  TYPE i,
+        lv_usedmb     TYPE i.
+* End of changes in V001
+
+
+  ls_output = lc_head. " Heading of script
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1. " Read input
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    ls_output = lc_noinput. " No input
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+      CREATE OBJECT lo_sql_con.
+      CREATE OBJECT lo_sql_stmt.
+      TRY.
+          lo_sql_stmt = lo_sql_con->create_statement( ).
+          CONCATENATE
+          'SELECT SQ_EXC_AGGR.name AS name , '
+          'SQ_EXC_AGGR.dbid AS dbid , '
+          'SQ_EXC_AGGR.suser_name AS suser_name , '
+          'SQ_EXC_AGGR.suid AS suid , '
+          'SQ_EXC_AGGR.status AS status , '
+          'SQ_EXC_AGGR.logptr AS logptr , '
+          'SQ_EXC_AGGR.crdate AS crdate , '
+          'SQ_EXC_AGGR.dumptrdate AS dumptrdate , '
+          'SQ_EXC_AGGR.status2 AS status2 , '
+          'SQ_EXC_AGGR.status3 AS status3 , '
+          'SQ_EXC_AGGR.status4 AS status4 , '
+          'SQ_EXC_AGGR.status5 AS status5 , '
+          'SQ_EXC_AGGR.encryption_status AS encryption_status , '
+          'SQ_EXC_AGGR.durability AS durability , '
+          'SQ_EXC_AGGR.assigned_mb AS assigned_mb , '
+          'SQ_EXC_AGGR.vdevno AS vdevno , '
+          'SQ_EXC_AGGR.in_drop AS in_drop , '
+          'SQ_EXC_AGGR.mixedlog AS mixedlog , '
+          'SQ_EXC_AGGR.suspect_pages AS suspect_pages , '
+          ''''
+          ' '
+          ''''
+          ' AS BGCOLOR , '
+          'SQ_EXC_AGGR.suspect_db AS suspect_db , '
+          'SQ_EXC_AGGR.log_free_pgs AS log_free_pgs , '
+          'SQ_EXC_AGGR.log_free_mb AS log_free_mb , '
+          'SQ_EXC_AGGR.log_total_mb AS log_total_mb , '
+          '0.0 AS DATA_RESERVED_PCT , '
+          '0.0 AS LOG_RESERVED_PCT , '
+          'SQ_EXC_AGGR.data_assigned_mb AS data_assigned_mb , '
+          'SQ_EXC_AGGR. data_free_mb AS data_free_mb , '
+          ''''
+          ' '
+          ''''
+          ' AS AEXP_ENABLED , '
+          ''''
+          ' '
+          ''''
+          ' AS AEXP_ENABLED_ICON , '
+          ''''
+          ' '
+          ''''
+          ' AS AEXP_ENABLED_TEXT , '
+          ''''
+          ' '
+          ''''
+          ' AS AEXP_LAST_DATA_EXP , '
+          ''''
+          ' '
+          ''''
+          ' AS AEXP_LAST_LOG_EXP , '
+          ''''
+          ' '
+          ''''
+          ' AS AEXP_INH_FROM_DEFAULT , '
+          '0 AS LOGTHR_COUNT , '
+          ''''
+          ' '
+          ''''
+          ' AS LOGTHR_LAST_EXEC_TIME , '
+          'SQ_EXC_AGGR.is_online AS is_online , '
+          ''''
+          ' '
+          ''''
+          ' AS CACHE_BOUND_TO FROM (SELECT MAX(assigned_mb) '
+          'AS assigned_mb , '
+          'MAX(crdate) AS crdate , '
+          'MAX(data_assigned_mb) AS data_assigned_mb , '
+          'MAX(data_free_mb) AS data_free_mb , '
+          'MAX(dumptrdate) AS dumptrdate , '
+          'MAX( durability) AS durability , '
+          'MAX(encryption_status) AS encryption_status , '
+          'MAX(in_drop) AS in_drop , '
+          'MAX(is_online) AS is_online , '
+          'MAX(log_free_mb) AS log_free_mb , '
+          'MAX(log_free_pgs) AS log_free_pgs , '
+          'MAX(log_total_mb) AS log_total_mb , '
+          'MAX(logptr) AS logptr , '
+          'MAX(mixedlog) AS mixedlog , MAX(status) AS status , '
+          'MAX(status2) AS status2 , MAX(status3) AS status3 , '
+          'MAX(status4) AS status4 , MAX(status5) AS status5 , '
+          'MAX(suid) AS suid , MAX(suser_name) AS suser_name , '
+          'MAX(suspect_db) AS suspect_db , '
+          'MAX(suspect_pages) AS suspect_pages , '
+          'MAX(vdevno) AS vdevno , dbid , '
+          'name FROM (SELECT MAX(SRC_SYSDATABASES.logptr) AS logptr , '
+          'MAX(SRC_SYSDATABASES.status) AS status , '
+          'MAX(SRC_SYSDATABASES.status2) AS status2 , '
+          'MAX(SRC_SYSDATABASES. status3) AS status3 , '
+          'MAX(SRC_SYSDATABASES.status4) AS status4 , '
+          'MAX(SRC_SYSDATABASES.status5) AS status5 , '
+          'MAX(SRC_SYSDATABASES.suid) AS suid , '
+          'MAX(SRC_SYSUSAGES.vdevno) AS vdevno , '
+          'MAX(case when ((SRC_SYSDATABASES.status & 32) + '
+          '(SRC_SYSDATABASES. status & 64) + '
+          '(SRC_SYSDATABASES.status & 256) + '
+          '(SRC_SYSDATABASES.status2 & 16) + '
+          '(SRC_SYSDATABASES.status2 & 32) + '
+          '(SRC_SYSDATABASES.status3 & 8) + '
+          '(SRC_SYSDATABASES.status3 & 4096)) = 0 then '
+          ''''
+          'X'
+          ''''
+          ' else '
+          ''''
+          ''''
+          ' end) '
+          'AS is_online , '
+          'MAX(case when (( SRC_SYSDATABASES.status & 32) + '
+          '(SRC_SYSDATABASES.status & 64) + '
+          '(SRC_SYSDATABASES.status & 256) + '
+          '(SRC_SYSDATABASES.status2 & 16) + '
+          '(SRC_SYSDATABASES.status2 & 32) + '
+          '(SRC_SYSDATABASES.status3 & 8) + '
+          '(SRC_SYSDATABASES.status3 & 4096)) = 0 '
+          'then ( case when SRC_SYSDATABASES.status2 & -32768 != 0 '
+          'then ( lct_admin('
+          ''''
+          'num_logpages'
+          ''''
+          ',SRC_SYSDATABASES.dbid) + '
+          'lct_admin('
+          ''''
+          'logsegment_freepages'
+          ''''
+          ',SRC_SYSDATABASES.dbid) + '
+          'lct_admin('
+          ''''
+          'reserved_for_rollbacks'
+          ''''
+          ',SRC_SYSDATABASES.dbid) ) '
+          'else ( select sum(u.size) from master..sysusages u '
+          'where u.segmap&4 = 4 and u.location not in (9,10) '
+          'and u.dbid = SRC_SYSDATABASES.dbid ) end ) else 0 '
+          'end * convert(float, @@maxpagesize) / 1048576) '
+          'AS log_total_mb , '
+          'MAX(case when ((SRC_SYSDATABASES.status & 32) + '
+          '(SRC_SYSDATABASES. status & 64) + '
+          '(SRC_SYSDATABASES.status & 256) + '
+          '(SRC_SYSDATABASES.status2 & 16) + '
+          '(SRC_SYSDATABASES.status2 & 32) + '
+          '(SRC_SYSDATABASES.status3 & 8) + '
+          '(SRC_SYSDATABASES.status3 & 4096)) = 0 '
+          'then ceiling(lct_admin('
+          ''''
+          'logsegment_freepages'
+          ''''
+          ',SRC_SYSDATABASES. dbid) - lct_admin('
+          ''''
+          'reserved_for_rollbacks'
+          ''''
+          ',SRC_SYSDATABASES.dbid)) else 0 '
+          'end * convert(float, @@maxpagesize) / 1048576) '
+          'AS log_free_mb , '
+          'MAX(case when ((SRC_SYSDATABASES.status & 32) + '
+          '(SRC_SYSDATABASES.status & 64) + '
+          '(SRC_SYSDATABASES.status & 256) + '
+          '(SRC_SYSDATABASES.status2 & 16) + '
+          '(SRC_SYSDATABASES.status2 & 32) + '
+          '(SRC_SYSDATABASES.status3 & 8) + '
+          '(SRC_SYSDATABASES.status3 & 4096)) = 0 '
+          'then ceiling(lct_admin('
+          ''''
+          'logsegment_freepages'
+          ''''
+          ',SRC_SYSDATABASES.dbid) - lct_admin('
+          ''''
+          'reserved_for_rollbacks'
+          ''''
+          ' ,SRC_SYSDATABASES.dbid)) else 0 end) '
+          'AS log_free_pgs , MAX(case when status & 256 != 0 then '
+          ''''
+          'Yes'
+          ''''
+          ' else '
+          ''''
+          'No'
+          ''''
+          ' end) AS suspect_db , '
+          'MAX(case when status2 & -32768 != 0 then '
+          ''''
+          'Yes'
+          ''''
+          ' else '
+          ''''
+          'No'
+          ''''
+          ' end) AS mixedlog , MAX(case when status2 & 128 != 0 then '
+          ''''
+          'Yes'
+          ''''
+          ' else '
+          ''''
+          'No'
+          ''''
+          ' end) AS suspect_pages , '
+          'MAX(case when status3 & 8192 != 0 then '
+          ''''
+          'Yes'
+          ''''
+          ' else '
+          ''''
+          'No'
+          ''''
+          ' end) AS in_drop , '
+          'MAX(case when status5 & 31 = 0 or status5 is null then '
+          ''''
+          'Not Encrypted'
+          ''''
+          ' when status5 & 31 = 1 then '
+          ''''
+          'Encrypted'
+          ''''
+          ' when status5 & 31 = 11 then '
+          ''''
+          'Encrypting ('
+          ''''
+          ' + convert(varchar, dbencryption_status('
+          ''''
+          'progress'
+          ''''
+          ',SRC_SYSDATABASES.dbid)) + '
+          ''''
+          '%)'
+          ''''
+          ' when status5 & 31 = 9 then '
+          ''''
+          'Encryption Suspended ('
+          ''''
+          ' + convert(varchar, dbencryption_status('
+          ''''
+          'progress'
+          ''''
+          ',SRC_SYSDATABASES.dbid)) + '
+          ''''
+          '%)'
+          ''''
+          ' when status5 & 31 = 20 then '
+          ''''
+          'Decrypting ('
+          ''''
+          ' + convert(varchar, dbencryption_status('
+          ''''
+          'progress'
+          ''''
+          ',SRC_SYSDATABASES.dbid)) + '
+          ''''
+          '%)'
+          ''''
+          'else '
+          ''''
+          'Decryption Suspended ('
+          ''''
+          ' + convert(varchar, dbencryption_status('
+          ''''
+          'progress'
+          ''''
+          ',SRC_SYSDATABASES.dbid)) + '
+          ''''
+          '%)'
+          ''''
+          ' end) AS encryption_status , '
+          'MAX(db_attr( db_name(SRC_SYSDATABASES.dbid), '
+          ''''
+          'durability'
+          ''''
+          ')) AS durability , '
+          'MAX(str_replace(str_replace(str_replace(convert(VARCHAR(19),'
+          'SRC_SYSDATABASES.crdate,23),'
+          ''''
+          ':'
+          ''''
+          ',NULL),'
+          ''''
+          '-'
+          ''''
+          ',NULL),'
+          ''''
+          'T'
+          ''''
+          ',NULL)) AS crdate , '
+          'MAX(str_replace'
+          '(str_replace(str_replace(convert(VARCHAR( 19),'
+          'SRC_SYSDATABASES.dumptrdate,23),'
+          ''''
+          ':'
+          ''''
+          ',NULL),'
+          ''''
+          '-'
+          ''''
+          ',NULL),'
+          ''''
+          'T'
+          ''''
+          ',NULL)) AS dumptrdate , '
+          'MAX(suser_name(suid)) AS suser_name , '
+          'SRC_SYSDATABASES.dbid AS dbid , '
+          'SRC_SYSDATABASES.name AS name , '
+          'SUM(case when SRC_SYSUSAGES.segmap = 0 then 0 '
+          'else convert( numeric(20,0), SRC_SYSUSAGES.size) * '
+          'convert(float, @@maxpagesize) / 1048576 end) '
+          'AS assigned_mb , '
+          'SUM(case when SRC_SYSUSAGES.segmap in (4,0) then 0 '
+          'else convert(int, convert(numeric(20,0), '
+          'curunreservedpgs(SRC_SYSUSAGES.dbid,SRC_SYSUSAGES.lstart, '
+          'SRC_SYSUSAGES.unreservedpgs)) * '
+          'convert(float, @@maxpagesize) / 1048576) end) '
+          'AS data_free_mb , '
+          'SUM(case when SRC_SYSUSAGES.segmap in (4,0) '
+          'then 0 else convert(int,(convert(numeric(20,0), '
+          'SRC_SYSUSAGES.size) * '
+          'convert(float, @@maxpagesize) / 1048576)) end) '
+          'AS data_assigned_mb '
+          'FROM master..sysdatabases '
+          'AS SRC_SYSDATABASES JOIN master..sysusages '
+          'AS SRC_SYSUSAGES ON '
+          'SRC_SYSDATABASES.dbid = SRC_SYSUSAGES.dbid '
+          'GROUP BY SRC_SYSDATABASES.name , SRC_SYSDATABASES.dbid ) '
+          'AS SQ_STD_AGGR GROUP BY name , dbid ) '
+          'AS SQ_EXC_AGGR AT ISOLATION READ COMMITTED'
+          INTO lv_command RESPECTING BLANKS."SQL command to get DB data
+* // Start of Operation to execute SQL lines of command
+          lv_sql_stmt = `select $EXEC( '` && lv_command && `' )`.
+          lo_sql_res = lo_sql_stmt->execute_query( lv_sql_stmt ).
+
+          GET REFERENCE OF lv_result INTO lo_res.
+          lo_sql_res->set_param( lo_res ).
+          WHILE lo_sql_res->next( ) > 0.
+            APPEND lv_result TO lt_database. " Result lines of SQL
+          ENDWHILE.
+          lo_sql_res->close( )."Close SQL command
+* // End of Operation to execute SQL lines of command
+        CATCH cx_sql_exception INTO lo_sql_excp. " Exception caught
+          lv_msg = lo_sql_excp->get_text( ). " Error message
+          ls_output = lv_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+
+      ENDTRY.
+
+      DELETE lt_database INDEX 1. "Delete 1st line ( Heading)
+      DELETE lt_database INDEX 1. " Delete 2nd line (underlines)
+      LOOP AT lt_database INTO ls_database.
+        CONDENSE ls_database.
+        SPLIT ls_database AT space INTO " Split the lines at Space
+        ls_data-name
+        ls_data-dbid
+        ls_data-suser_name
+        ls_data-suid
+        ls_data-status
+        ls_data-logptr
+        ls_data-crdate
+        ls_data-dumptrdate
+        ls_data-status2
+        ls_data-status3
+        ls_data-status4
+        ls_data-status5
+        ls_data-encryption_status
+        ls_data-durability
+        ls_data-assigned_mb
+        ls_data-vdevno
+        ls_data-in_drop
+        ls_data-mixedlog
+        ls_data-suspect_pages
+        ls_data-bgcolor
+        ls_data-suspect_db
+        ls_data-log_free_pgs
+        ls_data-log_free_mb
+        ls_data-log_total_mb
+        ls_data-data_reserved_pct
+        ls_data-log_reserved_pct
+        ls_data-data_assigned_mb
+        ls_data-data_free_mb
+        ls_data-aexp_enabled
+        ls_data-aexp_enabled_icon.
+        APPEND ls_data TO lt_data.
+        CLEAR: ls_data, ls_database.
+      ENDLOOP.
+      lv_sas = sy-sysid.
+      READ TABLE lt_data INTO ls_data WITH KEY name = lv_sas.
+      "Read data for SYBASE ('SAS') DB
+
+      lv_logfree = ls_data-log_free_mb. "Free log size in MB
+      lv_logassign = ls_data-log_total_mb. " Total log size in MB
+      lv_dataassig = ls_data-data_assigned_mb. " Total Data size in MB
+      lv_datafree = ls_data-data_free_mb. " Total data free size in MB
+
+      lv_freemb = lv_logfree + lv_datafree."Free size of DB in MB
+      lv_totalsize = lv_logassign + lv_dataassig."Total DB size
+      lv_usedmb = lv_totalsize - lv_freemb."Used size of DB in MB
+*     Converting intezer to string to pass in output
+      lv_total_size = lv_totalsize.
+      lv_free_size = lv_freemb.
+      lv_used_size = lv_usedmb.
+
+      CONCATENATE lc_name lc_sep
+      lc_totalsize lc_sep
+      lc_freesize  lc_sep
+      lc_usedsize
+      INTO ls_output. " Heading of the table coloums
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      CONCATENATE ls_data-name    lc_sep
+      lv_total_size   lc_sep
+      lv_free_size    lc_sep
+      lv_used_size
+      INTO ls_output. " Data of the table coloums
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+    WHEN OTHERS.
+      ls_output = lc_noaction.
+      APPEND ls_output TO lt_output.
+  ENDCASE.
+  CLEAR: ls_data, lv_freemb, lv_totalsize, lv_usedmb, lv_logfree,
+  lv_logassign, lv_dataassig, lv_datafree, ls_database, lv_sas,
+  ls_output, lv_total_size, lv_free_size, lv_used_size.
+  FREE: lt_data, lt_database.
+ENDFORM.

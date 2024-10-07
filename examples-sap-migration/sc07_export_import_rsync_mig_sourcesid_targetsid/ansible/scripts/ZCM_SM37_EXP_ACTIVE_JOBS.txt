@@ -1,0 +1,261 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SM37_EXP_ACTIVE_JOBS                    *
+* Title               :   Active Jobs in SM37                         *
+* Purpose             :   This report is used to export Active Jobs   *
+*                         from SM37                                   *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM37                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TBTCO                     X                                         *
+* TBTCP                     X                                         *
+* TBTCCNTXT                 X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-07-2021  Initial   Yasaswini K   Local       To Export Active jobs*
+*                                                from Sm37            *
+*09-09-2022   V001     Yasaswini K  Local  To pass message "No data   *
+*                                          found" in case of no data  *
+*                                          found in sytem             *
+*---------------------------------------------------------------------*
+REPORT zcm_sm37_exp_active_jobs.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  TYPES: BEGIN OF ty_tbtco,
+           jobname   TYPE btcjob,
+           jobcount  TYPE btcjobcnt,
+           jobgroup  TYPE btcjobgrp,
+           sdlstrtdt TYPE btcsdate,
+           sdlstrttm TYPE btcstime,
+           sdluname  TYPE btcsdlnm,
+           strtdate  TYPE btcxdate,
+           strttime  TYPE btcxtime,
+           enddate   TYPE btcxdate,
+           endtime   TYPE btcxtime,
+           status    TYPE btcstatus,
+         END OF ty_tbtco,
+
+         BEGIN OF ty_tbtcp,
+           jobname   TYPE btcjob,
+           jobcount  TYPE btcjobcnt,
+           stepcount TYPE btcstepcnt,
+           listident TYPE btclistid,
+         END OF ty_tbtcp.
+
+  CONSTANTS: lc_sep       TYPE c      VALUE '|',
+             lc_flag      TYPE c      VALUE 'X',
+             lc_r         TYPE c      VALUE 'R',
+             lc_req_id    TYPE c      VALUE
+             'SOLMAN_REQUEST_ID'                             LENGTH 18,
+             lc_zero      TYPE c      VALUE '0'              LENGTH 1,
+             lc_noinput   TYPE c      VALUE
+             'No input given'                                LENGTH 20,
+             lc_title     TYPE c VALUE
+             'Active Background Jobs in SM37'                LENGTH 40,
+             lc_export    TYPE c      VALUE 'EXPORT'         LENGTH 8,
+             lc_no_data   TYPE c      VALUE
+             'No data found'                                 LENGTH 30,
+             lc_jobname   TYPE c      VALUE 'Jobname'        LENGTH 10,
+             lc_spool     TYPE c      VALUE 'Spool'          LENGTH 10,
+             lc_jobdoc    TYPE c      VALUE 'Job doc'        LENGTH 10,
+             lc_name      TYPE c      VALUE 'Job CreatedBy'  LENGTH 20,
+             lc_strtdat   TYPE c      VALUE 'Start date'     LENGTH 14,
+             lc_strtime   TYPE c      VALUE 'Start Time'     LENGTH 15,
+             lc_null      TYPE c      VALUE 'NULL'           LENGTH 4,
+             lc_duration  TYPE c      VALUE 'Duration(sec.)'
+                                                             LENGTH 20,
+             lc_2000      TYPE c      VALUE
+             '2000'                                          LENGTH 4,
+             lc_86400     TYPE c      VALUE
+             '86400'                                         LENGTH 5,
+             lc_inc_input TYPE c      VALUE
+             'Incorrect input'                               LENGTH 20,
+             lc_listident TYPE c      VALUE
+             '0000000000'                                    LENGTH 10,
+             lc_delay     TYPE c      VALUE 'Delay(sec.)'    LENGTH 15.
+
+  DATA: lt_tbtco      TYPE STANDARD TABLE OF ty_tbtco,
+        ls_tbtco      TYPE ty_tbtco,
+        lt_solmanjobs TYPE STANDARD TABLE OF tbtccntxt,
+        ls_output     TYPE tab512,
+        lv_spool_icon TYPE char1,
+        lv_delta_date TYPE i,
+        lv_delta_time TYPE i,
+        lv_delay_time TYPE i,
+        lv_dura_time  TYPE i,
+        lv_dura_date  TYPE i,
+        lv_action     TYPE char6,
+        ls_input      TYPE tab512,
+        lv_jobdoc     TYPE char1,
+        lv_delay      TYPE string,
+        lv_dura       TYPE string,
+        lt_spoolid    TYPE STANDARD TABLE OF ty_tbtcp.
+
+  CLEAR: ls_tbtco, ls_output, lv_spool_icon,
+         lv_delta_date, lv_delta_time, lv_delay_time, lv_dura_time ,
+         lv_dura_date, lv_action, ls_input, lv_jobdoc, lv_delay,
+         lv_dura.
+
+  FREE: lt_tbtco, lt_output, lt_solmanjobs, lt_spoolid.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      SELECT jobname jobcount jobgroup sdlstrtdt
+             sdlstrttm sdluname strtdate strttime
+             enddate endtime status
+             FROM tbtco INTO TABLE lt_tbtco
+             WHERE sdlstrtdt EQ sy-datum
+             AND   status EQ lc_r.
+
+      IF sy-subrc = 0.
+        SELECT jobname jobcount stepcount listident
+                 FROM tbtcp
+                 INTO TABLE lt_spoolid
+                 FOR ALL ENTRIES IN lt_tbtco
+                 WHERE jobname = lt_tbtco-jobname AND
+                 jobcount      = lt_tbtco-jobcount AND
+                 listident     <> lc_listident.
+        IF sy-subrc = 0.
+          SELECT *
+                FROM tbtccntxt INTO TABLE lt_solmanjobs
+                FOR ALL ENTRIES IN lt_tbtco
+                WHERE jobname  = lt_tbtco-jobname
+                AND jobcount   = lt_tbtco-jobcount
+                AND ctxttype   = lc_req_id.
+          IF sy-subrc = 0.
+            SORT lt_tbtco BY jobname jobcount.
+          ENDIF.
+        ENDIF.
+
+        "Column Heading
+        CLEAR: ls_output.
+        CONCATENATE lc_jobname   lc_sep
+                    lc_spool     lc_sep
+                    lc_jobdoc    lc_sep
+                    lc_name      lc_sep
+                    lc_strtdat   lc_sep
+                    lc_strtime   lc_sep
+                    lc_duration  lc_sep
+                    lc_delay    INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_tbtco INTO ls_tbtco.
+
+          lv_delta_date = ls_tbtco-strtdate - ls_tbtco-sdlstrtdt.
+          lv_delta_time = ls_tbtco-strttime - ls_tbtco-sdlstrttm.
+
+          IF lv_delta_date < lc_zero.           " irregular situation
+            lv_delay_time = 0.
+          ELSEIF lv_delta_date > lc_2000.       " avoid overflow
+            lv_delay_time = lc_zero.
+          ELSE.
+            lv_delay_time = lv_delta_date * lc_86400 + lv_delta_time.
+            IF lv_delay_time < lc_zero.         " irregular situation
+              lv_delay_time = lc_zero.
+            ENDIF.
+          ENDIF.
+
+          lv_dura_date = ls_tbtco-enddate - ls_tbtco-strtdate.
+          lv_dura_time = ls_tbtco-endtime - ls_tbtco-strttime.
+
+          IF lv_dura_date < lc_zero.             " irregular situation
+            lv_dura_time = lc_zero.
+          ELSEIF lv_delta_date > lc_2000.        " avoid overflow
+            lv_dura_time = lc_zero.
+          ELSE.
+            lv_dura_time = lv_dura_date * lc_86400 + lv_dura_time.
+            IF lv_dura_time < lc_zero.           " irregular situation
+              lv_dura_time = lc_zero.
+            ENDIF.
+          ENDIF.
+
+          READ TABLE lt_spoolid WITH KEY jobname = ls_tbtco-jobname
+                  jobcount = ls_tbtco-jobcount
+                  TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
+            lv_spool_icon = lc_flag.
+          ENDIF.
+
+          READ TABLE lt_solmanjobs WITH KEY jobname = ls_tbtco-jobname
+          jobcount = ls_tbtco-jobcount
+          TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
+            lv_jobdoc = lc_flag.
+          ENDIF.
+
+          lv_delay = lv_delay_time.
+          lv_dura  = lv_dura_time.
+
+          IF lv_delay IS INITIAL.
+            lv_delay = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_tbtco-jobname  lc_sep
+                      lv_spool_icon     lc_sep
+                      lv_jobdoc         lc_sep
+                      ls_tbtco-sdluname lc_sep
+                      ls_tbtco-strtdate lc_sep
+                      ls_tbtco-strttime lc_sep
+                      lv_dura           lc_sep
+                      lv_delay
+          INTO ls_output.
+          APPEND ls_output TO lt_output.
+
+          CLEAR: ls_tbtco, ls_output, lv_spool_icon, lv_jobdoc,
+                 lv_delta_date, lv_delta_time, lv_dura_date,
+                 lv_dura_time, lv_delay, lv_dura.
+
+        ENDLOOP.
+      ELSE.
+        "No data found
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

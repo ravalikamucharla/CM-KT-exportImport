@@ -1,0 +1,21 @@
+---
+
+- name: setting path
+  tags: linux
+  vars:
+     ansible_python_interpreter: "{{ python_interpreter }}"
+     file_path: lin_env_comparison.py
+     linux_file: Linux_excluded_environmentvariable.txt
+  set_fact:
+     linux_env_update: "{{ lookup('first_found', file_path) }}"
+     lin_exlude_variable: "{{ lookup('first_found', linux_file) }}"
+
+- name: execute the command to update the env variables with password authentication
+  command: python3 {{ linux_env_update }} --s_sid={{ source.sap.sid | upper }} --s_hostName="{{ source_hostip }}" --s_userName="{{ env_var_update.env_user.source }}" --s_password="{{ passwords.env_update.source }}" --t_sid="{{ target.sap.sid | upper }}" --t_hostName="{{ target_hostip }}" --t_userName="{{  env_var_update.env_user.target }}" --t_password="{{ passwords.env_update.target }}" --loginMechanism="Password" --pemFile="_NULL" --isSudoUser="False" --exclude_vars_file="{{ lin_exlude_variable }}"
+  register: result 
+  when: env_var_update.env_pem_file_path is not defined
+
+- name: execute the command to update the env variables with pem file authentication
+  command: python3 {{ linux_env_update }} --s_sid="{{ source.sap.sid | upper }}" --s_hostName="{{ source_hostip }}" --s_userName="{{ env_var_update.env_user.source }}" --s_password="_NULL" --t_sid="{{ target.sap.sid | upper }}" --t_hostName="{{ target_hostip }}" --t_userName="{{  env_var_update.env_user.target }}" --t_password="_NULL" --loginMechanism="PPK" --pemFile="{{ env_pem_file_path }}" --isSudoUser="True" --exclude_vars_file="{{ lin_exlude_variable }}"
+  register: result
+  when: env_var_update.env_pem_file_path is defined

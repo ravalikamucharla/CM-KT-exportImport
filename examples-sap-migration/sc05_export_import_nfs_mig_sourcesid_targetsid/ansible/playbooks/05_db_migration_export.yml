@@ -1,0 +1,16 @@
+#tags: tab_split_order_by, exp_prep, table_split ,db_exp, db_imp
+---
+- name: Export
+  hosts: source_db
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3.6 #"{{ python_interpreter }}"
+    ansible_become: true
+    mode: export
+  roles:
+    - table_splitting 
+    - sap_export_preparation #calculating db size
+    - sap_export_tablesplit #spliting db with bigger size into smaller size to make the process easy 
+    - sap_export_database #exporting db
+
+  

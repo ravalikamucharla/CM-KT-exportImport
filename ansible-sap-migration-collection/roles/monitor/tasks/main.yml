@@ -1,0 +1,31 @@
+---
+
+# - name: getprocesslist green
+#   include_tasks: processlist.yml
+
+# - name: check if nfs is working
+#   include_tasks: nfs.yml
+
+# - name: check if ftp is working
+#   include_tasks: ftp.yml
+
+# - name: grep sapinst.log for keyword "Stop On Error" 
+#   include_tasks: sapinst_stop_on_err.yml #pending
+
+# - name: check r3load processes
+#   include_tasks: r3load.yml #pending
+
+# - name: check free -g result
+#   include_tasks: free_space.yml #pending
+
+# # - name: check ulimit
+# #   include_tasks: ulimit.yml
+
+# - name: ping server
+#   include_tasks: ping.yml
+
+# - name: check the file system utilization for export directory 
+#   include_tasks: fs_export_check.yml
+
+- name: monitor if swpm logs are getting written every few seconds
+  include_tasks: swpm_log_check.yml #pending

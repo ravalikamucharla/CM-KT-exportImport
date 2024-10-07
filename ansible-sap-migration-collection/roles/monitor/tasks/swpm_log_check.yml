@@ -1,0 +1,19 @@
+- name: Check SWPM Log File
+  wait_for:
+    path: /path/to/your/swpm.log  
+    search_regex: ".*"  # This will match any line, change it to match specific entries
+    delay: 5  
+    timeout: 3600  
+  ignore_errors: yes  
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: Check SWPM Log File
+  wait_for:
+    path: /path/to/your/swpm.log  
+    search_regex: ".*"  # This will match any line, change it to match specific entries
+    delay: 5  
+    timeout: 3600  
+  ignore_errors: yes  
+  delegate_to: "{{ groups['target_pas'][0] }}"
+  when: system_type == "target"

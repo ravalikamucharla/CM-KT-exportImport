@@ -1,0 +1,266 @@
+*&*******************************************************************&*
+* Report              :   ZCM_SMLG_EXP_LOGONGRP_741_HVER              *
+* Title               :   Logon group export                          *
+* Purpose             :   This report is used to export logon group   *
+*                     :   details from tcode SMLG pre migration       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX               :      X                                        *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*11-11-2022  Initial   ASHWINI K P  Local        To export logon group*
+*                                                details from SMLG    *
+*---------------------------------------------------------------------*
+
+REPORT zcm_smlg_exp_logon_groups.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                   LENGTH 1,
+             lc_export    TYPE c VALUE 'EXPORT'              LENGTH 20,
+             lc_logon     TYPE c VALUE 'Logon group name'    LENGTH 20,
+             lc_ins       TYPE c VALUE 'Instance name'       LENGTH 20,
+             lc_time      TYPE c VALUE 'Response time'       LENGTH 20,
+             lc_users     TYPE c VALUE 'Users'               LENGTH 5,
+             lc_flag      TYPE c VALUE 'IPV6 flag'           LENGTH 10,
+             lc_ipv6      TYPE c VALUE 'IPV6 address'        LENGTH 12,
+             lc_classnum  TYPE c VALUE 'Classnum'            LENGTH 20,
+             lc_classname TYPE c VALUE 'Classname'           LENGTH 20,
+             lc_favtype   TYPE c VALUE 'Fav Type'            LENGTH 10,
+             lc_nodata    TYPE c VALUE 'No data found'       LENGTH 13,
+             lc_noinput   TYPE c VALUE 'No input passed'     LENGTH 15,
+             lc_title     TYPE c VALUE 'LogonGroups'         LENGTH 11,
+             lc_null      TYPE c VALUE 'NULL'                LENGTH 4,
+             lc_incinput  TYPE c VALUE 'Incorrect Input'     LENGTH 15,
+             " Below messages are used for exception raised for FM
+             " 'SMLG_GET_SETUP'
+             lc_msg1      TYPE c VALUE 'Foreign Lock'        LENGTH 12,
+             lc_msg2      TYPE c VALUE 'System failure'      LENGTH 14,
+             lc_msg3      TYPE c VALUE 'Invalid group type'  LENGTH 18.
+
+
+  DATA: lt_relations      TYPE STANDARD TABLE OF rzllitab,
+        ls_relations      TYPE rzllitab,
+        lt_erfc_relations TYPE STANDARD TABLE OF rzlliclass,
+        ls_erfc_relations TYPE rzlliclass,
+        lt_instances      TYPE STANDARD TABLE OF msxxlist,
+        ls_instances      TYPE msxxlist,
+        lv_value_holder   TYPE string,
+        lv_subrc          TYPE string,
+        ls_input          TYPE tab512,
+        ls_output         TYPE tab512,
+        ls_prefinal       TYPE string,
+        lv_action         TYPE char8,
+        lv_msg            TYPE string,
+        lv_fav_type       TYPE char4.
+
+  DATA: BEGIN OF lt_table,
+          classname    TYPE rzllitab-classname,
+          applserver   TYPE rzllitab-applserver,
+          resp_time    TYPE rzllitab-resp_time,
+          users        TYPE rzllitab-users,
+          ipv6         TYPE rzllitab-ipv6,
+          ipv6_address TYPE rzllitab-ipv6_address,
+        END OF lt_table.
+
+  FIELD-SYMBOLS: <lfs_output>   TYPE any,
+                 <fs_structure> TYPE any,
+                 <comp>         TYPE any.
+
+  FREE: lt_output.
+  " Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR:ls_output.
+
+
+  CLEAR: ls_input, lv_action.
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    "No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+      FREE: lt_relations,lt_erfc_relations.
+      " Logon Group and instance
+      CALL FUNCTION 'SMLG_GET_SETUP'
+        EXPORTING
+          set_lock           = space
+          grouptype          = ' '  "group_type
+        TABLES
+          setup              = lt_relations
+          erfc_setup         = lt_erfc_relations
+        EXCEPTIONS
+          foreign_lock       = 1
+          system_failure     = 2
+          invalid_group_type = 3
+          OTHERS             = 4.
+      IF sy-subrc NE 0.
+        IF sy-subrc LT 4.
+          CLEAR: lv_subrc,lv_msg.
+          lv_subrc = sy-subrc.
+          CONCATENATE 'lc_msg' lv_subrc INTO lv_msg.
+          CONDENSE lv_msg NO-GAPS.
+          ASSIGN (lv_msg) TO <lfs_output>.
+          IF <lfs_output> IS ASSIGNED.
+            ls_output = <lfs_output>.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output.
+            RETURN.
+          ENDIF.
+        ELSE.
+          ls_output = lc_nodata.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+          RETURN.
+        ENDIF.
+      ENDIF.
+
+      FREE: lt_instances.
+      " Instances
+      CALL FUNCTION 'TH_SERVER_LIST'
+        TABLES
+          list = lt_instances.
+
+      SORT: lt_instances BY name,
+            lt_relations BY applserver.
+
+      " Find instances without a group & add them
+      CLEAR: ls_instances.
+      LOOP AT lt_instances INTO ls_instances.
+        CLEAR: ls_relations.
+        READ TABLE lt_relations INTO ls_relations
+                             WITH KEY applserver = ls_instances-name.
+        IF sy-subrc NE 0.    "instance has no corresponding group
+          ls_relations-classname  = lc_null. "'NULL'.
+          ls_relations-applserver = ls_instances-name.
+          APPEND ls_relations TO lt_relations.
+        ENDIF.
+      ENDLOOP.
+
+      IF lt_relations[] IS INITIAL.
+
+        " No data found
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+        RETURN.
+
+      ENDIF.
+
+      " Column Headings
+      CONCATENATE lc_logon     lc_sep
+                  lc_ins       lc_sep
+                  lc_time      lc_sep
+                  lc_users     lc_sep
+                  lc_flag      lc_sep
+                  lc_ipv6      lc_sep
+                  lc_classnum  lc_sep
+                  lc_classname lc_sep
+                  lc_favtype INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      SORT: lt_relations BY classname.
+
+      "Table data
+      LOOP AT lt_relations INTO ls_relations.
+
+        " Append active servers status
+        MOVE-CORRESPONDING ls_relations TO lt_table.
+
+        " Build the 1st part of output from relations table
+        CLEAR: ls_prefinal,ls_output,lv_value_holder.
+        ASSIGN lt_table TO <fs_structure>.
+        DO.
+          ASSIGN COMPONENT sy-index OF STRUCTURE <fs_structure>
+            TO <comp>.
+          IF sy-subrc <> 0.
+            EXIT .
+          ENDIF.
+          lv_value_holder = <comp>.
+          CONCATENATE ls_prefinal lv_value_holder lc_sep
+          INTO ls_prefinal.
+        ENDDO.
+
+        " Pass favourite type
+        CLEAR: ls_erfc_relations,lv_fav_type.
+        READ TABLE lt_erfc_relations INTO ls_erfc_relations
+        WITH KEY classname = ls_relations-classname.
+        IF sy-subrc EQ 0.
+          lv_fav_type = ls_erfc_relations-favtype.
+        ELSE.
+          lv_fav_type = lc_null.
+        ENDIF.
+
+        CONCATENATE ls_prefinal
+                    ls_erfc_relations-classnum  lc_sep
+                    ls_erfc_relations-classname lc_sep
+                    lv_fav_type
+               INTO ls_prefinal.
+
+        PERFORM end_null_check CHANGING ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+
+      ENDLOOP.
+
+      PERFORM null_check TABLES  lt_output.
+
+    WHEN OTHERS.
+
+      ls_output = lc_incinput.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+      RETURN.
+
+  ENDCASE.
+
+ENDFORM.
+
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  CONSTANTS: lc_null TYPE c VALUE 'NULL' LENGTH 4.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string lc_null
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+
+FORM null_check TABLES lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

@@ -1,0 +1,616 @@
+*---------------------------------------------------------------------*
+* Program Name        : ZCM_R_FP_TEST_00_CHK_ADS_CONXN                *
+* Title               : ADS Connectivity Check                        *
+* Purpose             : Check Adobe Document Services connectivity    *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* Program - FP_TEST_00                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TSP03                    X                                          *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author     TR#/Local  Description              *
+*---------------------------------------------------------------------*
+*02-16-2021  Initial   Swetha     Local      Capture ADS connectivity *
+*09-13-2022  V001      Soumya     Local      To remove inline declarat*
+*                                            ions                     *
+*---------------------------------------------------------------------*
+REPORT zcm_r_fp_test_00_chk_ads_conxn.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config TABLES t_input  STRUCTURE tab512
+                       t_output STRUCTURE tab512.
+
+  "// Declarations
+  DATA:
+    lv_form       TYPE fpwbformname,
+    lv_dest       TYPE rspopname,
+    lv_connection TYPE rfcdest,
+    lv_langu      TYPE spras,
+    lv_page       TYPE char10,
+    lv_country    TYPE land1,
+    lv_loop       TYPE char10,
+    lv_pages      TYPE i,
+    lv_n          TYPE i,
+    lv_fm_name    TYPE rs38l_fnam,
+    lv_page_nr    TYPE string,
+    lv_line_nr    TYPE string,
+    lv_spid       TYPE char10,
+    lv_padest     TYPE rspopname. "+V001
+
+  "// Internal Tables
+  DATA:
+    lt_ptab   TYPE abap_func_parmbind_tab, "Sorted table type
+    lt_etab   TYPE abap_func_excpbind_tab, "Sorted table type
+    lt_itf    TYPE tsftext,
+    lt_export TYPE STANDARD TABLE OF rsexp,
+    lt_import TYPE STANDARD TABLE OF rsimp,
+    lt_excp   TYPE STANDARD TABLE OF rsexc,
+    lt_tabl   TYPE STANDARD TABLE OF rstbl.
+
+  "// Work Areas
+  DATA:
+    ls_docparams         TYPE sfpdocparams,
+    ls_outputparams      TYPE sfpoutputparams,
+    ls_itf_line          TYPE tline,
+    ls_itf_line_pattern1 TYPE tdline
+                           VALUE 'Line % on page #',
+    ls_itf_line_pattern2 TYPE tdline,
+    ls_result            TYPE sfpjoboutput,
+    ld_ref               TYPE REF TO data,
+* Begin of changes in V001
+    ls_out               TYPE tab512,
+    ls_import            TYPE rsimp,
+    lw_excp              TYPE rsexc,
+    ls_spoolid           TYPE rspoid,
+    lv_mtext             TYPE string,
+    lw_excp_tab          TYPE abap_func_excpbind,
+    ls_ptab              TYPE abap_func_parmbind.
+* End of changes in V001
+
+  "// Constants
+  CONSTANTS:
+    lc_sep     TYPE char1  VALUE '|',
+    lc_form    TYPE char10 VALUE 'FP_TEST_00',
+    lc_connec  TYPE char3  VALUE 'ADS',
+    lc_langu   TYPE char1  VALUE 'D',
+    lc_country TYPE char2  VALUE 'DE',
+    lc_page    TYPE char1  VALUE '2',
+    lc_loop    TYPE char1  VALUE '1',
+    lc_hash    TYPE char1  VALUE '#',
+    lc_per     TYPE char1  VALUE '%',
+
+    "// Text
+    lc_title   TYPE string  VALUE 'ADS Connectivity Check',
+    lc_name    TYPE string  VALUE 'Form Name',
+    lc_con     TYPE string  VALUE 'Connection Name',
+    lc_opd     TYPE string  VALUE 'Output Device',
+    lc_msgtxt  TYPE string  VALUE 'Connection check Message',
+    lc_odtxt   TYPE string  VALUE 'Incorrect Output Device',
+    lc_fmtxt   TYPE string  VALUE 'Incorrect Form Name',
+    lc_soape   TYPE string  VALUE
+                 'Incorrect Connection Name/Output Device.',
+    lc_notok   TYPE string  VALUE 'ADS Connectivity-Not Ok',
+    lc_ok      TYPE string  VALUE 'ADS Connectivity-Ok.Spool#',
+    lc_null    TYPE char4   VALUE 'Null',
+    lc_emsg    TYPE char1   VALUE 'E',
+    lc_sfp     TYPE char12  VALUE 'SFPDOCPARAMS',
+    lc_tsf     TYPE char7   VALUE 'TSFTEXT',
+    lc_input   TYPE string  VALUE 'Incorrect Input Parameters'.
+
+* Begin of changes in V001
+  "//Field Symbols
+  FIELD-SYMBOLS: <fs_data>  TYPE any,
+                 <fs_input> TYPE any.
+* End of changes in V001
+
+  "// Free tables & Clear variables
+  FREE :
+  lt_ptab,
+  lt_etab,
+  lt_itf,
+  lt_export,
+  lt_import,
+  lt_excp,
+  lt_tabl.
+
+  CLEAR :
+  lv_form,
+  lv_dest,
+  lv_connection,
+  lv_langu,
+  lv_page,
+  lv_country,
+  lv_loop,
+  lv_pages,
+  lv_n,
+  lv_fm_name,
+  lv_page_nr,
+  lv_line_nr,
+  ls_docparams ,
+  ls_outputparams,
+  ls_itf_line,
+  ls_itf_line_pattern1,
+  ls_itf_line_pattern2,
+  ls_result,
+* Begin of changes in V001
+  lv_padest,
+  ls_import,
+  ls_out,
+  lw_excp,
+  ls_spoolid.
+* End of changes in V001
+
+  "// Derive Input data
+  READ TABLE t_input ASSIGNING <fs_input> INDEX 1. "+V001
+  IF <fs_input> IS ASSIGNED.
+    "// Move Input data
+    SPLIT <fs_input> AT  lc_sep " '|'
+    INTO lv_form lv_dest lv_connection lv_langu
+    lv_page lv_country lv_loop.
+  ELSE.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+
+    " Heading Cloumns
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lc_null lc_sep lc_null lc_sep
+    lc_null lc_sep lc_input
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect parameters
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ENDIF.
+
+  "// Form Name
+  IF lv_form IS INITIAL.
+    lv_form = lc_form.
+  ENDIF.
+  "// Connection Name
+  IF lv_connection IS INITIAL.
+    lv_connection = lc_connec.
+  ENDIF.
+  "// lang
+  IF lv_langu IS INITIAL.
+    lv_langu = lc_langu.
+  ENDIF.
+  "// Country
+  IF lv_country IS INITIAL.
+    lv_country = lc_country.
+  ENDIF.
+  "// # of Page for spool print
+  IF lv_page IS INITIAL.
+    lv_page = lc_page.
+  ENDIF.
+  "// # of loop count
+  IF lv_loop IS INITIAL.
+    lv_loop = lc_loop.
+  ENDIF.
+
+  "// output devicce
+  IF lv_dest IS INITIAL.
+    lv_dest = lc_null.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+
+    " Heading Cloumns
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_odtxt
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect output device
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ENDIF.
+
+  "// Page#
+  lv_pages = lv_page.
+
+  "// Prepare  data for spool print
+  DO lv_pages TIMES.
+    lv_page_nr = sy-index.
+    ls_itf_line_pattern2 = ls_itf_line_pattern1.
+    REPLACE lc_hash IN ls_itf_line_pattern2 WITH lv_page_nr IN
+    CHARACTER
+    MODE.
+    DO 15 TIMES.
+      lv_line_nr = sy-index.
+      ls_itf_line-tdline = ls_itf_line_pattern2.
+      REPLACE lc_per  IN ls_itf_line-tdline WITH lv_line_nr IN
+      CHARACTER
+      MODE.
+      APPEND ls_itf_line TO lt_itf .
+      CLEAR ls_itf_line.
+    ENDDO.
+  ENDDO.
+
+
+  "// Get the name of the generated function module
+  TRY.
+      CALL FUNCTION 'FP_FUNCTION_MODULE_NAME'
+        EXPORTING
+          i_name     = lv_form
+        IMPORTING
+          e_funcname = lv_fm_name.
+      "// Incorrect Form Name
+    CATCH cx_fp_api_repository
+      cx_fp_api_usage
+      cx_fp_api_internal.
+
+      " Title
+      CLEAR: ls_out.
+      ls_out = lc_title.
+      CONDENSE ls_out.
+      APPEND ls_out TO t_output.
+
+      " Heading Cloumns
+      CLEAR: ls_out.
+      CONCATENATE lc_name lc_sep lc_con lc_sep
+      lc_opd lc_sep lc_msgtxt
+      INTO
+      ls_out.
+      CONDENSE ls_out.
+      APPEND ls_out TO t_output.
+      " Message
+      CLEAR ls_out.
+
+      CONCATENATE lv_form lc_sep lv_connection lc_sep
+      lv_dest lc_sep lc_fmtxt
+      INTO ls_out.
+      CONDENSE ls_out.
+      "// Incorrect Form Name
+      APPEND ls_out TO t_output.
+      CLEAR ls_out.
+      RETURN.
+  ENDTRY.
+  "// Output device conversion
+  CALL FUNCTION 'CONVERSION_EXIT_SPDEV_INPUT'
+    EXPORTING
+      input         = lv_dest
+    IMPORTING
+      output        = ls_outputparams-dest
+    EXCEPTIONS
+      error_message = 1.
+  IF sy-subrc <> 0.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_odtxt
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect output device
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ENDIF.
+
+  "// check if output device exist
+  SELECT SINGLE padest FROM tsp03 INTO lv_padest WHERE padest =
+        ls_outputparams-dest.
+  IF sy-subrc <> 0.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_odtxt
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect output device
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ENDIF.
+
+  "// No Dialogue
+  ls_outputparams-nodialog = abap_true.
+  ls_outputparams-connection = lv_connection.
+  "// Job Open
+  CALL FUNCTION 'FP_JOB_OPEN'
+    CHANGING
+      ie_outputparams = ls_outputparams
+    EXCEPTIONS
+      cancel          = 1
+      usage_error     = 2
+      system_error    = 3
+      internal_error  = 4
+      OTHERS          = 5.
+  IF sy-subrc <> 0.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_soape
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect form name
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+
+  ENDIF.
+  "// Interface Import
+  CALL FUNCTION 'FUNCTION_IMPORT_INTERFACE'
+    EXPORTING
+      funcname           = lv_fm_name
+    TABLES
+      exception_list     = lt_excp[]
+      export_parameter   = lt_export[]
+      import_parameter   = lt_import[]
+      tables_parameter   = lt_tabl[]
+    EXCEPTIONS
+      error_message      = 1
+      function_not_found = 2
+      invalid_name       = 3
+      OTHERS             = 4.
+  IF sy-subrc =  0.
+
+    ls_docparams-langu   = lv_langu.
+    ls_docparams-country = lv_country.
+
+    "// Parameters check
+    LOOP AT lt_import INTO ls_import.
+
+* Begin of changes in V001
+     ls_ptab-name = ls_import-parameter.
+     ls_ptab-kind = abap_func_exporting.
+* End of changes in V001
+
+      "// Import
+      CASE ls_import-typ.
+        WHEN lc_sfp." 'SFPDOCPARAMS'.
+          CREATE DATA ld_ref TYPE (ls_import-typ).
+          ASSIGN ld_ref->* TO <fs_data>.
+          <fs_data> = ls_docparams.
+          ls_ptab-value = ld_ref.
+        WHEN lc_tsf." 'TSFTEXT'.
+          CREATE DATA ld_ref TYPE (ls_import-typ).
+          ASSIGN ld_ref->* TO <fs_data>.
+          <fs_data> = lt_itf[].
+          ls_ptab-value = ld_ref.
+        WHEN OTHERS.
+      ENDCASE.
+
+      INSERT ls_ptab INTO TABLE lt_ptab.
+      CLEAR ls_ptab.
+    ENDLOOP.
+    "// Exception
+    LOOP AT lt_excp INTO lw_excp.
+      lv_n = lv_n + 1.
+* Begin of changes in V001
+      lw_excp_tab-name = lw_excp-exception.
+      lw_excp_tab-value = lv_n.
+* End of changes in V001
+      INSERT lw_excp_tab INTO TABLE lt_etab.
+      CLEAR lw_excp_tab.
+    ENDLOOP.
+  ELSE.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_fmtxt
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect form name
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ENDIF.
+
+  "// This is required for test prog to be executed via test framework
+  CLEAR sy-cprog. "##WRITE_OK
+  CALL FUNCTION lv_fm_name
+    PARAMETER-TABLE
+    lt_ptab
+    EXCEPTION-TABLE
+    lt_etab.
+  "// Error message  returned
+  IF sy-subrc <> 0.
+    IF sy-msgty = lc_emsg." 'E'.
+
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      INTO lv_mtext
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+      " Title
+      CLEAR: ls_out.
+      ls_out = lc_title.
+      CONDENSE ls_out.
+      APPEND ls_out TO t_output.
+
+      " Heading Cloumns
+      CLEAR: ls_out.
+      CONCATENATE lc_name lc_sep lc_con lc_sep
+      lc_opd lc_sep lc_msgtxt
+      INTO
+      ls_out.
+      CONDENSE ls_out.
+      APPEND ls_out TO t_output.
+      " Message
+      CLEAR ls_out.
+      CONCATENATE lv_form lc_sep lv_connection lc_sep
+      lv_dest lc_sep lc_soape  lv_mtext
+      INTO ls_out.
+      CONDENSE ls_out.
+      "// Incorrect parameters
+      APPEND ls_out TO t_output.
+      CLEAR ls_out.
+      RETURN.
+    ENDIF.
+  ENDIF.
+  "// Job Close
+  CALL FUNCTION 'FP_JOB_CLOSE'
+    IMPORTING
+      e_result       = ls_result
+    EXCEPTIONS
+      usage_error    = 1
+      system_error   = 2
+      internal_error = 3
+      OTHERS         = 4.
+  IF sy-subrc <> 0.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_soape
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// Incorrect parameters
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ENDIF.
+
+  "//Check the result.
+  IF ls_result-spoolids IS INITIAL.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_notok
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// connectivity - not ok
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+    RETURN.
+  ELSE.
+    " Title
+    CLEAR: ls_out.
+    ls_out = lc_title.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+
+    " Heading Cloumns
+    CLEAR: ls_out.
+    CONCATENATE lc_name lc_sep lc_con lc_sep
+    lc_opd lc_sep lc_msgtxt
+    INTO
+    ls_out.
+    CONDENSE ls_out.
+    APPEND ls_out TO t_output.
+    " Message
+    CLEAR ls_out.
+    READ TABLE ls_result-spoolids INDEX 1 INTO ls_spoolid.
+    CLEAR lv_spid.
+    IF sy-subrc = 0.
+      lv_spid = ls_spoolid.
+    ENDIF.
+    CONDENSE lv_spid NO-GAPS.
+    CONCATENATE lv_form lc_sep lv_connection lc_sep
+    lv_dest lc_sep lc_ok lv_spid
+    INTO ls_out.
+    CONDENSE ls_out.
+    "// connectivity ok
+    APPEND ls_out TO t_output.
+    CLEAR ls_out.
+  ENDIF.
+ENDFORM.

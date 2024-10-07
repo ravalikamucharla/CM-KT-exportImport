@@ -1,0 +1,125 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SCOT_DEACTIVATE_NODES                    *
+* Title               :  To deactivate SCOT nodes                     *
+* Purpose             :  To deactivate SCOT nodes as part of rampdown *
+*                        activity                                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SCOT                                                                *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* SXNODES                   X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-10-2021  Initial   Soumya Ray   LOCAL         To deactivate SCOT  *
+*                                                 nodes               *
+*---------------------------------------------------------------------*
+
+REPORT zcm_scot_deactivate_nodes.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_deactivate TYPE c VALUE 'DEACTIVATE' LENGTH 10,
+             lc_nodata     TYPE c VALUE
+             'No data found'                         LENGTH 20,
+             lc_no_nodes   TYPE c VALUE
+             'No of nodes deactivated :'             LENGTH 25,
+             lc_inc_input  TYPE c VALUE
+             'Incorrect Input'                       LENGTH 20,
+             lc_noinput    TYPE c VALUE
+             'No input passed'                       LENGTH 15,
+             lc_title      TYPE c VALUE
+             'Rampdown activity on scot nodes'       LENGTH 50,
+             lc_mode       TYPE dd26e-enqmode   VALUE  'E',
+             lc_tabname    TYPE rstable-tabname VALUE  'SXNODES',
+             lc_enqueue    TYPE c  VALUE
+             'SXNODES table failed to lock'           LENGTH 50.
+
+  TYPES: BEGIN OF lty_sxnodes,
+          mandt TYPE mandt,
+          node  TYPE sx_node_id,
+         END OF lty_sxnodes.
+
+  DATA: ls_output      TYPE tab512,
+        ls_input       TYPE tab512,
+        lv_action      TYPE string,
+        lv_count       TYPE string,
+        lt_sxnodes     TYPE STANDARD TABLE OF lty_sxnodes.
+
+  CLEAR: lv_action, ls_output, ls_input, lv_count.
+  FREE: lt_sxnodes.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_deactivate. "DEACTIVATE
+      "Fetch all nodes from SCOT
+      SELECT mandt node FROM sxnodes INTO TABLE lt_sxnodes.
+      IF lt_sxnodes IS INITIAL.
+        "No data found
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        RETURN.
+      ENDIF.
+
+* FM to enqueue the SXNODES table
+      CALL FUNCTION 'ENQUEUE_E_TABLE'
+        EXPORTING
+          mode_rstable   = lc_mode
+          tabname        = lc_tabname
+        EXCEPTIONS
+          foreign_lock   = 1
+          system_failure = 2
+          OTHERS         = 3.
+      IF sy-subrc <> 0. " Table is not locked
+        ls_output = lc_enqueue. " Msg to denote lock of table failed
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+      "Update recodes in SXNODES table
+      UPDATE sxnodes SET active = abap_false.
+      COMMIT WORK.
+
+* FM to enqueue the SXNODES table
+      CALL FUNCTION 'DEQUEUE_E_TABLE'
+        EXPORTING
+          mode_rstable = lc_mode
+          tabname      = lc_tabname.
+
+      DESCRIBE TABLE lt_sxnodes LINES lv_count.
+      CONCATENATE lc_no_nodes lv_count INTO ls_output
+      SEPARATED BY space.
+      APPEND ls_output TO lt_output.
+
+      CLEAR: lv_action, ls_output, ls_input, lv_count.
+      FREE: lt_sxnodes.
+
+    WHEN OTHERS.
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+ENDFORM.

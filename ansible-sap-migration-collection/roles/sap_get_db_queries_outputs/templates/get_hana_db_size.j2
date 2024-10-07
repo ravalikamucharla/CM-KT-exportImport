@@ -1,0 +1,4 @@
+[{
+    "DATABASE_NAME": {{ output.results[index].stdout_lines[1].split(',')[0] }},
+    "DATABASE_SIZE_IN_GB": "{{ output.results[index].stdout_lines[1].split(',')[1] }}"
+}]

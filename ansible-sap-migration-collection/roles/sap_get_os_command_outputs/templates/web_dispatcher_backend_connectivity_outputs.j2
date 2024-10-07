@@ -1,0 +1,10 @@
+[{"mmaximum number of sockets supported on this host":"{{ wd_backend_connectivity_outputs.stdout_lines[3].split(':')[1] | trim  }}"},
+{"{{ wd_backend_connectivity_outputs.stdout_lines[4].split(':')[0] }}":"{{ wd_backend_connectivity_outputs.stdout_lines[4].split(':')[1] | trim  }}"},
+{"message_server_connection":"{{ wd_backend_connectivity_outputs.stdout_lines[5]  }}"},
+{"message_server_info":"{{ wd_backend_connectivity_outputs.stdout_lines[6]  }}"},
+{"message_server_instance_name":"{{ wd_backend_connectivity_outputs.stdout_lines[11].split('|')[1]  }}"},
+{"hostname":"{{ wd_backend_connectivity_outputs.stdout_lines[11].split('|')[2]  }}"},
+{"http_port":"{{ wd_backend_connectivity_outputs.stdout_lines[11].split('|')[3] | trim }}"},
+{"https_port":"{{ wd_backend_connectivity_outputs.stdout_lines[11].split('|')[4] | trim  }}"},
+{"Checking ABAP servers with URL":"{{ wd_backend_connectivity_outputs.stdout_lines[13] | replace('\"','')  }}"},
+{"Checking ABAP server":"{{ wd_backend_connectivity_outputs.stdout_lines[14]   }}"}]

@@ -1,0 +1,17 @@
+- name: execute sql command
+  win_shell: sqlcmd -W -s "|" -Q "{{ item.query }}"
+  register: sql_command_output
+  loop: "{{ sql_queries }}"
+
+- debug: 
+    var: sql_command_output
+
+- name: Write ouptut in json format
+  template:
+    src: "sql_commands_output.j2"
+    dest: "{{ db_export_path }}{{ db_type }}/{{ item.name }}_output.txt"
+  with_items: "{{ sql_queries }}"
+  loop_control:
+       index_var: index
+  delegate_to: localhost
+ 

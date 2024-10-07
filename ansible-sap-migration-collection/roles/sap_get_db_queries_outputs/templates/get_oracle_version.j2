@@ -1,0 +1,4 @@
+[{
+    "oracle_version": "{{ output.results[index].stdout_lines[3] | replace(" O","O") }}",
+    "plsql_release": "{{ output.results[index].stdout_lines[4]  | replace(" PL","PL")}}" 
+}]

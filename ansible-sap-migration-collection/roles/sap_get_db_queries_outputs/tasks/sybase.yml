@@ -1,0 +1,60 @@
+---
+
+- name: Copy sybase scripts from local to target nodes
+  win_copy:
+    src: "../files/run_update_index_stats_win.sql"
+    dest: "C:\\temp\\"
+    mode: '0777'
+
+- name: Create an empty file
+  win_file:
+     path: C:\temp\{{ item.name }}.txt
+     state: touch
+     mode: '0777'
+  loop:
+    - "{{ sybase_queries }}"    
+
+- name: Insert sybase queries 
+  win_lineinfile:
+     path: C:\temp\{{ item.name }}.txt
+     line: "{{ item.query }}"
+  loop:
+    - "{{ sybase_queries }}"
+
+- name: Insert go in the query text file
+  win_lineinfile:
+     path: C:\temp\{{ item.name }}.txt
+     line: go
+  loop:
+    - "{{ sybase_queries }}"  
+
+-  name: Execute sybase queries
+   win_command: 'D:\sybase\{{ sid }}\OCS-16_0\bin\isql.exe -U{{ db_user }} -P{{ db_password }} -S{{ sid }} -D{{ sid }} -X -i "C:\temp\{{ item.name }}.txt"'
+   register: db_outputs
+   loop:
+    - "{{ sybase_queries }}" 
+
+- debug: var=db_outputs
+
+- name: Write sybase ouptuts in json format
+  template:
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.json'
+  become: yes
+  delegate_to: localhost
+  loop:
+       - "{{ sybase_queries }}"
+  loop_control:
+       index_var: index
+
+- name: Copy sybase consistency check scripts from local to target nodes
+  win_copy:
+    src: "../files/gen_dbcc_checktab.sql"
+    dest: "C:\\temp\\"
+    mode: '0777'
+    
+-  name: Execute sybase queries for consistency check
+   win_command: 'D:\sybase\{{ sid }}\OCS-16_0\bin\isql.exe -U{{ db_user }} -P{{ db_password }} -S{{ sid }} -D{{ sid }} -X -i "C:\temp\gen_dbcc_checktab.sql.txt"'
+   register: db_cosi_outputs
+   loop:
+    - "{{ sybase_queries }}" 

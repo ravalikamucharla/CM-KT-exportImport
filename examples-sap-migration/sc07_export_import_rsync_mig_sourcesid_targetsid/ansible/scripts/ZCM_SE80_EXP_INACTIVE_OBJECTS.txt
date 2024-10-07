@@ -1,0 +1,126 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SE80_EXP_INACTIVE_OBJECTS               *
+* Title               :   Export Inactive Objects in SE80             *
+* Purpose             :   This report is used to Export Inactive      *
+*                         Objects in SE80 for Cloud Migration         *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SE80                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version    Author       TR#/Local     Description        *
+*---------------------------------------------------------------------*
+*08-23-2021  Initial   Ruchir Kamble  Local     To Export Inactive    *
+*                                               Objects in SE80       *
+*07-25-2022   V001     Soumya Ray     Local   To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sytem     *
+*---------------------------------------------------------------------*
+REPORT zcm_se80_exp_inactive_objects.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep        TYPE c VALUE '|'                 LENGTH 1,
+    lc_null       TYPE c VALUE 'NULL'              LENGTH 4,
+    lc_export     TYPE c VALUE 'EXPORT'            LENGTH 6,
+    lc_title      TYPE c VALUE 'Inactive Objects'  LENGTH 16,
+    lc_level      TYPE c VALUE 'Level'             LENGTH 5,
+    lc_object     TYPE c VALUE 'Object'            LENGTH 6,
+    lc_desc       TYPE c VALUE 'Description'       LENGTH 12,
+    lc_inc_input  TYPE c VALUE 'Incorrect input'   LENGTH 20,
+    lc_noinput    TYPE c VALUE 'No input given'    LENGTH 20,
+    lc_no_objects TYPE c VALUE
+    'No data found'                                LENGTH 20, "+V001
+    lc_all        TYPE sy-uname VALUE '*'.
+
+  DATA : ls_input   TYPE tab512,
+         ls_output  TYPE tab512,
+         lv_action  TYPE char10,
+         lt_objects TYPE STANDARD TABLE OF snodetext,
+         ls_objects TYPE snodetext.
+
+  " Clear variables before use
+  CLEAR: ls_output, ls_input, lv_action, ls_objects.
+
+  FREE: lt_output, lt_objects.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      " FM to fetch Inactive objects for all users in the system
+      CALL FUNCTION 'RS_INACTIVE_OBJECTS_TREE'
+        EXPORTING
+          uname  = lc_all
+        TABLES
+          p_tree = lt_objects.
+
+      IF lt_objects IS INITIAL.
+
+        " No data found
+        ls_output =  lc_no_objects.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+
+      ELSE.
+
+        " Adding headings to the output
+        CONCATENATE lc_level lc_object lc_desc
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+
+        LOOP AT lt_objects INTO ls_objects.
+
+          IF ls_objects-text2 IS INITIAL.
+            ls_objects-text2 = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_objects-tlevel ls_objects-text1
+                      ls_objects-text2
+                      INTO ls_output
+                      SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDLOOP.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.

@@ -1,0 +1,388 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_HDB_ST04_EXP_ALERT_MONITOR              *
+* Title               :   Alerts in ST04                              *
+* Purpose             :   This report is used to export Alerts in ST04*
+*                         in Cloud Migration                          *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* ST04                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXXX                    X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*07-26-2021  Initial   Ruchir Kamble   Local       To Export System   *
+*                                                 Alerts in ST04      *
+*---------------------------------------------------------------------*
+
+REPORT zcm_hdb_st04_exp_alert_monitor.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep             TYPE c VALUE '|'                    LENGTH 1,
+    lc_86399           TYPE c VALUE '86399'                LENGTH 5,
+    lc_3600            TYPE c VALUE '3600'                 LENGTH 4,
+    lc_99              TYPE c VALUE '99'                   LENGTH 2,
+    lc_null            TYPE c VALUE 'NULL'                 LENGTH 4,
+    lc_export          TYPE c VALUE 'EXPORT'               LENGTH 6,
+    lc_alert_id        TYPE c VALUE 'Alert ID'             LENGTH 8,
+    lc_alert_name      TYPE c VALUE 'Alert Name'           LENGTH 10,
+    lc_last_check_time TYPE c VALUE 'Last Check Time'      LENGTH 15,
+    lc_interval        TYPE c VALUE 'Interval'             LENGTH 8,
+    lc_next_check_time TYPE c VALUE 'Next Check Time'      LENGTH 15,
+    lc_max_priority    TYPE c VALUE 'Max Priority'         LENGTH 13,
+    lc_description     TYPE c VALUE 'Description'          LENGTH 12,
+    lc_user_action     TYPE c VALUE 'User Action'          LENGTH 11,
+    lc_timestamp       TYPE c VALUE 'Timestamp'            LENGTH 12,
+    lc_priority        TYPE c VALUE 'Priority'             LENGTH 8,
+    lc_error           TYPE c VALUE 'Error'                LENGTH 5,
+    lc_high            TYPE c VALUE 'High'                 LENGTH 4,
+    lc_medium          TYPE c VALUE 'Medium'               LENGTH 6,
+    lc_low             TYPE c VALUE 'Low'                  LENGTH 3,
+    lc_info            TYPE c VALUE 'Info'                 LENGTH 4,
+    lc_curr_alerts     TYPE c VALUE 'Current Alerts'       LENGTH 14,
+    lc_alert_info      TYPE c VALUE
+    'Alert Check Information'                              LENGTH 23,
+    lc_inc_input       TYPE c VALUE 'Incorrect input'      LENGTH 20,
+    lc_noinput         TYPE c VALUE 'No input given'       LENGTH 20,
+    lc_title           TYPE c VALUE 'Alerts'               LENGTH 6,
+    lc_no_data         TYPE c VALUE 'No data found'        LENGTH 20.
+
+  DATA: ls_output      TYPE tab512,
+        ls_input       TYPE tab512,
+        lv_action      TYPE char6,
+        lv_con_name    TYPE dbcon_name,
+        lv_curr_query  TYPE string,
+        lv_alert_query TYPE string,
+        lv_exe_msg     TYPE string,
+        lv_con_msg     TYPE string,
+        lv_alert_id    TYPE char10,
+        lv_rating      TYPE string,
+        lv_int         TYPE i,
+        lv_time        TYPE t,
+        lv_hours(3),
+        lv_interval    TYPE char10,
+        lt_alerts_curr TYPE STANDARD TABLE OF hdb_alert_current,
+        ls_alerts_curr TYPE hdb_alert_current,
+        lt_alerts_info TYPE STANDARD TABLE OF hdb_alert_checks,
+        ls_alerts_info TYPE hdb_alert_checks,
+        lr_data        TYPE REF TO data,
+        lr_sql_excp    TYPE REF TO cx_sql_exception,
+        lr_conn        TYPE REF TO cl_sql_connection,
+        lr_stmt        TYPE REF TO cl_sql_statement,
+        lr_result      TYPE REF TO cl_sql_result_set.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, lv_action, lv_con_name, lv_curr_query,
+         lv_alert_query, lv_exe_msg, lv_con_msg, lv_alert_id,
+         lv_rating, lv_int, lv_time, lv_hours, lv_interval,
+         ls_alerts_info, ls_alerts_curr.
+
+  FREE: lt_output, lt_alerts_curr, lt_alerts_info.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      FREE: lt_output.
+
+      " To get database connection
+      TRY.
+          lr_conn = cl_db6_con=>get_connection( lv_con_name ).
+          lr_stmt   = lr_conn->create_statement(  ).
+
+          " To catch if any exception occurs
+        CATCH cx_sql_exception INTO lr_sql_excp.
+          lv_con_msg = lr_sql_excp->get_text( ).
+          ls_output = lv_con_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+      ENDTRY.
+
+****************************Alerts Checks**************************
+
+      " Adding sub title to the output
+      ls_output = lc_alert_info.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Building query for Alerts Checks
+      CONCATENATE
+      'SELECT ALERT_ID AS ALERT_ID , '
+      'ALERT_NAME AS ALERT_NAME , '
+      'SNAPSHOT_ID AS SNAPSHOT_ID , '
+      'ALERT_LAST_CHECK_TIMESTAMP AS ALERT_LAST_CHECK_TIMESTAMP , '
+      'INTERVAL AS INTERVAL , '
+      'ALERT_NEXT_CHECK_TIMESTAMP AS ALERT_NEXT_CHECK_TIMESTAMP , '
+      'ALERT_LAST_CHECK_RATING AS ALERT_LAST_CHECK_RATING , '
+      '''' ''''
+      ' AS CHECK_ICON , '
+      '''' ''''
+      ' AS RATING_TEXT , '
+      '''' ''''
+      ' AS RATING_GROUP , '
+      'ALERT_DESCRIPTION AS ALERT_DESCRIPTION , '
+      'ALERT_USERACTION AS ALERT_USERACTION , '
+      '''' ''''
+      ' AS LINECOLOR '
+      ' FROM(SELECT SRC_ALERTS.ALERT_DESCRIPTION '
+      ' AS ALERT_DESCRIPTION , '
+      'SRC_ALERTS.ALERT_ID AS ALERT_ID , '
+      'SRC_ALERTS.ALERT_LAST_CHECK_RATING '
+      ' AS ALERT_LAST_CHECK_RATING , '
+      'SRC_ALERTS.ALERT_LAST_CHECK_TIMESTAMP '
+      ' AS ALERT_LAST_CHECK_TIMESTAMP , '
+      'SRC_ALERTS.ALERT_NAME AS ALERT_NAME , '
+      'SRC_ALERTS.ALERT_NEXT_CHECK_TIMESTAMP '
+      ' AS ALERT_NEXT_CHECK_TIMESTAMP , '
+      'SRC_ALERTS.ALERT_USERACTION AS ALERT_USERACTION , '
+      'SRC_ALERTS.INTERVAL AS INTERVAL , '
+      'SRC_ALERTS.SNAPSHOT_ID AS SNAPSHOT_ID '
+      ' FROM _SYS_STATISTICS.STATISTICS_LAST_CHECKS '
+      ' AS SRC_ALERTS ) '
+      ' AS SQ_NO_AGGR '
+      INTO lv_alert_query.
+
+      TRY.
+          lr_result = lr_stmt->execute_query( lv_alert_query ).
+          GET REFERENCE OF lt_alerts_info INTO lr_data.
+          lr_result->set_param_table( itab_ref = lr_data ).
+          lr_result->next_package( ).
+
+          IF lt_alerts_info IS NOT INITIAL.
+
+            " Adding heading to the output
+            CONCATENATE lc_alert_id
+                        lc_alert_name
+                        lc_last_check_time
+                        lc_interval
+                        lc_next_check_time
+                        lc_max_priority
+                        lc_description
+                        lc_user_action
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Sorting data by alert id in Ascending order
+            SORT lt_alerts_info BY alert_id ASCENDING.
+
+            LOOP AT lt_alerts_info INTO ls_alerts_info.
+
+              lv_alert_id = ls_alerts_info-alert_id.
+              CONDENSE lv_alert_id.
+
+              IF ls_alerts_info-alert_last_check_rating GE 5.
+                lv_rating = lc_error.
+              ELSEIF ls_alerts_info-alert_last_check_rating EQ 4.
+                lv_rating = lc_high.
+              ELSEIF ls_alerts_info-alert_last_check_rating EQ 3.
+                lv_rating = lc_medium.
+              ELSEIF ls_alerts_info-alert_last_check_rating EQ 2.
+                lv_rating = lc_low.
+              ELSEIF ls_alerts_info-alert_last_check_rating LT 2.
+                lv_rating = lc_null.
+              ENDIF.
+
+              lv_int = ls_alerts_info-interval.
+              lv_time = lv_int.
+              IF lv_int > 0.
+                WRITE lv_time TO lv_interval
+                USING EDIT MASK '__:__:__'.
+                IF lv_int > lc_86399.
+                  lv_hours = lv_int DIV lc_3600.
+                  IF lv_hours > lc_99.
+                    lv_interval = lv_hours && ':00:00'.
+                  ELSE.
+                    lv_interval(2) = lv_hours.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+
+              CONCATENATE lv_alert_id
+                          ls_alerts_info-alert_name
+                          ls_alerts_info-alert_last_check_timestamp
+                          lv_interval
+                          ls_alerts_info-alert_next_check_timestamp
+                          lv_rating
+                          ls_alerts_info-alert_description
+                          ls_alerts_info-alert_useraction
+                          INTO ls_output
+                          SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_alerts_info, lv_alert_id, lv_rating,
+                     lv_interval, ls_output.
+            ENDLOOP.
+
+          ELSE.
+            " No data found
+            ls_output = lc_no_data.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+          ENDIF.
+
+          " To catch if any exception occurs
+        CATCH cx_sql_exception INTO lr_sql_excp.
+          lv_exe_msg = lr_sql_excp->get_text( ).
+          ls_output =  lv_exe_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+      ENDTRY.
+
+      " Adding empty line to the output
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+****************************Current Alerts**************************
+
+      " Adding sub title to the output
+      ls_output = lc_curr_alerts.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Building query for Current Alerts
+      CONCATENATE
+      'SELECT ALERT_ID AS ALERT_ID , '
+      'SNAPSHOT_ID AS SNAPSHOT_ID , '
+      'ALERT_DESCRIPTION AS ALERT_DESCRIPTION , '
+      'ALERT_DETAILS AS ALERT_DETAILS , '
+      'ALERT_NAME AS ALERT_NAME , '
+      'ALERT_RATING AS ALERT_RATING , '
+      'ALERT_TIMESTAMP AS ALERT_TIMESTAMP , '
+      'ALERT_USERACTION AS ALERT_USERACTION , '
+      'INDEX AS INDEX , '
+      '''' ''''
+      ' AS CHECK_ICON , '
+      '''' ''''
+      ' AS RATING_TEXT , '
+      '''' ''''
+      ' AS RATING_GROUP , '
+      '''' ''''
+      ' AS LINECOLOR '
+      ' FROM (SELECT   SRC_CURR_ALERTS.ALERT_DESCRIPTION '
+      ' AS ALERT_DESCRIPTION , '
+      'SRC_CURR_ALERTS.ALERT_DETAILS AS ALERT_DETAILS , '
+      'SRC_CURR_ALERTS.ALERT_ID AS ALERT_ID , '
+      'SRC_CURR_ALERTS.ALERT_NAME AS ALERT_NAME , '
+      'SRC_CURR_ALERTS.ALERT_RATING AS ALERT_RATING , '
+      'SRC_CURR_ALERTS.ALERT_TIMESTAMP '
+      ' AS ALERT_TIMESTAMP , '
+      'SRC_CURR_ALERTS.ALERT_USERACTION '
+      ' AS ALERT_USERACTION , '
+      'SRC_CURR_ALERTS.INDEX AS INDEX , '
+      'SRC_CURR_ALERTS.SNAPSHOT_ID AS SNAPSHOT_ID '
+      ' FROM _SYS_STATISTICS.STATISTICS_CURRENT_ALERTS '
+      ' AS SRC_CURR_ALERTS ) '
+      ' AS SQ_NO_AGGR '
+      INTO lv_curr_query.
+
+      TRY.
+          lr_result = lr_stmt->execute_query( lv_curr_query ).
+          GET REFERENCE OF lt_alerts_curr INTO lr_data.
+          lr_result->set_param_table( itab_ref = lr_data ).
+          lr_result->next_package( ).
+
+          IF lt_alerts_curr IS NOT INITIAL.
+
+            " Adding headings to the output
+            CONCATENATE lc_timestamp
+                        lc_user_action
+                        lc_priority
+                        lc_description
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Sorting data by time stamp in Ascending order
+            SORT lt_alerts_curr BY alert_timestamp ASCENDING.
+
+            LOOP AT lt_alerts_curr INTO ls_alerts_curr.
+
+              IF ls_alerts_curr-alert_rating GE 5.
+                lv_rating = lc_error.
+              ELSEIF ls_alerts_curr-alert_rating EQ 4.
+                lv_rating = lc_high.
+              ELSEIF ls_alerts_curr-alert_rating EQ 3.
+                lv_rating = lc_medium.
+              ELSEIF ls_alerts_curr-alert_rating EQ 2.
+                lv_rating = lc_low.
+              ELSEIF ls_alerts_curr-alert_rating EQ 1.
+                lv_rating = lc_info.
+              ENDIF.
+
+              CONCATENATE ls_alerts_curr-alert_timestamp
+                          ls_alerts_curr-alert_useraction
+                          lv_rating
+                          ls_alerts_curr-alert_details
+                          INTO ls_output
+                          SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_alerts_curr, lv_rating, ls_output.
+
+            ENDLOOP.
+
+          ELSE.
+            " No data found
+            ls_output = lc_no_data.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+          ENDIF.
+
+          " To catch if any exception occurs
+        CATCH cx_sql_exception INTO lr_sql_excp.
+          lv_exe_msg = lr_sql_excp->get_text( ).
+          ls_output =  lv_exe_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+      ENDTRY.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

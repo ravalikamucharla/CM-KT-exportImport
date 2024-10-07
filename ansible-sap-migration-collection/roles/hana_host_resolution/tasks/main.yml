@@ -1,0 +1,9 @@
+---
+- name: set host resolution on source
+  include_tasks: "host_resolution_{{ set_on }}.yml"
+  when: source_primary_db is defined or target_primary_db is defined
+
+- name: set host resolution on source
+  include_tasks: "host_resolution_{{ set_on }}_ha.yml"
+  when: target_secondary_db is defined and topology == 'HA'
+ 

@@ -1,0 +1,360 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_HDB_NWBC_CONFIG_OVRVW_HVER              *
+* Title               :   Fetch NWBC Configuration Overview &Parameter*
+* Purpose             :   This report is used to export NWBC          *
+*                         Configuration Overview and Parameter names  *
+*                         for SAP and customer                        *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* /UI2/NWBC_CFG_CUST                                                  *
+* /UI2/NWBC_CFG_P_CUST                                                *
+* /UI2/NWBC_CFG_P_SAP                                                 *
+* /UI2/NWBC_CFG_SAP                                                   *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* /UI2/NWBC_CFGC            X                                         *
+* /UI2/NWBC_CFGCT           X                                         *
+* /UI2/NWBC_CFG_NC          X                                         *
+* /UI2/NWBC_CFGNCT          X                                         *
+* /UI2/NWBC_CFG             X                                         *
+* /UI2/NWBC_CFG_N           X                                         *
+* /UI2/NWBC_CFGT            X                                         *
+* /UI2/NWBC_CFG_NT          X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*07-27-2021  Initial   Soumya Ray   Local        To fetch NWBC        *
+*                                             configuration overview  *
+*                                             and parameter names     *
+*05-16-2022  V001      Soumya Ray   V001        To pass message 'No   *
+*                                               data found' in case no*
+*                                               data is system'       *
+*06-16-2023  V002      Yasaswini K  V002        To show error message *
+*                                               when tcode is not     *
+*                                               available
+*---------------------------------------------------------------------*
+REPORT zcm_hdb_nwbc_config_ovrvw_hver.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep          TYPE c VALUE '|'                 LENGTH 1,
+             lc_dlr          TYPE c VALUE '$'                 LENGTH 1,
+             lc_plus         TYPE c VALUE '+'                 LENGTH 1,
+             lc_astrix       TYPE c VALUE '*'                 LENGTH 1,
+             lc_lang_english TYPE c VALUE 'E'                 LENGTH 1,
+             lc_custname_y   TYPE c VALUE 'Y%'                LENGTH 2,
+             lc_custname_z   TYPE c VALUE 'Z%'                LENGTH 2,
+             lc_export       TYPE c VALUE 'EXPORT'            LENGTH 6,
+             lc_null         TYPE c VALUE 'NULL'              LENGTH 4,
+             lc_nwbctitle    TYPE c VALUE
+             'NWBC Configuration'                             LENGTH 20,
+             lc_ninput       TYPE c VALUE 'No input passed'   LENGTH 17,
+             lc_title1       TYPE c VALUE
+             'NWBC Configuration:Overview(Customer)'          LENGTH 50,
+             lc_pathflt      TYPE c VALUE 'Path Filter'       LENGTH 11,
+             lc_paramnm      TYPE c VALUE 'Parameter Name'    LENGTH 15,
+             lc_transf       TYPE c VALUE 'Translatable'      LENGTH 12,
+             lc_paramvl      TYPE c VALUE 'Parameter Value'   LENGTH 15,
+             lc_transpar     TYPE c VALUE
+             'Translated Parameter Value'                     LENGTH 26,
+             lc_title2       TYPE c VALUE
+             'NWBC Configuration:Parameter Names(Customer)'   LENGTH 60,
+             lc_parades      TYPE c VALUE
+             'Parameter Description'                          LENGTH 25,
+             lc_title3       TYPE c VALUE
+             'NWBC Configuration:Overview(SAP)'               LENGTH 50,
+             lc_title4       TYPE c VALUE
+             'NWBC Configuration:Parameter Names(SAP)'        LENGTH 50,
+             lc_reserve      TYPE c VALUE
+             'Reserved'                                       LENGTH 8,
+*   Begin of changes in V001
+             lc_naction      TYPE c VALUE
+             'Incorrect input'                                LENGTH 25,
+             lc_ndata        TYPE c VALUE 'No data found'     LENGTH 13.
+*   End of changes in V001
+
+  DATA: ls_output         TYPE tab512,
+*   Begin of changes in V002
+        lo_nwbc           TYPE REF TO cl_nwbc,
+        lv_url(1024)      TYPE c,
+        lo_nwbc_exception TYPE REF TO cx_nwbc,
+        lv_err_txt        TYPE string.
+*   End of changes in V002
+
+  "Title
+  ls_output = lc_nwbctitle.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO DATA(ls_input) INDEX 1."Read input
+  IF sy-subrc NE 0.
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  DATA(lv_action) = ls_input.
+
+  CASE lv_action. "Action
+
+    WHEN lc_export. "EXPORT
+
+      FREE: lt_output.
+
+*   Begin of changes in V002
+*//----NWBC tcode check---------------//*
+      TRY.
+          CREATE OBJECT lo_nwbc.
+          lv_url = lo_nwbc->url_base(  ).
+
+        CATCH cx_nwbc INTO lo_nwbc_exception.
+          lv_err_txt = lo_nwbc_exception->get_text( ).
+
+          ls_output = lc_title1. "Title
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          ls_output = lv_err_txt.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          APPEND ls_output TO lt_output.
+          ls_output = lc_title2. "Title
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          ls_output = lv_err_txt.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          APPEND ls_output TO lt_output.
+          ls_output = lc_title3. "Title
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          ls_output = lv_err_txt.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          APPEND ls_output TO lt_output.
+          ls_output = lc_title4. "Title
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          ls_output = lv_err_txt.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+      ENDTRY.
+*   End of changes in V002
+
+*//----NWBC Configuration:Overview(Customer)--------//*
+      ls_output = lc_title1. "Title
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      "Select path filter, parameter name, translatable, parameter value
+      "translated parameter value from table /ui2/nwbc_cfgc,
+      "/ui2/nwbc_cfg_nc, /ui2/nwbc_cfgct
+      SELECT a~path_filter,
+      a~name,
+      b~is_reserved,
+      b~is_translatable,
+      a~value,
+      c~value_translated
+      FROM /ui2/nwbc_cfgc AS a
+      INNER JOIN /ui2/nwbc_cfg_nc AS b
+      ON a~name EQ b~parameter_name
+      INNER JOIN /ui2/nwbc_cfgct AS c
+      ON ( a~path_filter EQ c~path_filter AND a~name EQ c~name )
+      WHERE c~language EQ @lc_lang_english
+      INTO TABLE @DATA(lt_tabcus).
+      IF sy-subrc EQ 0.
+        SORT lt_tabcus BY path_filter ASCENDING.
+        "coloumn heading
+        CONCATENATE lc_pathflt lc_paramnm lc_transf lc_paramvl
+        lc_transpar INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        "Data
+        LOOP AT lt_tabcus INTO DATA(ls_tabcus).
+          IF ls_tabcus-value_translated IS INITIAL.
+            ls_tabcus-value_translated = lc_null.
+          ENDIF.
+          CONCATENATE ls_tabcus-path_filter ls_tabcus-name
+          ls_tabcus-is_reserved ls_tabcus-is_translatable
+          ls_tabcus-value ls_tabcus-value_translated
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_tabcus.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_ndata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+*//-------------------------------------------------------//*
+*//----NWBC Configuration:Parameter Names(Customer)------//*
+      APPEND ls_output TO lt_output.
+      ls_output = lc_title2. "Title
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      "Select parameter name, translatable, parameter description from
+      "table /ui2/nwbc_cfg_nc, /ui2/nwbc_cfgnct.
+      SELECT a~parameter_name,
+      a~is_translatable,
+      b~description
+      FROM /ui2/nwbc_cfg_nc AS a
+      INNER JOIN /ui2/nwbc_cfgnct AS b
+      ON a~parameter_name EQ b~parameter_name
+      INTO TABLE @DATA(lt_cfgncv).
+      IF sy-subrc EQ 0.
+        SORT lt_cfgncv BY parameter_name ASCENDING.
+        "coloumn heading
+        CONCATENATE lc_paramnm lc_transf lc_parades INTO ls_output
+        SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        "Data
+        LOOP AT lt_cfgncv INTO DATA(ls_cfgncv).
+          IF ls_cfgncv-description IS INITIAL.
+            ls_cfgncv-description = lc_null.
+          ENDIF.
+          CONCATENATE ls_cfgncv-parameter_name
+          ls_cfgncv-is_translatable ls_cfgncv-description
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_cfgncv.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_ndata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+*//-------------------------------------------------------//*
+*//----NWBC Configuration:Overview(SAP)------------------//*
+      APPEND ls_output TO lt_output.
+      ls_output = lc_title3.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      "Select path filter,parameter name, translatable, parameter value
+      "translated parameter value from table /UI2/NWBC_CFG,
+      "/UI2/NWBC_CFG_N, /UI2/NWBC_CFGT.
+      "Y% and Z% is excluded from the parameter name in order to
+      "exclude customer created Parameters.
+      SELECT a~path_filter,
+      a~name,
+      b~is_reserved,
+      b~is_translatable,
+      a~value,
+      c~value_translated
+      FROM /ui2/nwbc_cfg AS a
+      INNER JOIN /ui2/nwbc_cfg_n AS b
+      ON a~name EQ b~parameter_name
+      INNER JOIN /ui2/nwbc_cfgt AS c
+      ON ( a~path_filter EQ c~path_filter AND a~name EQ c~name )
+      WHERE a~name NE @lc_custname_y
+      AND a~name NE @lc_custname_z
+      AND c~language EQ @lc_lang_english
+      INTO TABLE @DATA(lt_cfgv).
+      IF sy-subrc EQ 0.
+        SORT lt_cfgv BY path_filter ASCENDING.
+        "Coloumn heading
+        CONCATENATE lc_pathflt lc_paramnm lc_transf lc_paramvl
+        lc_transpar INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        "Data
+        LOOP AT lt_cfgv INTO DATA(ls_cfgv).
+          FIND lc_sep IN ls_cfgv-value.
+          IF sy-subrc EQ 0.
+            DATA(lv_cfgv_value) = ls_cfgv-value.
+            CLEAR ls_cfgv-value.
+            CONCATENATE lc_dlr lv_cfgv_value lc_dlr
+            INTO ls_cfgv-value.
+          ENDIF.
+          IF ls_cfgv-value_translated IS INITIAL.
+            ls_cfgv-value_translated = lc_null.
+          ENDIF.
+          " $ symbol is added in front and back of the string for
+          "ignoring it at python end
+          IF ls_cfgv-path_filter EQ lc_plus.
+            CONCATENATE lc_dlr lc_astrix lc_dlr INTO
+            ls_cfgv-path_filter.
+          ENDIF.
+          CONCATENATE ls_cfgv-path_filter ls_cfgv-name
+          ls_cfgv-is_translatable ls_cfgv-value
+          ls_cfgv-value_translated INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_cfgv, lv_cfgv_value.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_ndata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+*//------------------------------------------------------//*
+*//----NWBC Configuration:Parameter Names(SAP)----------//*
+      APPEND ls_output TO lt_output.
+      ls_output = lc_title4. "Title
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      "Select parameter name, translatable, reserved, description
+      "value from table /UI2/NWBC_CFG_N, /UI2/NWBC_CFG_NT.
+      "Y% and Z% is excluded from the parameter name in order to
+      "exclude customer created Parameters
+      SELECT a~parameter_name,
+      a~is_translatable,
+      a~is_reserved,
+      b~description
+      FROM /ui2/nwbc_cfg_n AS a
+      INNER JOIN /ui2/nwbc_cfg_nt AS b
+      ON a~parameter_name EQ b~parameter_name
+      WHERE a~parameter_name NE @lc_custname_y
+      AND a~parameter_name NE @lc_custname_z
+      AND b~language EQ @lc_lang_english
+      INTO TABLE @DATA(lt_cfgnvsap).
+      IF sy-subrc EQ 0.
+        SORT lt_cfgnvsap BY parameter_name ASCENDING.
+        "Coloumn heading
+        CONCATENATE lc_paramnm lc_transf lc_reserve lc_parades
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        LOOP AT lt_cfgnvsap INTO DATA(ls_cfgnvsap).
+          IF ls_cfgnvsap-description IS INITIAL.
+            ls_cfgnvsap-description = lc_null.
+          ENDIF.
+          CONCATENATE ls_cfgnvsap-parameter_name
+          ls_cfgnvsap-is_translatable ls_cfgnvsap-is_reserved
+          ls_cfgnvsap-description INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_cfgnvsap.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_ndata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+      FREE: lt_tabcus, lt_cfgnvsap, lt_cfgv, lt_cfgncv.
+*//------------------------------------------------------//*
+    WHEN OTHERS.
+      ls_output = lc_naction.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+  "Null check in middle fields
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

@@ -1,0 +1,34 @@
+- name: main | target primary
+  block:
+    
+    - name:  set maintenance 
+      include_tasks: set_maintenance_mode.yml
+
+    - name: stop-hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: stop.yml
+
+    - name: cleanup_resource | cleanup resource 
+      include_tasks: cleanup_resource.yml
+
+    - name: cleanup_resource | check the status after cleanup
+      include_tasks: status.yml
+      
+  when: ansible_hostname == node1 
+
+- name: main | target secondary
+  block:
+
+    - name: cleanup_resource | stop-hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: stop.yml
+
+    - name:  cleanup resource 
+      include_tasks: cleanup_resource.yml
+
+    - name: main | check the status after cleanup
+      include_tasks: status.yml
+      
+  delegate_to: "{{ groups['target_slave_db'][0] }}"

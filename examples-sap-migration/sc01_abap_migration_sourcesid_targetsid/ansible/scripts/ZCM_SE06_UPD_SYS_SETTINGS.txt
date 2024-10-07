@@ -1,0 +1,453 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SE06_UPD_SYSTEM_SETTINGS                 *
+* Title               :  Restore SE06 Settings                        *
+* Purpose             :  This report is for restoring SE06 settings   *
+*                        during Cloud Migration                       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SE06                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TADIR                               X                               *
+* TRNSPACE                            X                               *
+* DLV_SYSTC                           X                               *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*11-24-2021  Initial   Yasaswini K   Local     Created new report to  *
+*                                              improve performance for*
+*                                              restoring SE06         *
+*---------------------------------------------------------------------*
+REPORT zcm_se06_upd_sys_settings.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  TYPES: BEGIN OF lty_namespace,
+           namespace  TYPE trnspace-namespace,
+           text       TYPE trnspacett-descriptn,
+           prefix     TYPE trnspace-namespace,
+           changeable TYPE trchange,
+           role       TYPE trnrole,
+           license    TYPE trnlicense,
+           sscrflag   TYPE sscrflag,
+           sapflag    TYPE sapstandrd,
+           gen_only   TYPE gen_only,
+           mt_type    TYPE string,
+         END OF lty_namespace.
+
+  CONSTANTS:lc_sep       TYPE c VALUE '|'                 LENGTH 1,
+            lc_n         TYPE c VALUE 'N'                 LENGTH 1,
+            lc_f         TYPE c VALUE 'F'                 LENGTH 1,
+            lc_x         TYPE c VALUE 'X'                 LENGTH 1,
+            lc_head      TYPE c VALUE 'HEAD'              LENGTH 4,
+            lc_syst      TYPE c VALUE 'SYST'              LENGTH 4,
+            lc_null      TYPE c VALUE 'NULL'              LENGTH 4,
+            lc_mod       TYPE c VALUE 'Modifiable'        LENGTH 12,
+            lc_not_mod   TYPE c VALUE 'Not Modifiable'    LENGTH 15,
+            lc_mode      TYPE dd26e-enqmode VALUE 'E',
+            lc_tadir     TYPE rstable-tabname VALUE 'TADIR',
+            lc_trnspace  TYPE rstable-tabname VALUE 'TRNSPACE',
+            lc_dlv_systc TYPE rstable-tabname VALUE 'DLV_SYSTC',
+            lc_title     TYPE c VALUE
+            'Restore SE06 Settings'                         LENGTH 30,
+            lc_heading   TYPE c VALUE
+            'SE06 Settings'                                 LENGTH 15,
+            lc_res_glo   TYPE c VALUE
+            'Global Setting is restored to'                 LENGTH 30,
+            lc_res_soft  TYPE c VALUE
+            'Software Components have been restored in the system'
+                                                            LENGTH 55,
+            lc_res_name  TYPE c VALUE
+            'Namespaces have been restored in the system'   LENGTH 50,
+            lc_err_glob  TYPE c VALUE
+            'No Global setting to restore'                  LENGTH 40,
+            lc_err_soft  TYPE c VALUE
+            'No Software Components settings to restore'    LENGTH 50,
+            lc_err_name  TYPE c VALUE
+            'No Namespaces settings to restore'             LENGTH 35,
+            lc_fail_msg  TYPE c VALUE
+            'Failed to restore settings'                    LENGTH 35.
+
+  DATA:ls_input        TYPE tab512,
+       ls_output       TYPE tab512,
+       lv_tabix        TYPE sy-tabix,
+       lv_action       TYPE char1,
+       lv_lines        TYPE i,
+       lv_global       TYPE char20,
+       lv_setting      TYPE char20,
+       lv_update       TYPE char1,
+       lt_global_input TYPE TABLE OF tab512,
+       ls_global_input TYPE tab512,
+       lt_soft_input   TYPE TABLE OF tab512,
+       ls_soft_input   TYPE tab512,
+       lt_name_input   TYPE TABLE OF tab512,
+       ls_name_input   TYPE tab512,
+       lt_dlv_systc    TYPE STANDARD TABLE OF dlv_systc,
+       ls_dlv_systc    TYPE dlv_systc,
+       ls_dlvunit      TYPE trdlvunit,
+       ls_trnspace     TYPE trnspace,
+       lt_trnspace     TYPE STANDARD TABLE OF trnspace,
+       ls_namespace    TYPE lty_namespace.
+
+***********************Splitting input*************************
+  LOOP AT lt_input INTO ls_input.
+
+    IF ls_input IS NOT INITIAL.
+      REPLACE ALL OCCURRENCES OF lc_null IN ls_input WITH space.
+      ls_global_input = ls_input.
+      APPEND ls_global_input TO lt_global_input.
+      CLEAR ls_global_input.
+    ELSE.
+      lv_tabix = sy-tabix.
+      EXIT.
+    ENDIF.
+
+  ENDLOOP.
+
+  LOOP AT lt_input INTO ls_input FROM lv_tabix + 1.
+
+    IF ls_input IS NOT INITIAL.
+      REPLACE ALL OCCURRENCES OF lc_null IN ls_input WITH space.
+      ls_soft_input = ls_input.
+      APPEND ls_soft_input TO lt_soft_input.
+      CLEAR ls_soft_input.
+    ELSE.
+      lv_tabix = sy-tabix.
+      EXIT.
+    ENDIF.
+
+  ENDLOOP.
+
+  LOOP AT lt_input INTO ls_input FROM lv_tabix + 1.
+
+    IF ls_input IS NOT INITIAL.
+      REPLACE ALL OCCURRENCES OF lc_null IN ls_input WITH space.
+      ls_name_input = ls_input.
+      APPEND ls_name_input TO lt_name_input.
+      CLEAR ls_name_input.
+    ELSE.
+      lv_tabix = sy-tabix.
+      EXIT.
+    ENDIF.
+
+  ENDLOOP.
+*******************Restore Global Setting**********************
+
+  CLEAR: lv_lines, lv_action, lv_global, lv_setting.
+
+  DESCRIBE TABLE lt_global_input LINES lv_lines.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  "Cloumn Heading
+  ls_output = lc_heading.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  IF lv_lines > 1.
+
+    " To delete heading from the input
+    DELETE lt_global_input INDEX 1.
+
+    READ TABLE lt_global_input INTO ls_global_input INDEX 1.
+
+    IF sy-subrc EQ 0.
+
+      SPLIT ls_global_input AT lc_sep INTO
+            lv_global
+            lv_setting
+            lv_action.
+
+      " FM to lock global setting table
+      CALL FUNCTION 'ENQUEUE_E_TABLE'
+        EXPORTING
+          mode_rstable   = lc_mode
+          tabname        = lc_tadir
+        EXCEPTIONS
+          foreign_lock   = 1
+          system_failure = 2
+          OTHERS         = 3.
+      IF sy-subrc NE 0.
+
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSE.
+
+        IF lv_setting EQ lc_mod.        " If Modifiable
+
+          UPDATE tadir SET edtflag    = space
+                       WHERE pgmid    = lc_head
+                         AND object   = lc_syst
+                         AND obj_name = space.
+
+          IF sy-subrc = 0.
+            lv_update = abap_true.
+          ENDIF.
+
+        ELSEIF lv_setting EQ lc_not_mod.      " If Not Modifiable
+
+          UPDATE tadir SET edtflag    = lc_n
+                       WHERE pgmid    = lc_head
+                         AND object   = lc_syst
+                         AND obj_name = space.
+
+          IF sy-subrc = 0.
+            lv_update = abap_true.
+          ENDIF.
+
+        ENDIF.
+
+        " FM to unlock global setting table
+        CALL FUNCTION 'DEQUEUE_E_TABLE'
+          EXPORTING
+            mode_rstable = lc_mode
+            tabname      = lc_tadir.
+      ENDIF.
+    ENDIF.
+
+    IF lv_update = abap_true.
+      " FM to lock software component table
+      CALL FUNCTION 'ENQUEUE_E_TABLE'
+        EXPORTING
+          mode_rstable   = lc_mode
+          tabname        = lc_dlv_systc
+        EXCEPTIONS
+          foreign_lock   = 1
+          system_failure = 2
+          OTHERS         = 3.
+
+      IF sy-subrc NE 0.
+
+        IF lv_setting EQ lc_mod.        " If Modifiable
+          UPDATE dlv_systc SET changeable = lc_f.
+        ELSEIF lv_setting EQ lc_not_mod.      " If Not Modifiable
+          UPDATE dlv_systc SET changeable = lc_n.
+        ENDIF.
+
+        " FM to unlock software components table
+        CALL FUNCTION 'DEQUEUE_E_TABLE'
+          EXPORTING
+            mode_rstable = lc_mode
+            tabname      = lc_dlv_systc.
+
+      ENDIF.
+
+      " FM to lock namespace table
+      CALL FUNCTION 'ENQUEUE_E_TABLE'
+        EXPORTING
+          mode_rstable   = lc_mode
+          tabname        = lc_trnspace
+        EXCEPTIONS
+          foreign_lock   = 1
+          system_failure = 2
+          OTHERS         = 3.
+
+      IF sy-subrc NE 0.
+
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSE.
+
+        IF lv_setting EQ lc_mod.        " If Modifiable
+
+          UPDATE trnspace SET editflag = lc_x.
+
+          CONCATENATE lc_res_glo lc_mod
+                            INTO ls_output
+                            SEPARATED BY space.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSEIF lv_setting EQ lc_not_mod.      " If Not Modifiable
+
+          UPDATE trnspace SET editflag = space.
+
+          CONCATENATE lc_res_glo lc_mod
+                            INTO ls_output
+                            SEPARATED BY space.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " FM to unlock namespace table
+        CALL FUNCTION 'DEQUEUE_E_TABLE'
+          EXPORTING
+            mode_rstable = lc_mode
+            tabname      = lc_trnspace.
+      ENDIF.
+    ENDIF.
+  ELSE.
+    " No Global setting to restore
+    ls_output = lc_err_glob.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+  ENDIF.
+
+********************Restore Software Components*****************
+  CLEAR: lv_lines, lv_action.
+
+  DESCRIBE TABLE lt_soft_input LINES lv_lines.
+
+  IF lv_lines > 2.
+    " To delete heading from the input
+    DELETE lt_soft_input INDEX 1.
+
+    LOOP AT lt_soft_input INTO ls_soft_input.
+      SPLIT ls_soft_input AT lc_sep INTO
+            ls_dlvunit-desc_text
+            ls_dlvunit-dlvunit
+            ls_dlvunit-changeable
+            lv_action.
+
+      ls_dlv_systc-dlvunit = ls_dlvunit-dlvunit.
+      ls_dlv_systc-changeable = ls_dlvunit-changeable.
+      APPEND ls_dlv_systc TO lt_dlv_systc.
+
+      CLEAR: ls_dlvunit, ls_soft_input.
+    ENDLOOP.
+
+    " FM to lock software component table
+    CALL FUNCTION 'ENQUEUE_E_TABLE'
+      EXPORTING
+        mode_rstable   = lc_mode
+        tabname        = lc_dlv_systc
+      EXCEPTIONS
+        foreign_lock   = 1
+        system_failure = 2
+        OTHERS         = 3.
+
+    IF sy-subrc NE 0.
+
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+      INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+    ELSE.
+
+      UPDATE dlv_systc FROM TABLE lt_dlv_systc.
+
+      IF sy-subrc EQ 0.
+
+        " Software Components have been restored in the system
+        ls_output = lc_res_soft.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSE.
+        " Failed to restore
+        ls_output = lc_fail_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+
+      " FM to unlock software components table
+      CALL FUNCTION 'DEQUEUE_E_TABLE'
+        EXPORTING
+          mode_rstable = lc_mode
+          tabname      = lc_dlv_systc.
+
+    ENDIF.
+
+  ELSE.
+    " No software components settings to restore
+    ls_output = lc_err_soft.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+  ENDIF.
+
+**********************Restore Namespaces************************
+  CLEAR: lv_lines, lv_action.
+
+  DESCRIBE TABLE lt_name_input LINES lv_lines.
+
+  IF lv_lines > 2.
+    " To delete heading from the input
+    DELETE lt_name_input INDEX 1.
+
+    LOOP AT lt_name_input INTO ls_name_input.
+
+      SPLIT ls_name_input AT lc_sep INTO
+            ls_namespace-text
+            ls_namespace-prefix
+            ls_namespace-changeable
+            ls_namespace-namespace
+            ls_namespace-role
+            ls_namespace-license
+            ls_namespace-sscrflag
+            ls_namespace-sapflag
+            ls_namespace-gen_only
+            ls_namespace-mt_type
+            lv_action.
+
+      ls_trnspace-role      = ls_namespace-role.
+      ls_trnspace-license   = ls_namespace-license.
+      ls_trnspace-sscrflag  = ls_namespace-sscrflag.
+      ls_trnspace-sapflag   = ls_namespace-sapflag.
+      ls_trnspace-gen_only  = ls_namespace-gen_only.
+      ls_trnspace-namespace = ls_namespace-namespace.
+      ls_trnspace-editflag  = ls_namespace-changeable.
+      APPEND ls_trnspace TO lt_trnspace.
+      CLEAR: ls_name_input, ls_namespace, ls_trnspace.
+    ENDLOOP.
+
+    " FM to lock namespace table
+    CALL FUNCTION 'ENQUEUE_E_TABLE'
+      EXPORTING
+        mode_rstable   = lc_mode
+        tabname        = lc_trnspace
+      EXCEPTIONS
+        foreign_lock   = 1
+        system_failure = 2
+        OTHERS         = 3.
+
+    IF sy-subrc NE 0.
+
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+      INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+    ELSE.
+      UPDATE trnspace FROM TABLE lt_trnspace.
+
+      IF sy-subrc EQ 0.
+
+        " Namespaces have been restored in the system
+        ls_output = lc_res_name.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ELSE.
+        " Failed to restore
+        ls_output = lc_fail_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+    ENDIF.
+  ELSE.
+    " No namespaces settings to restore
+    ls_output = lc_err_name.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+  ENDIF.
+ENDFORM.

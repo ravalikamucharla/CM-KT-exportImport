@@ -1,0 +1,51 @@
+#!/bin/bash
+if [ $# -ne 3 ]; then
+echo "USAGE: $0 ExportDirectory ContainerName SasToken"
+echo "Example: $0 {{ exp_dir }} {{ container_url }} {{ sas_token }}"
+exit 2
+fi
+
+exp_dir=$1
+container_url=$2
+sas_token=$3
+
+# Disable histexpand so ! can be used in azcopy pattern in double quotes.
+set +o histexpand
+# So we can ctrl-c within the while loop.
+trap exit SIGINT
+
+azscp() {
+local src=${1}
+local dst=${2}
+azcopy list "${dst}" >/dev/null 2>&1 || azcopy sync "${src}" "${dst}"
+}
+
+cd "{{ exp_dir }}" || exit
+while true; do
+sgns=$(ls {{ exp_dir }}/*.SGN | awk -F / '{print $NF}' | cut -d . -f 1)
+if [[ -z "${sgns}" ]]; then
+# Sync any files such as LABELIDX.ASC and DDL files.
+azcopy sync . "{{ container_url }}?{{ sas_token }}" --recursive --exclude-pattern="*.SGN" --exclude-path="export_statistics.properties"
+sleep 60
+continue
+fi
+
+# Copy any other initial files, excluding any that match the pattern of signal files.
+sgns_pat=$(echo "${sgns}" | tr ' ' '|')
+azcopy sync ABAP "{{ container_url }}/?{{ sas_token }}" --recursive --exclude-pattern=".*(${sgns_pat}).*"
+for sgn in ${sgns}; do
+# The pattern (?!foo) excludes foo, so
+# we have a double negative. Therefore azcopy only _includes_ patterns with foo.
+azcopy sync ABAP "{{ container_url }}/{{ sas_token }}" --recursive --exclude-pattern="(?!.*\b${sgn}\b).*"
+azscp "{{ exp_dir }}/${sgn}.SGN" "{{ container_url }}/'${sgn}.SGN'?{{ sas_token }}"
+done
+
+if [ -f "{{ exp_dir }}/export_statistics.properties" ]; then
+# Export is done. Do a final sync of any remaining files, first excluding signal
+# files to ensure all data files are copied, and then including signal files.
+azcopy sync . "{{ container_url }}?{{ sas_token }}" --recursive --exclude-pattern="*.SGN" --exclude-path="export_statistics.properties"
+azcopy sync . "{{ container_url }}?{{ sas_token }}" --recursive
+break
+fi
+sleep 30
+done

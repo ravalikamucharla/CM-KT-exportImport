@@ -1,0 +1,8 @@
+---
+
+- hosts: localhost
+  tags: prereq
+  vars:
+    system_type: source
+  roles:
+    - abap_prereqs

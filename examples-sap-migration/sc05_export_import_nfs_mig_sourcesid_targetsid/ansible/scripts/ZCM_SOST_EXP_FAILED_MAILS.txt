@@ -1,0 +1,382 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SOST_EXP_FAILED_MAILS                   *
+* Title               :   Check failed mails in SOST                  *
+* Purpose             :   This report is used to check and display    *
+*                     :   mails with waiting and error status from    *
+*                     :   SOST                                        *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SOST OR SAPLSBCS_OUT                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* RSBASIDOC           :     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-11-2021  Initial  Ashwini B G   Local       To check failed mails *
+*                                               in SOST               *
+*09-06-2022  V001     Soumya Ray    Local       To fetch data of part *
+*                                               icular number of days *
+*---------------------------------------------------------------------*
+REPORT zcm_sost_exp_failed_mails.
+
+CLASS lcl_sost_failed_mails DEFINITION.
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF gty_addr_types_t,
+             mandt     TYPE mandt,
+             addr_type TYPE sx_addr_type,
+             method    TYPE sx_methods,
+             extern    TYPE sx_boolean,
+             api1name  TYPE so_adr_typ,
+             text(30),
+           END   OF gty_addr_types_t,
+
+           gtt_addr_types_t TYPE STANDARD TABLE OF gty_addr_types_t.
+
+    DATA: gs_addr_types TYPE gty_addr_types_t.
+
+    METHODS: get_sendart_longtexts
+      EXPORTING it_addr_types TYPE gtt_addr_types_t.
+
+    METHODS: end_null_check
+      CHANGING is_prefinal TYPE string.
+
+ENDCLASS.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep         TYPE c VALUE '|'                  LENGTH 1,
+             lc_msg         TYPE c VALUE
+             'List of failed mails in SOST'                   LENGTH 80,
+             lc_no_input    TYPE c VALUE 'No input given'     LENGTH 20,
+             lc_inc_input   TYPE c VALUE 'Incorrect input'    LENGTH 20,
+             lc_act_exp     TYPE c VALUE 'EXPORT'             LENGTH 6,
+             lc_no_data     TYPE c VALUE 'No data found'      LENGTH 20,
+             lc_no_text     TYPE c VALUE '<No text found>'    LENGTH 30,
+             lc_status      TYPE c VALUE 'Status'             LENGTH 6,
+             lc_send_meth   TYPE c VALUE 'Send Method'        LENGTH 11,
+             lc_doc_title   TYPE c VALUE 'Doc. Title'         LENGTH 10,
+             lc_sender      TYPE c VALUE 'Sender'             LENGTH 6,
+             lc_recipient   TYPE c VALUE 'Recipient'          LENGTH 9,
+             lc_send_date   TYPE c VALUE 'Send date'          LENGTH 9,
+             lc_send_time   TYPE c VALUE 'Send time'          LENGTH 9,
+             lc_msg_no      TYPE c VALUE 'Msg no'             LENGTH 6,
+             lc_status_text TYPE c VALUE 'Status text'        LENGTH 11,
+             lc_set         TYPE c VALUE 'X'                  LENGTH 1,
+             lc_w           TYPE c VALUE 'W'                  LENGTH 1,
+             lc_e           TYPE c VALUE 'E'                  LENGTH 1,
+             lc_waiting     TYPE c VALUE 'Waiting'            LENGTH 7,
+             lc_error       TYPE c VALUE 'Error'              LENGTH 5.
+
+  TYPES: ltt_tab_sost TYPE soxsp2tab.
+
+  TYPES: BEGIN OF lty_addr_types_t,
+           mandt     TYPE mandt,
+           addr_type TYPE sx_addr_type,
+           method    TYPE sx_methods,
+           extern    TYPE sx_boolean,
+           api1name  TYPE so_adr_typ,
+           text(30),
+         END   OF lty_addr_types_t.
+
+  DATA: ls_input             TYPE tab512,
+        ls_output            TYPE tab512,
+        lv_action            TYPE char6,
+        ls_soststatus        TYPE soststatus,
+        lt_send_processes    TYPE ltt_tab_sost,
+        ls_send_processes    TYPE soxsp2,
+        lt_addr_types        TYPE STANDARD TABLE OF lty_addr_types_t,
+        ls_addr_types        TYPE lty_addr_types_t,
+        lo_sost_failed_mails TYPE REF TO lcl_sost_failed_mails,
+        ls_prefinal          TYPE string,
+        lv_start_date        TYPE c LENGTH 10,
+        lv_start_time        TYPE c LENGTH 8,
+*  Begin of changes in V001
+        lv_days              TYPE n,
+        lv_caldate           TYPE sy-datum.
+*  End of changes in V001
+
+  FIELD-SYMBOLS: <fs_sp> TYPE soxsp2.
+
+  " Clear all variables before use
+  CLEAR: ls_input,
+         lv_action,
+         lv_caldate, lv_days. "+V001
+
+  FREE: lt_output.
+
+  " Title
+  ls_output = lc_msg.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Read input values from Python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO lv_action lv_days. "+V002
+  ELSE.
+    " No input given
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CREATE OBJECT lo_sost_failed_mails.
+
+  CASE lv_action.
+
+    WHEN lc_act_exp. "EXPORT
+
+* Under the pre-migration activities, mails which are in either
+* waiting or error status are exported to Python.
+* This data is displayed in transaction SOST.
+
+* Below code is copied from standard function group SAPLSBCS_OUT
+
+      " Fill status flag only for waiting and error status
+      CLEAR: ls_soststatus.
+      ls_soststatus-wait = lc_set.
+      ls_soststatus-error = lc_set.
+
+      " Read all the mails with either waiting or failed status
+      FREE: lt_send_processes.
+      CALL FUNCTION 'SX_SNDREC_SELECT'
+        EXPORTING
+          status  = ls_soststatus
+        IMPORTING
+          sndrecs = lt_send_processes.
+
+*   Begin of changes in V001
+      "Calculate the date as per days input prior to current
+      lv_caldate = sy-datum - lv_days.
+
+      "Sort by date and time
+      SORT lt_send_processes BY stat_date DESCENDING
+      stat_time DESCENDING.
+
+      "Delete entries below date range
+      DELETE lt_send_processes WHERE stat_date LT lv_caldate.
+*   End of changes in V001
+
+      IF lt_send_processes[] IS NOT INITIAL.
+
+        " insert status texts in main table
+        PERFORM insert_text IN PROGRAM saplsbcs_out
+        USING lt_send_processes.
+
+        SORT lt_send_processes[]
+        DESCENDING BY stat_date stat_time.
+
+        " get sender and receiver and put them into main table
+        PERFORM get_sender_and_receiver IN PROGRAM saplsbcs_out
+        USING lt_send_processes.
+
+        IF lo_sost_failed_mails IS BOUND.
+
+          " Fetch different SAP address types and for each
+          " address type read a text from the general text
+          " table for SAPoffice
+          FREE: lt_addr_types.
+          CALL METHOD lo_sost_failed_mails->get_sendart_longtexts
+            IMPORTING
+              it_addr_types = lt_addr_types.
+
+        ENDIF.
+
+        SORT: lt_addr_types BY addr_type.
+
+        " Longtext for sendart(sender type)
+        LOOP AT lt_send_processes ASSIGNING <fs_sp>.
+          CLEAR: ls_addr_types.
+          READ TABLE lt_addr_types INTO ls_addr_types
+          WITH KEY addr_type = <fs_sp>-sndart BINARY SEARCH.
+          IF sy-subrc NE 0.
+            <fs_sp>-sndart_l = lc_no_text.
+          ELSE.
+            <fs_sp>-sndart_l = ls_addr_types-text.
+          ENDIF.
+        ENDLOOP.
+
+        UNASSIGN: <fs_sp>.
+
+        " Heading Column
+        CONCATENATE lc_status
+                    lc_send_meth
+                    lc_doc_title
+                    lc_sender
+                    lc_recipient
+                    lc_send_date
+                    lc_send_time
+                    lc_msg_no
+                    lc_status_text
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        " SOST failed mails data
+        CLEAR: ls_send_processes,ls_prefinal.
+        LOOP AT lt_send_processes INTO ls_send_processes.
+
+          " Pass the waiting or error status text
+          IF ls_send_processes-status EQ lc_w.
+            ls_send_processes-status = lc_waiting.
+          ELSEIF ls_send_processes-status EQ lc_e.
+            ls_send_processes-status = lc_error.
+          ENDIF.
+
+          " Set date to dd-mm-yyyy format
+          IF ls_send_processes-stat_date IS NOT INITIAL.
+            CLEAR: lv_start_date.
+            CONCATENATE ls_send_processes-stat_date+6(2) '-'
+                        ls_send_processes-stat_date+4(2) '-'
+                        ls_send_processes-stat_date+0(4)
+                        INTO lv_start_date.
+          ENDIF.
+
+          " Set time to hh:mm:ss format
+          IF ls_send_processes-stat_time IS NOT INITIAL.
+            CLEAR: lv_start_time.
+            CONCATENATE ls_send_processes-stat_time+0(2) ':'
+                        ls_send_processes-stat_time+2(2) ':'
+                        ls_send_processes-stat_time+4(2)
+                        INTO lv_start_time.
+          ENDIF.
+
+          CONCATENATE ls_send_processes-status
+                      ls_send_processes-sndart_l
+                      ls_send_processes-titel
+                      ls_send_processes-sender
+                      ls_send_processes-address
+                      lv_start_date
+                      lv_start_time
+                      ls_send_processes-msgno
+                      ls_send_processes-msgtxt INTO ls_output
+                      SEPARATED BY lc_sep.
+
+          ls_prefinal = ls_output.
+
+          IF lo_sost_failed_mails IS BOUND.
+
+            " Add NULL if last field value is blank
+            CALL METHOD lo_sost_failed_mails->end_null_check
+              CHANGING
+                is_prefinal = ls_prefinal.
+
+          ENDIF.
+
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_send_processes,ls_output,ls_prefinal.
+        ENDLOOP.
+
+        " Add NULL value if any of the field value is blank
+        DO.
+          REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+          IN TABLE lt_output WITH '|NULL|'.
+          FIND '||' IN TABLE lt_output.
+          IF sy-subrc <> 0.
+            EXIT .
+          ENDIF.
+        ENDDO.
+
+      ELSE.
+
+        " No data found
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      RETURN.
+
+  ENDCASE.
+
+ENDFORM.
+CLASS lcl_sost_failed_mails IMPLEMENTATION.
+
+  METHOD get_sendart_longtexts.
+
+    CONSTANTS: lc_extern    TYPE sxaddrtype-extern    VALUE 'X',
+               lc_addr_type TYPE sxaddrtype-addr_type VALUE 'TEL',
+               lc_x40       TYPE sx_addr_type         VALUE 'X40',
+               lc_rml       TYPE sx_addr_type         VALUE 'RML',
+               lc_fax       TYPE sx_addr_type         VALUE 'FAX',
+               lc_int       TYPE sx_addr_type         VALUE 'INT',
+               lc_pag       TYPE sx_addr_type         VALUE 'PAG',
+               lc_prt       TYPE sx_addr_type         VALUE 'PRT',
+               lc_292       TYPE tsotx-txtnum         VALUE '292',
+               lc_293       TYPE tsotx-txtnum         VALUE '293',
+               lc_294       TYPE tsotx-txtnum         VALUE '294',
+               lc_296       TYPE tsotx-txtnum         VALUE '296',
+               lc_301       TYPE tsotx-txtnum         VALUE '301',
+               lc_302       TYPE tsotx-txtnum         VALUE '302'.
+
+
+    " Read all different address types
+    FREE: it_addr_types.
+    SELECT *
+      FROM sxaddrtype
+      INTO TABLE it_addr_types
+      WHERE  extern EQ lc_extern " 'X'
+      AND addr_type NE lc_addr_type. " 'TEL'
+    IF sy-subrc EQ 0.
+      " For each address type read a text from the general text
+      " table for SAPoffice
+      LOOP AT it_addr_types INTO gs_addr_types.
+        CASE gs_addr_types-addr_type.
+          WHEN lc_x40. " X40
+            PERFORM tsotx_select IN PROGRAM sapfssoa
+            USING lc_292 gs_addr_types-text.
+          WHEN lc_rml. " RML
+            PERFORM tsotx_select IN PROGRAM sapfssoa
+            USING lc_293 gs_addr_types-text.
+          WHEN lc_fax. " FAX
+            PERFORM tsotx_select IN PROGRAM sapfssoa
+            USING lc_294 gs_addr_types-text.
+          WHEN lc_int. " INT
+            PERFORM tsotx_select IN PROGRAM sapfssoa
+            USING lc_296 gs_addr_types-text.
+          WHEN lc_pag. " PAG
+            PERFORM tsotx_select IN PROGRAM sapfssoa
+            USING lc_301 gs_addr_types-text.
+          WHEN lc_prt. " PRT
+            PERFORM tsotx_select IN PROGRAM sapfssoa
+            USING lc_302 gs_addr_types-text.
+          WHEN OTHERS.
+            MOVE gs_addr_types-addr_type TO gs_addr_types-text.
+        ENDCASE.
+        MODIFY it_addr_types FROM gs_addr_types.
+        CLEAR: gs_addr_types.
+      ENDLOOP.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD end_null_check.
+
+    DATA lv_last_char TYPE char1.
+
+    lv_last_char = substring( val = is_prefinal
+                     off = strlen( is_prefinal ) - 1
+                     len = 1 ).
+    IF lv_last_char = '|'.
+      CONCATENATE is_prefinal 'NULL'
+        INTO is_prefinal.
+    ENDIF.
+
+  ENDMETHOD.                    "end_null_check
+ENDCLASS.

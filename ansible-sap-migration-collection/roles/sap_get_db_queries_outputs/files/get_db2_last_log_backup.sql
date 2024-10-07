@@ -1,0 +1,1 @@
+db2 "select START_TIME operationtype, substr(lastlog,1,100) from sysibmadm.db_history where operation='B' and sqlcode is null order by start_time desc"

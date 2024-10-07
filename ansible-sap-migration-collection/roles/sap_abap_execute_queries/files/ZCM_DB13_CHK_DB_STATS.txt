@@ -1,0 +1,732 @@
+*---------------------------------------------------------------------*
+* Program Name        :    ZCM_DB13_CHK_DB_STATS                      *
+* Title               :    Logical Systems                            *
+* Purpose             :    This report is used extract status and job *
+*                          log of db check job sumbitted  (tcode DB13)*
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DB13                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* SDBAH                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-17-2020  Initial   Yasaswini     Local       To extract status and*
+*                                                log of db check job  *
+*                                                sumbitted            *
+*10-14-2022  V001      Soumya Ray    Local       To remove inline dec-*
+*                                                larations            *
+*---------------------------------------------------------------------*
+
+
+REPORT zcm_db13_chk_upd_db_stats.
+FORM get_config
+               TABLES ft_input  STRUCTURE tab512
+                      ft_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c          VALUE '|',
+             lc_export    TYPE char80     VALUE 'EXPORT',
+             lc_enterdate TYPE string     VALUE 'Enterdate',
+             lc_entertime TYPE string     VALUE 'Entertime',
+             lc_text      TYPE string     VALUE 'Text',
+             lc_msgid     TYPE string     VALUE 'Messageid',
+             lc_msgno     TYPE string     VALUE 'Msgno',
+             lc_msgtype   TYPE string     VALUE 'Msgtype',
+             lc_msg       TYPE string
+             VALUE 'Check and update optimizer statistics',
+             lc_nojob     TYPE string     VALUE
+             'No job scheduled for last one week',
+             lc_status    TYPE char20     VALUE 'Status',
+             lc_joblog    TYPE char20     VALUE 'Joblog',
+* Begin of changes in V001
+             lc_inc_input TYPE c VALUE 'Incorrect input'    LENGTH 20,
+             lc_noinput   TYPE c VALUE 'No input given'     LENGTH 20,
+             lc_null      TYPE c VALUE 'NULL'               LENGTH 4.
+* End of changes in V001
+
+  DATA:lv_action          TYPE char8,
+       lv_time            TYPE sdba_time,
+       ls_sdbah           TYPE sdbah,
+       lv_sysid           TYPE sysysid,
+       lv_datum           TYPE sy-datum,
+       r_data             TYPE RANGE OF sdba_crts,
+       s_data             LIKE LINE OF r_data,
+       lt_sdbah           TYPE STANDARD TABLE OF sdbah,
+       lt_action_buffer   TYPE  db6jo_action_table,
+       lt_logs            TYPE db6jo_log_entry_table,
+       lv_cretstmp        TYPE sdba_crts,
+       lv_msg             TYPE string,
+       ls_output          TYPE tab512,
+       lv_cretstmp1       TYPE sdba_crts,
+       lv_date1           TYPE sy-datum,
+       lt_batchlog        TYPE db6jo_batchlog_table,
+       lv_from_date       TYPE sydatum,
+       lv_to_date         TYPE sydatum,
+       lv_period          TYPE i,
+* Begin of changes in V001
+       ls_input           TYPE tab512.
+
+  FIELD-SYMBOLS: <fs_log> TYPE tbtc5.
+
+  " Heading Columns
+  CLEAR: ls_output.
+  ls_output = lc_msg.
+  APPEND ls_output TO ft_output.
+  CLEAR: ls_output.
+
+* End of changes in V001
+
+  READ TABLE ft_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO ft_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  CLEAR: lv_action,
+  lv_datum,
+  lv_time,
+  lv_cretstmp1,
+  lv_from_date,
+  lv_to_date,
+  lv_period,
+  ls_sdbah,
+  lv_sysid.
+
+  REFRESH: lt_sdbah[],
+  lt_action_buffer,
+  lt_logs,
+  lt_batchlog.
+
+
+  lv_action = ls_input.
+  lv_datum = sy-datum.
+  lv_time  = sy-uzeit.
+
+  "system id
+  lv_sysid = sy-sysid.
+
+  CASE lv_action.
+    WHEN lc_export.
+      "check if Job ran successfully in last one week
+
+      CONCATENATE lv_datum lv_time INTO lv_cretstmp.
+
+      lv_date1 = lv_datum - 7.
+      CONCATENATE lv_date1 lv_time INTO lv_cretstmp1.
+
+      s_data-option = 'BT'.
+      s_data-sign   = 'I'.
+      s_data-low    = lv_cretstmp1.
+      s_data-high   = lv_cretstmp.
+      APPEND s_data TO r_data.
+
+      SELECT * FROM sdbah
+      INTO TABLE lt_sdbah
+      WHERE beg IN r_data
+      AND funct = 'sta'
+      AND sysid = lv_sysid
+      AND obj = 'ALL'.
+      IF sy-subrc EQ 0.
+        SORT lt_sdbah BY beg DESCENDING.
+        READ TABLE lt_sdbah INTO ls_sdbah INDEX 1.
+        "needs to send the date
+        lv_from_date = ls_sdbah-beg+0(8).
+        lv_to_date   = lv_from_date.
+        lv_period    = '1'.
+
+        PERFORM log_action_buffer TABLES lt_action_buffer
+          lt_logs
+          lt_batchlog
+        USING  lv_from_date
+              lv_to_date
+              lv_period
+        CHANGING lv_msg.
+      ELSE.
+        lv_msg = lc_nojob .
+      ENDIF.
+
+      ls_output = lc_status.
+      APPEND ls_output TO ft_output.
+      CLEAR: ls_output.
+
+      "Status
+      ls_output = lv_msg.
+      APPEND ls_output TO ft_output.
+      CLEAR: ls_output.
+
+
+      IF NOT lt_batchlog IS INITIAL.
+
+        "Space
+        CLEAR: ls_output.
+        APPEND ls_output TO ft_output.
+        "Job log
+        CLEAR: ls_output.
+        ls_output = lc_joblog.
+        APPEND ls_output TO ft_output.
+
+        CONCATENATE lc_enterdate lc_sep
+        lc_entertime lc_sep
+        lc_text lc_sep
+        lc_msgid lc_sep
+        lc_msgno lc_sep
+        lc_msgtype INTO ls_output.
+        APPEND ls_output TO ft_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_batchlog ASSIGNING <fs_log>.
+* Begin of changes in V001
+          IF <fs_log>-msgtype IS INITIAL.
+            <fs_log>-msgtype = lc_null.
+          ENDIF.
+* End of changes in V001
+          CONCATENATE <fs_log>-enterdate lc_sep
+          <fs_log>-entertime lc_sep
+          <fs_log>-text lc_sep
+          <fs_log>-msgid lc_sep
+          <fs_log>-msgno lc_sep
+          <fs_log>-msgtype INTO ls_output.
+          APPEND ls_output TO ft_output.
+          CLEAR: ls_output.
+        ENDLOOP.
+        PERFORM null_check TABLES  ft_output.
+      ENDIF.
+
+* Begin of changes in V001
+    WHEN OTHERS.
+    " Incorrect input
+    ls_output = lc_inc_input.
+    APPEND ls_output TO ft_output.
+    CLEAR ls_output.
+* End of changes in V001
+
+  ENDCASE.
+ENDFORM.
+FORM status  TABLES  lt_logs   TYPE db6jo_log_entry_table
+             USING   ls_action TYPE LINE OF db6jo_action_table
+             CHANGING lv_msg.
+
+  DATA:
+    seconds      TYPE i,
+    wa_log       TYPE db6jo_log_entry,
+    start        TYPE db6tstamp_struct,
+    overdue      TYPE db6tstamp_struct,
+    gone         TYPE db6tstamp_struct,
+    running      TYPE db6tstamp_struct,
+    endtime      TYPE db6tstamp_struct,
+    status       TYPE i,
+    ls_calaction TYPE REF TO cl_dba_config.
+
+  start-date = ls_action-date.
+  start-time = ls_action-time.
+
+  IF ls_action-log_ref IS INITIAL.
+    gone    = start.
+    gone-date = gone-date +
+    cl_dba_core_constants=>co_retain_days_dbalog.
+
+    overdue = start.
+    overdue =
+    cl_db6_calendar_tool=>add_seconds_to_timestamp( seconds   = 7200
+    timestamp = overdue ).
+    IF start-date > sy-datum OR
+    ( start-date = sy-datum AND
+    start-time >= sy-uzeit    ).
+      status = cl_db6_calendar_action=>act_scheduled.
+    ELSEIF gone-date < sy-datum OR
+      ( gone-date = sy-datum AND
+      gone-time <= sy-uzeit ).
+      status = cl_db6_calendar_action=>act_status_gone.
+    ELSEIF overdue-date < sy-datum OR
+      ( overdue-date = sy-datum AND
+      overdue-time <= sy-uzeit    ).
+      status = cl_db6_calendar_action=>act_overdue.
+    ELSE.
+      status = cl_db6_calendar_action=>act_status_undefined.
+    ENDIF.
+  ELSE.
+    READ TABLE lt_logs INDEX ls_action-log_ref INTO wa_log.
+    CASE wa_log-log-returncode.
+      WHEN 0.
+        status = cl_db6_calendar_action=>act_finished.
+      WHEN 1.
+        status = cl_db6_calendar_action=>act_warning.
+      WHEN cl_db6_rc=>x_undefined.
+        IF wa_log-log-endtime IS INITIAL.
+          CREATE OBJECT ls_calaction TYPE cl_dba_config.
+          seconds = ls_calaction->get_batch_overdue_time( ).
+          running =
+      cl_db6_calendar_tool=>add_seconds_to_timestamp( seconds = seconds
+          timestamp = start ).
+
+        ELSE.
+*         if (estimated) endtime is updated during runtime of the job
+*         the job gets status failed if endtime + 12 hours is reached
+          endtime = wa_log-log-endtime.
+          running =
+          cl_db6_calendar_tool=>add_hours_to_timestamp( hours     = 12
+          timestamp = endtime ).
+        ENDIF.
+        IF running-date > sy-datum OR
+        ( running-date = sy-datum AND
+        running-time > sy-uzeit     ).
+          status = cl_db6_calendar_action=>act_running.
+        ELSE.
+          status = cl_db6_calendar_action=>act_error.
+        ENDIF.
+      WHEN OTHERS.
+        status = cl_db6_calendar_action=>act_error.
+    ENDCASE.
+  ENDIF.
+
+  IF status <> cl_db6_calendar_action=>act_status_undefined.
+    lv_msg = cl_dba_image=>image_of_action_status( status ).
+  ELSE.
+    lv_msg = 'Not available'(049).
+  ENDIF.
+ENDFORM.
+FORM null_check  TABLES   lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  LOG_ACTION_BUFFER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LS_SDBAP  text
+*      -->P_LV_FROM_DATE  text
+*      -->P_LV_TO_DATE  text
+*      -->P_LV_PERIOD  text
+*----------------------------------------------------------------------*
+FORM log_action_buffer TABLES lt_action_buffer TYPE db6jo_action_table
+                              lt_logs TYPE db6jo_log_entry_table
+                              lt_batchlog TYPE  db6jo_batchlog_table
+                        USING lv_from_date TYPE sy-datum
+                              lv_to_date TYPE sy-datum
+                              lv_period TYPE i
+                     CHANGING lv_msg.
+
+  DATA: lt_sdbap1            TYPE STANDARD TABLE OF sdbap,
+        ls_sdbap1            TYPE sdbap,
+        ls_plan              TYPE sdbap,
+        lt_expanded_planning TYPE TABLE OF sdbap,
+        ls_action_entry      TYPE db6jo_action,
+        ls_planning_entry    TYPE db6jo_planning_entry,
+        lv_first_planning    TYPE db6tstamp_struct,
+        ls_from              TYPE db6tstamp_struct,
+        ls_to                TYPE db6tstamp_struct,
+        current_planning     TYPE db6tstamp_struct,
+        delta                TYPE p,
+        lv_period_in_seconds TYPE i,
+        lt_planning_buffer   TYPE STANDARD TABLE OF
+        db6jo_planning_entry,
+        lv_planning_index    TYPE sytabix,
+        lv_logname           TYPE db6path,
+        ls_from_oracle       TYPE db6tstamp_struct,
+        lo_calender_tool     TYPE REF TO cl_db6_calendar_tool,
+        lo_calenderdb        TYPE REF TO cl_db6_calendar_action,
+        lv_sys_id            TYPE sy-sysid,
+        lo_sys               TYPE REF TO cl_db6_sys,
+        lo_exec              TYPE REF TO cx_db6_sys,
+        lv_function_name     TYPE syrepid,
+        lt_db6_logs          TYPE TABLE OF db6pmprot,
+        ls_log_entry         TYPE db6jo_log_entry,
+        system_id            TYPE db6navsyst-sysid,
+        ls_action            TYPE LINE OF db6jo_action_table,
+        wa_recurrence        TYPE sdba_recur,
+        ls_data              TYPE sdbap.
+
+  FIELD-SYMBOLS: <log>             TYPE db6pmprot.
+
+  REFRESH: lt_sdbap1[].
+  CLEAR: ls_sdbap1.
+
+  CREATE OBJECT lo_calenderdb.
+  CREATE OBJECT lo_calender_tool.
+  "get all entries
+  SELECT * FROM sdbap INTO TABLE lt_sdbap1
+  WHERE sysid = sy-sysid.
+  SORT lt_sdbap1 BY daye timee ASCENDING.
+
+  LOOP AT lt_sdbap1 INTO ls_sdbap1.
+    ls_planning_entry-data = ls_sdbap1.
+    APPEND ls_planning_entry TO lt_planning_buffer.
+    CLEAR: ls_sdbap1, ls_planning_entry.
+  ENDLOOP.
+  "action log
+  LOOP AT lt_planning_buffer INTO ls_planning_entry.
+    ls_action_entry-plan_ref = sy-tabix.
+    "system id
+    ls_action_entry-sysid = sy-sysid.
+    lv_first_planning =
+    lo_calenderdb->first_start( ls_planning_entry-data ).
+    lv_period_in_seconds =
+    lo_calenderdb->action_period( ls_planning_entry-data ).
+
+    DO 24 TIMES.
+      ls_from-time = ( sy-index - 1 ) * 3600.
+      ls_to-time   = ls_from-time + 3599.
+      ls_from-date = lv_from_date.
+      DO lv_period TIMES.
+        ls_to-date = ls_from-date.
+        current_planning = lv_first_planning.
+        IF ls_planning_entry-data-period <> 0      AND
+              current_planning  <  ls_from.
+          delta =
+          lo_calender_tool->time_diff_struct( start = current_planning
+          endt = ls_to ) .
+          delta =
+          delta DIV lv_period_in_seconds * lv_period_in_seconds.
+          current_planning =
+          lo_calender_tool->add_seconds_to_timestamp( seconds = delta
+          timestamp =  current_planning ).
+        ENDIF.
+        IF current_planning BETWEEN ls_from AND ls_to AND
+        ( ls_planning_entry-data-deltstmp >
+              current_planning OR
+        ls_planning_entry-data-deltstmp IS INITIAL ).
+          ls_action_entry-day =
+          lo_calender_tool->daynumber_of_date(
+          current_planning-date ).
+          ls_action_entry-date = current_planning-date.
+          ls_action_entry-time = current_planning-time.
+          APPEND ls_action_entry TO lt_action_buffer.
+
+          ls_plan = ls_planning_entry-data.
+          ls_plan-starttstmp = current_planning.
+          IF ls_plan-sysid <> '*'.
+            APPEND ls_plan TO lt_expanded_planning.
+          ENDIF.
+        ENDIF.
+        ls_from-date = ls_from-date + 1.
+      ENDDO.
+    ENDDO.
+    CLEAR: ls_planning_entry.
+  ENDLOOP.
+*  Read DBA log entries
+  ls_to-date = lv_from_date + lv_period - 1.
+
+*FORM log_buffer .
+  lv_sys_id = sy-sysid. "System ID
+
+  TRY .
+      cl_db6_sys=>get_sys_ref(
+      EXPORTING
+        system_id     = lv_sys_id
+        RECEIVING
+        sys_ref       = lo_sys        ).
+
+    CATCH cx_db6_sys INTO lo_exec.
+
+  ENDTRY.
+***Read the database name
+*check with IF lo_sys IS NOT BOUND or lo_sys->con_ref IS INITIAL.
+  IF lo_sys IS BOUND.
+
+    CLEAR: lt_logs[].
+
+    CONCATENATE lo_sys->sys_data-dbsys '_LOG_READ'
+    INTO lv_function_name.
+*    function_name = 'ORA_LOG_READ'.
+    CALL FUNCTION lv_function_name
+      DESTINATION lo_sys->sys_data-rfcdest
+      EXPORTING
+        connection = lo_sys->sys_data-dbcname
+        from_date  = lv_from_date
+        from_time  = '000000'
+        to_date    = lv_to_date
+        to_time    = '235959'
+        system_id  = system_id
+      TABLES
+        logs       = lt_db6_logs
+        plannings  = lt_expanded_planning.
+** Transfer all log entries except Userexit Log
+    LOOP AT lt_db6_logs ASSIGNING <log>
+    WHERE progid <> db6jo_id_userexit.
+      ls_log_entry-external = 'X'."Default: Assume
+      ls_log_entry-log      = <log>.
+      APPEND ls_log_entry TO lt_logs.
+    ENDLOOP.
+**
+    SORT lt_logs[] BY log-progid log-starttime
+    log-returncode DESCENDING.
+  ENDIF.
+  SORT lt_action_buffer DESCENDING BY date day time.
+
+  LOOP AT lt_action_buffer INTO ls_action_entry.
+
+    lv_planning_index = sy-tabix.
+
+    ls_from-date = ls_action_entry-date.
+    ls_from-time = ls_action_entry-time.
+    READ TABLE lt_planning_buffer INDEX ls_action_entry-plan_ref
+    INTO ls_planning_entry.
+
+    IF lo_sys->sys_data-dbsys = 'ORA' AND
+    ls_planning_entry-data-sysid <> '*' AND
+    ls_planning_entry-data-btype <>
+          cl_db6_calendar_cfg_meta=>co_id_nls_cleanup.
+      ls_from_oracle = ls_from.
+      IF lo_sys->sys_data-saprel(1) = '4'.
+* start search 60 sec before, due to time differences  saprel < 46
+        ls_from_oracle =
+        cl_db6_calendar_tool=>sub_seconds_from_timestamp( seconds = 60
+        timestamp = ls_from_oracle ).
+        LOOP AT lt_logs INTO ls_log_entry
+        WHERE log-starttime  >= ls_from_oracle     AND
+        log-system_id   = ls_planning_entry-data-sysid  AND
+              external        =  'X'.
+
+          IF  ls_planning_entry-data-btype = ls_log_entry-log-progid
+                OR
+          ls_planning_entry-data-btype = 'ALGOF' AND
+                ls_log_entry-log-progid = 'ALLOF' OR
+          ls_planning_entry-data-btype = 'ALLOG' AND
+                ls_log_entry-log-progid = 'ALL' OR
+          ls_planning_entry-data-btype = 'FLGOF' AND
+                ls_log_entry-log-progid = 'FLLOF' OR
+          ls_planning_entry-data-btype = 'FLLOG' AND
+                ls_log_entry-log-progid = 'FLL' OR
+          ls_planning_entry-data-btype = 'ILGOF' AND
+                ls_log_entry-log-progid = 'INCOF' OR
+          ls_planning_entry-data-btype = 'INLOG' AND
+                ls_log_entry-log-progid = 'INCR'.
+            ls_log_entry-external = space.
+            MODIFY lt_logs FROM ls_log_entry INDEX sy-tabix.
+            ls_action_entry-log_ref = sy-tabix.
+            MODIFY lt_action_buffer
+            FROM ls_action_entry INDEX lv_planning_index.
+            EXIT.
+          ENDIF.
+        ENDLOOP.
+      ELSE.
+* start search 1200 sec before, due to time differences
+        ls_from_oracle =
+        cl_db6_calendar_tool=>sub_seconds_from_timestamp( seconds
+        = 1200
+        timestamp = ls_from_oracle ).
+        lv_logname = ls_planning_entry-data-btype.
+        OVERLAY lv_logname WITH '___________________'.
+        MOVE ls_planning_entry-data-starttstmp TO lv_logname+5.
+        LOOP AT lt_logs INTO ls_log_entry
+        WHERE log-commndline  = lv_logname.
+          ls_log_entry-external = space.
+          MODIFY lt_logs FROM ls_log_entry INDEX sy-tabix.
+          ls_action_entry-log_ref = sy-tabix.
+          MODIFY lt_action_buffer
+          FROM ls_action_entry INDEX lv_planning_index.
+          EXIT.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+  "action buffer
+  SORT lt_action_buffer DESCENDING BY time.
+
+  "Job log
+  LOOP AT lt_action_buffer INTO ls_action.
+    IF ls_action-date EQ sy-datum AND ls_action-time LT sy-uzeit .
+      READ TABLE lt_planning_buffer INTO ls_planning_entry
+      INDEX ls_action-plan_ref.
+      ls_data = ls_planning_entry-data.
+      IF ls_data-btype = 'STATS'.
+        EXIT.
+      ENDIF.
+    ELSEIF ls_action-date LT sy-datum .
+      READ TABLE lt_planning_buffer INTO ls_planning_entry
+      INDEX ls_action-plan_ref.
+      ls_data = ls_planning_entry-data.
+      IF ls_data-btype = 'STATS'.
+        EXIT.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+  PERFORM recurrence TABLES lt_planning_buffer
+  USING ls_data
+  CHANGING wa_recurrence .
+  "Job log
+  PERFORM joblog TABLES lt_batchlog
+  USING wa_recurrence
+        ls_action
+        ls_data .
+  "Status
+  PERFORM status TABLES
+    lt_logs
+  USING  ls_action
+  CHANGING lv_msg.
+
+
+ENDFORM.
+
+
+FORM recurrence  TABLES   lt_planning_buffer TYPE db6jo_planning_table
+                 USING    ls_data TYPE sdbap
+                 CHANGING recurrence TYPE sdba_recur.
+
+  FIELD-SYMBOLS: <current> TYPE c.
+  DATA:
+    action_excp       TYPE REF TO cx_db6_calendar_action,
+    offset            TYPE i,
+    action            TYPE sdbap,
+    lo_exec           TYPE REF TO cx_db6_calendar_action,
+    wa_planning_entry TYPE db6jo_planning_entry.
+
+  CLEAR recurrence.
+  action = ls_data.
+  IF action-period <> 0.
+    IF action-daye  = 0 AND
+    action-timee = '240000'.
+*     hourly planning
+      recurrence-period = action-period.
+      recurrence-unit   = 'H'.
+    ELSEIF action-daye = 0.
+*     daily planning
+      recurrence-period = action-period.
+      recurrence-unit = 'D'.
+
+      LOOP AT lt_planning_buffer INTO wa_planning_entry
+      WHERE data-daye     = 0 AND
+      data-btype    = action-btype AND
+      data-cretstmp = action-cretstmp AND
+      data-deltstmp = action-deltstmp .
+        IF wa_planning_entry-data-timee(2) BETWEEN 0 AND 23.
+          offset = wa_planning_entry-data-timee(2).
+          ASSIGN recurrence-hourofday+offset(1) TO <current>.
+          <current> = 'X'.
+        ELSE.
+          TRY .
+          action_excp = cl_dba_cx_factory=>create_db6_calendar_action(
+          class_name  = 'CL_DB6_CALENDAR_ACTION'
+          method_name = 'DETERMINE_RECURRENCE'
+          action      = action-btype
+          rc          = cl_db6_rc=>x_invalid_planning_data ).
+
+          CATCH cx_db6_calendar_action INTO lo_exec.
+
+          ENDTRY.
+
+        ENDIF.
+      ENDLOOP.
+      IF sy-subrc = 4.
+        TRY .
+
+        action_excp = cl_dba_cx_factory=>create_db6_calendar_action(
+        class_name  = 'CL_DB6_CALENDAR_ACTION'
+        method_name = 'DETERMINE_RECURRENCE'
+        action      = action-btype
+        rc          = cl_db6_rc=>x_no_actions_found ).
+
+        CATCH cx_db6_calendar_action INTO lo_exec.
+
+        ENDTRY.
+
+      ENDIF.
+    ELSE.
+*     weekly planning
+      recurrence-period = action-period DIV 7.
+      recurrence-unit = 'W'.
+*     look for all actions of this type scheduled at the same time to
+*     find all days of the week
+      LOOP AT lt_planning_buffer INTO wa_planning_entry
+      WHERE data-timee = action-timee AND
+      data-btype = action-btype AND
+      data-cretstmp = action-cretstmp.
+        IF wa_planning_entry-data-daye BETWEEN 1 AND 7.
+          offset = wa_planning_entry-data-daye - 1.
+          ASSIGN recurrence-dayofweek+offset(1) TO <current>.
+          <current> = 'X'.
+        ELSE.
+          TRY .
+          action_excp = cl_dba_cx_factory=>create_db6_calendar_action(
+          class_name  = 'CL_DB6_CALENDAR_ACTION'
+          method_name = 'DETERMINE_RECURRENCE'
+          action      = action-btype
+          rc          = cl_db6_rc=>x_invalid_planning_data ).
+
+          CATCH cx_db6_calendar_action INTO lo_exec.
+
+          ENDTRY.
+
+        ENDIF.
+      ENDLOOP.
+      IF sy-subrc = 4.
+
+        TRY .
+        action_excp = cl_dba_cx_factory=>create_db6_calendar_action(
+        class_name  = 'CL_DB6_CALENDAR_ACTION'
+        method_name = 'DETERMINE_RECURRENCE'
+        action      = action-btype
+        rc          = cl_db6_rc=>x_no_actions_found ).
+*        RAISE EXCEPTION action_excp.
+        CATCH cx_db6_calendar_action INTO lo_exec.
+
+        ENDTRY.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+
+FORM joblog  TABLES  lt_batchlog TYPE db6jo_batchlog_table
+             USING    wa_recurrence
+                      ls_action TYPE LINE OF db6jo_action_table
+                      ls_data   TYPE sdbap .
+
+  DATA: lo_sys    TYPE REF TO cl_db6_sys,
+        lo_exec   TYPE REF TO cx_db6_sys,
+        lv_sys_id TYPE sy-sysid,
+        timestamp TYPE db6tstamp_struct.
+
+  lv_sys_id = sy-sysid. "System ID
+  TRY .
+      cl_db6_sys=>get_sys_ref(
+      EXPORTING
+        system_id     = lv_sys_id
+        RECEIVING
+        sys_ref       = lo_sys        ).
+
+    CATCH cx_db6_sys INTO lo_exec.
+
+  ENDTRY.
+***Read the database name
+*check with IF lo_sys IS NOT BOUND or lo_sys->con_ref IS INITIAL.
+  IF lo_sys IS BOUND.
+
+    timestamp-date = ls_action-date.
+    timestamp-time = ls_action-time.
+
+    CALL FUNCTION 'DB6_PLAN_GET_BATCHLOG'
+      EXPORTING
+        action                = ls_data
+        recurrence            = wa_recurrence
+        plan_date             = timestamp-date
+        plan_time             = timestamp-time
+        connection            = lo_sys->sys_data-dbcname
+      TABLES
+        messages              = lt_batchlog
+      EXCEPTIONS
+        no_configuration_data = cl_db6_rc=>x_no_configuration_data
+        no_messages_found     = cl_db6_rc=>x_no_messages_found
+        job_error             = cl_db6_rc=>x_job_error
+        OTHERS                = cl_db6_rc=>x_others.
+  ENDIF.
+ENDFORM.

@@ -1,0 +1,188 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SM19_UPD_SEC_AUDIT_PROFILE               *
+* Title               :  Restore security audit profile               *
+* Purpose             :  To restore security audit profile in SM19    *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM19                                                                *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* RSAUPROF                  X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-17-2021  Initial   Soumya Ray   Local       Restore security audit*
+*                                               profile               *
+*---------------------------------------------------------------------*
+REPORT zcm_sm19_upd_sec_audit_profile.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'               LENGTH 1,
+             lc_count_0   TYPE c VALUE '0'               LENGTH 1,
+             lc_msg_head  TYPE c VALUE
+  'Security audit:administrator audit profile restore'   LENGTH 50,
+             lc_unchanged TYPE c VALUE
+             'Security audit profile is unchanged'       LENGTH 50,
+             lc_update    TYPE c VALUE  'U',
+             lc_insert    TYPE c VALUE  'I',
+             lc_delete    TYPE c VALUE  'D',
+             lc_mode      TYPE dd26e-enqmode   VALUE    'E',
+             lc_tabname   TYPE rstable-tabname VALUE    'RSAUPROF',
+             lc_enqueue   TYPE c VALUE
+             'RSAUPROF table failed to lock'            LENGTH 50,
+             lc_umsg      TYPE c VALUE
+             'No of record updated:'                    LENGTH 21,
+             lc_imsg      TYPE c VALUE
+             'No of record inserted:'                   LENGTH 23,
+             lc_dmsg      TYPE c VALUE
+             'No of record deleted:'                    LENGTH 21.
+
+  DATA: lv_lines         TYPE string,
+        ls_input         TYPE tab512,
+        ls_output        TYPE tab512,
+        lv_action        TYPE string,
+        lv_classes       TYPE string,
+        lv_severity      TYPE string,
+        lv_selvar        TYPE string,
+        lv_msgvect       TYPE string,
+        ls_rsauprof      TYPE rsauprof,
+        lv_insert_count  TYPE string,
+        lv_delete_count  TYPE string,
+        lv_update_count  TYPE string,
+        lt_rsauprof_insr TYPE STANDARD TABLE OF rsauprof,
+        lt_rsauprof_del  TYPE STANDARD TABLE OF rsauprof,
+        lt_rsauprof_upd  TYPE STANDARD TABLE OF rsauprof.
+
+  CLEAR: ls_rsauprof, lv_selvar, lv_severity, lv_msgvect, lv_classes,
+  ls_input, ls_output, lv_action, lv_lines, lv_insert_count,
+  lv_delete_count, lv_update_count.
+  FREE: lt_rsauprof_insr, lt_rsauprof_del, lt_rsauprof_upd .
+
+  "Title
+  ls_output = lc_msg_head.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  DESCRIBE TABLE lt_input LINES lv_lines.
+  IF lv_lines > 1. " To check if the imported file has data
+    "Blank check
+    DO .
+      REPLACE ALL OCCURRENCES OF SUBSTRING '|NULL|'
+      IN TABLE lt_input WITH '||'.
+      FIND '|NULL|' IN TABLE lt_input.
+      IF sy-subrc <> 0.
+        EXIT .
+      ENDIF.
+    ENDDO.
+    DELETE lt_input INDEX 1.  " To delete the header line
+  ELSE. " If no data input from PYTHON
+    ls_output = lc_unchanged. "Security audit profile is unchanged
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+
+  LOOP AT lt_input INTO ls_input.
+    SPLIT ls_input AT lc_sep INTO
+    ls_rsauprof-profname
+    ls_rsauprof-slotno
+    ls_rsauprof-currprof
+    lv_classes
+    lv_severity
+    ls_rsauprof-client
+    ls_rsauprof-uname
+    ls_rsauprof-status
+    ls_rsauprof-cuname
+    ls_rsauprof-cdate
+    lv_selvar
+    lv_msgvect
+    lv_action.
+
+    ls_rsauprof-classes = lv_classes.
+    ls_rsauprof-severity = lv_severity.
+    ls_rsauprof-selvar = lv_selvar.
+    ls_rsauprof-msgvect = lv_msgvect.
+
+    CASE lv_action.
+      WHEN lc_update. " Action update 'U'
+        APPEND ls_rsauprof TO lt_rsauprof_upd.
+      WHEN lc_insert.  " Action insert'I'
+        APPEND ls_rsauprof TO lt_rsauprof_insr.
+      WHEN lc_delete.  " Action Delete 'D'
+        APPEND ls_rsauprof TO lt_rsauprof_del.
+      WHEN OTHERS.
+    ENDCASE.
+    CLEAR: ls_rsauprof, lv_selvar, lv_severity, lv_msgvect, lv_classes,
+    ls_input, lv_action.
+  ENDLOOP.
+
+*  FM to enqueue the RSAUPROF table
+  CALL FUNCTION 'ENQUEUE_E_TABLE'
+    EXPORTING
+      mode_rstable   = lc_mode
+      tabname        = lc_tabname
+    EXCEPTIONS
+      foreign_lock   = 1
+      system_failure = 2
+      OTHERS         = 3.
+  IF sy-subrc <> 0. " Table is not locked
+    ls_output = lc_enqueue. " Msg to denote lock of table failed
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  "Deletion of entries from RSAUPROF table
+  IF lt_rsauprof_del IS NOT INITIAL.
+    DELETE rsauprof FROM TABLE lt_rsauprof_del .
+    COMMIT WORK.
+    DESCRIBE TABLE lt_rsauprof_del LINES lv_delete_count.
+  ELSE.
+    lv_delete_count = lc_count_0.
+  ENDIF.
+
+  "Insert of entries from RSAUPROF table
+  IF lt_rsauprof_insr IS NOT INITIAL.
+    MODIFY rsauprof FROM TABLE lt_rsauprof_insr .
+    COMMIT WORK.
+    DESCRIBE TABLE lt_rsauprof_insr LINES lv_insert_count.
+  ELSE.
+    lv_insert_count = lc_count_0.
+  ENDIF.
+
+  "Update of entries from RSAUPROF table
+  IF lt_rsauprof_upd IS NOT INITIAL.
+    UPDATE rsauprof FROM TABLE lt_rsauprof_upd .
+    COMMIT WORK.
+    DESCRIBE TABLE lt_rsauprof_upd LINES lv_update_count.
+  ELSE.
+    lv_update_count = lc_count_0.
+  ENDIF.
+
+* FM to enqueue the RSAUPROF table
+  CALL FUNCTION 'DEQUEUE_E_TABLE'
+  EXPORTING
+    mode_rstable = lc_mode
+    tabname      = lc_tabname.
+
+  CONCATENATE lc_dmsg lv_delete_count INTO ls_output. "Delete message
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CONCATENATE lc_imsg lv_insert_count INTO ls_output. "Insert message
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CONCATENATE lc_umsg lv_update_count INTO ls_output. "Update message
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CLEAR: ls_rsauprof, lv_selvar, lv_severity, lv_msgvect, lv_classes,
+  ls_input,lv_action, lv_lines, lv_insert_count, lv_delete_count,
+  lv_update_count.
+  FREE: lt_rsauprof_insr, lt_rsauprof_del, lt_rsauprof_upd .
+ENDFORM.

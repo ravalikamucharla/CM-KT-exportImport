@@ -1,0 +1,10 @@
+---
+
+- name: Cleanup the resource in target primary system
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_cleanup --force"
+  async: 12000
+  poll: 3
+  register: cleanup_output
+
+- debug:
+    var: cleanup_output

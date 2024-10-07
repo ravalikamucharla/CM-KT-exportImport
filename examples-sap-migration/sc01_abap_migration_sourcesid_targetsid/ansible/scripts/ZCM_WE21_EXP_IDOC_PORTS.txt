@@ -1,0 +1,196 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_WE21_EXP_IDOC_PORTS                     *
+* Title               :   Logical Systems                             *
+* Purpose             :   To Export IDOC ports                        *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* WE21                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* EDIPOA                    X                                         *
+* EDIPORT                   X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*04-09-2020 Initial  Fathima Hussain  Local     To Export IDOC ports  *
+*09-07-2022  V001    Yasaswini K      Local    To pass "No data found"*
+*                                              and to reove dead codes*
+*---------------------------------------------------------------------*
+REPORT zcm_we21_exp_idoc_ports.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c        VALUE '|',
+             lc_export    TYPE char20   VALUE 'EXPORT',
+*  Begin of changes in V001
+             lc_title     TYPE c        VALUE
+             'IDOCPorts'                                   LENGTH 25,
+             lc_ninput    TYPE c        VALUE
+             'No input passed'                             LENGTH 20,
+             lc_err_msg   TYPE c        VALUE
+             'No data found'                               LENGTH 40,
+             lc_inc_input TYPE c        VALUE
+             'Incorrect input'                             LENGTH 20.
+*  End of changes in V001
+
+  DATA: ls_input    TYPE tab512,
+        ls_output   TYPE tab512,
+        ls_prefinal TYPE string,
+        lv_action   TYPE char8.
+
+  CLEAR: ls_input,
+         lv_action.
+
+* Begin of changes in V001
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of changes in V001
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+*EDIPOA
+*EDIPORT
+      DATA :lt_edipoa  TYPE TABLE OF edipoa,
+            ls_edipoa  TYPE edipoa,
+            lt_ediport TYPE TABLE OF ediport,
+            ls_ediport TYPE ediport.
+
+      "Table Name
+      FREE: lt_output[].
+      ls_output = 'EDIPOA'.
+      APPEND ls_output TO lt_output.
+
+      SELECT * FROM edipoa INTO TABLE lt_edipoa.
+      IF sy-subrc <> 0.
+        ls_output = lc_err_msg.                   "+V001
+        APPEND ls_output TO lt_output.
+        RETURN.
+      ENDIF.
+
+      "Column headings
+      CONCATENATE  'Client' lc_sep
+                   'Port' lc_sep
+                   'RFCDestination' lc_sep
+                   'VersionOfControlRecord' lc_sep
+                   'QueueProcessing' lc_sep
+                   'SendFieldsOfSegmentVersion' lc_sep
+                   'ReceivingSystemRelease'
+                  INTO ls_output.
+      APPEND ls_output TO lt_output.
+
+      "Table data
+      LOOP AT lt_edipoa INTO ls_edipoa.
+        CONCATENATE ls_edipoa-mandt lc_sep
+                   ls_edipoa-port lc_sep
+                   ls_edipoa-logdes lc_sep
+                   ls_edipoa-versio lc_sep
+                   ls_edipoa-use_queue lc_sep
+                   ls_edipoa-send_small lc_sep
+                   ls_edipoa-target_docrel
+                   INTO ls_prefinal.
+        PERFORM end_null_check CHANGING ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+      ENDLOOP.
+
+      PERFORM null_check TABLES  lt_output.            "+V001
+
+
+*Blank line between tables
+      CLEAR ls_output.
+      APPEND ls_output TO lt_output.
+
+
+      "Table Name
+      ls_output = 'EDIPORT'.
+      APPEND ls_output TO lt_output.
+
+      SELECT * FROM ediport INTO TABLE lt_ediport.
+      IF sy-subrc <> 0.
+        ls_output = lc_err_msg.                    "+V001
+        APPEND ls_output TO lt_output.
+        RETURN.
+      ENDIF.
+
+      "Column headings
+      CONCATENATE  'Client' lc_sep
+                   'Port' lc_sep
+                   'Type' lc_sep
+                   'Description'
+                  INTO ls_output.
+      APPEND ls_output TO lt_output.
+
+      "Table data
+      LOOP AT lt_ediport INTO ls_ediport.
+        CONCATENATE ls_ediport-mandt lc_sep
+                   ls_ediport-port lc_sep
+                   ls_ediport-porttyp lc_sep
+                   ls_ediport-descri
+                   INTO ls_prefinal.
+        PERFORM end_null_check CHANGING ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+      ENDLOOP.
+
+      PERFORM null_check TABLES  lt_output.
+
+    WHEN OTHERS.
+* Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+* End of changes in V001
+  ENDCASE.
+
+ENDFORM.
+
+
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+
+
+FORM null_check TABLES lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

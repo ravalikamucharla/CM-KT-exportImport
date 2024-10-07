@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    hostname: "{{ groups['target_ascs'][0] }}"
+    hostip: "{{ hostvars[groups['target_ascs'][0]].ansible_host }}"    
+  vars_files:
+    - ../inventory/group_vars/target_ascs.yml
+    - ../inventory/host_vars/{{ groups['target_ascs'][0] }}.yml
+  roles:
+    - sap_abap_postmigration
+
+

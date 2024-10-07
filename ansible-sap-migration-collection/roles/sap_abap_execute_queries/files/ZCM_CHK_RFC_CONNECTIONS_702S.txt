@@ -1,0 +1,256 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_CHK_RFC_CONNECTIONS_702S                *
+* Title               :   Export & Test RFC Connections               *
+* Purpose             :   This report is used to Export & Test RFC    *
+*                         Connections during Cloud Migration          *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RSRFCCHK                                                            *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXXX                    X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*05-21-2021  Initial   Ruchir Kamble  Local    To Export & Test ABAP  *
+*                                              RFC Connection         *
+*04-21-2022  V001      Soumya Ray     Local    Changes to adjust the  *
+*                                              structure of internal  *
+*                                              table generated        *
+*---------------------------------------------------------------------*
+
+REPORT  zcm_chk_rfc_connections_702s.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+* Begin of changes in V001
+  TYPES: BEGIN OF lty_list,
+           rfctype        TYPE rfctype_d,
+           rfctytext      TYPE rfctytext,
+           rfcdest        TYPE rfcdest,
+           rfcdoc1        TYPE rfcdoc_d,
+           muname         TYPE modusrname,
+           mudate         TYPE rdir_udate,
+           mutime         TYPE syuzeit,
+           muclient       TYPE symandt,
+           cuname         TYPE creusrname,
+           cudate         TYPE rdir_cdate,
+           cutime         TYPE syuzeit,
+           cuclient       TYPE symandt,
+           rfchost        TYPE rfchost,
+           rfcservice     TYPE rfcservice,
+           rfcclient      TYPE rfcclient,
+           rfcsameusr     TYPE rfcsameusr,
+           rfcuser        TYPE rfcalias,
+           rfclang        TYPE rfclang,
+           rfcauth        TYPE rfcauth,
+           rfclogon       TYPE rfclogon,
+           rfctsysopt     TYPE rfctsysopt,
+           rfcsnc         TYPE rfcsnc,
+           authority      TYPE destauth,
+           rfc_conn_tst_i TYPE icon_text,
+           rfc_conn_tst_t TYPE c LENGTH 132,
+         END OF lty_list.
+* End of changes in V001
+
+  CONSTANTS: lc_sep        TYPE c VALUE '|'                  LENGTH 1,
+             lc_x          TYPE c VALUE 'X'                  LENGTH 1,
+             lc_sign       TYPE c VALUE 'I'                  LENGTH 1,
+             lc_kind       TYPE c VALUE 'S'                  LENGTH 1,
+             lc_eq         TYPE c VALUE 'EQ'                 LENGTH 2,
+             lc_cp         TYPE c VALUE 'CP'                 LENGTH 2,
+             lc_all        TYPE c VALUE '*'                  LENGTH 1,
+             lc_null       TYPE c VALUE 'NULL'               LENGTH 4,
+             lc_stype      TYPE c VALUE 'STYPE'              LENGTH 5,
+             lc_alldest    TYPE c VALUE 'ALL_DEST'           LENGTH 8,
+             lc_conntst    TYPE c VALUE 'CONN_TST'           LENGTH 10,
+             lc_export     TYPE c VALUE 'EXPORT'             LENGTH 6,
+             lc_conn_type  TYPE c VALUE 'Connectiontype'     LENGTH 20,
+             lc_rfc_dest   TYPE c VALUE 'RFCDestination'     LENGTH 20,
+             lc_host       TYPE c VALUE 'Targethost'         LENGTH 20,
+             lc_service    TYPE c VALUE 'Service'            LENGTH 10,
+             lc_client     TYPE c VALUE 'Client'             LENGTH 6,
+             lc_curr_user  TYPE c VALUE 'CurrentUser'        LENGTH 15,
+             lc_userid     TYPE c VALUE 'UserId'             LENGTH 6,
+             lc_language   TYPE c VALUE 'Language'           LENGTH 10,
+             lc_password   TYPE c VALUE 'Password'           LENGTH 10,
+             lc_logon      TYPE c VALUE 'LogonScreen'        LENGTH 20,
+             lc_trustedsys TYPE c VALUE 'TrustedSystem'      LENGTH 25,
+             lc_rfc_snc    TYPE c VALUE 'RFCSNC'             LENGTH 6,
+             lc_destn_auth TYPE c VALUE 'DestnAuthorization' LENGTH 30,
+             lc_logonstat  TYPE c VALUE 'LogonStatus'        LENGTH 11,
+             lc_title      TYPE c VALUE
+             'RFC Destinations with Logon Data'              LENGTH 50,
+             lc_err_msg    TYPE c VALUE
+             'Check RFC Connection failed'                   LENGTH 40,
+             lc_inc_input  TYPE c VALUE 'Incorrect input'    LENGTH 20,
+             lc_noinput    TYPE c VALUE 'No input given'     LENGTH 20,
+*    Begin of changes in V001
+             lc_nodata     TYPE c VALUE 'No data found'      LENGTH 20.
+*    End of changes in V001
+
+  DATA: ls_input     TYPE tab512,
+        ls_output    TYPE tab512,
+        lv_action    TYPE char6,
+        lt_selection TYPE STANDARD TABLE OF rsparams,
+        ls_selection LIKE LINE OF lt_selection,
+        ls_data      TYPE REF TO data,
+        ls_list      TYPE lty_list.
+
+  FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, ls_list, ls_selection, ls_data,
+  lv_action.
+
+  FREE: lt_output, lt_selection.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.       " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.      " If action is Export
+
+      ls_selection-selname = lc_stype. " RFC type
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_cp.
+      ls_selection-low     = lc_all.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      ls_selection-selname = lc_alldest. " Display all RFC Destinations
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lc_x.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      ls_selection-selname = lc_conntst. " Connection test
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lc_x.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      cl_salv_bs_runtime_info=>set( display  = abap_false
+      metadata = abap_false
+      data     = abap_true ).
+
+      " To Check RFC Connections
+      SUBMIT rsrfcchk WITH SELECTION-TABLE lt_selection AND RETURN.
+
+      " To fetch output from submit report
+      TRY.
+          cl_salv_bs_runtime_info=>get_data_ref(
+          IMPORTING r_data = ls_data ).
+          ASSIGN ls_data->* TO <lt_data>.
+          IF <lt_data> IS ASSIGNED.
+*   Begin of changes in V001
+            IF <lt_data> IS INITIAL.
+              ls_output = lc_nodata.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+              RETURN.
+            ENDIF.
+*   End of changes in V001
+            " Adding heading to the output
+            CONCATENATE lc_conn_type     lc_sep
+            lc_rfc_dest      lc_sep
+            lc_host          lc_sep
+            lc_service       lc_sep
+            lc_client        lc_sep
+            lc_curr_user     lc_sep
+            lc_userid        lc_sep
+            lc_language      lc_sep
+            lc_password      lc_sep
+            lc_logon         lc_sep
+            lc_trustedsys    lc_sep
+            lc_rfc_snc       lc_sep
+            lc_destn_auth    lc_sep
+            lc_logonstat
+            INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            LOOP AT <lt_data> INTO ls_list.
+
+              CONDENSE ls_list-rfchost.
+
+              IF ls_list-rfc_conn_tst_t IS INITIAL.
+                ls_list-rfc_conn_tst_t = lc_null.
+              ENDIF.
+
+              CONCATENATE ls_list-rfctytext       lc_sep
+              ls_list-rfcdest         lc_sep
+              ls_list-rfchost         lc_sep
+              ls_list-rfcservice      lc_sep
+              ls_list-rfcclient       lc_sep
+              ls_list-rfcsameusr      lc_sep
+              ls_list-rfcuser         lc_sep
+              ls_list-rfclang         lc_sep
+              ls_list-rfcauth         lc_sep
+              ls_list-rfclogon        lc_sep
+              ls_list-rfctsysopt      lc_sep
+              ls_list-rfcsnc          lc_sep
+              ls_list-authority       lc_sep
+              ls_list-rfc_conn_tst_t
+              INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_list, ls_output.
+
+            ENDLOOP.
+
+          ENDIF.
+
+          " Catch exception message
+        CATCH cx_salv_bs_sc_runtime_info.
+          ls_output = lc_err_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+      ENDTRY.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  IF lt_output[] IS NOT INITIAL.
+
+    " To replace blank values with NULL
+    DO.
+      REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+      IN TABLE lt_output WITH '|NULL|'.
+      FIND '||' IN TABLE lt_output.
+      IF sy-subrc <> 0.
+        EXIT .
+      ENDIF.
+    ENDDO.
+  ENDIF.
+
+ENDFORM.

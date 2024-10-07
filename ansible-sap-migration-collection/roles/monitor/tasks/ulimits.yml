@@ -1,0 +1,3 @@
+- name: calculate free %
+  shell: ulimit
+  register: ulimit

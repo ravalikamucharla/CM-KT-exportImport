@@ -1,0 +1,8 @@
+#!/bin/bash
+/usr/bin/at "{{ cut_over.time }}" "{{ cut_over.date }}" <<EOF
+cd {{ ansible_folder_path }}
+ansible-playbook playbooks/05_4_hsr_disable_replication.yml >> ./05_cut_over.log
+ansible-playbook playbooks/05_5_hsr_migration_target_primary.yml >> ./05_cut_over.log
+ansible-playbook playbooks/05_6_hsr_replication_status_target.yml >> ./05_cut_over.log
+ansible-playbook playbooks/05_7_hsr_reset_maintenance_mode.yml >> ./05_cut_over.log
+EOF

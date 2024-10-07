@@ -1,0 +1,328 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SPAD_EXP_OPDEVICE_SERVERS               *
+* Title               :   Export Output devices                       *
+* Purpose             :   This report is used to display list of O/P  *
+*                         Devices                                     *
+*---------------------------------------------------------------------*
+* Related Transaction                                                 *
+* SPAD                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TSP03D                     X                                        *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version    Author       TR#/Local     Description        *
+*---------------------------------------------------------------------*
+*09-10-2020  Initial   Yasaswini K    Local     To Export O/P Devices *
+*08-31-2021  V001      Yasaswini K    Local     To add input flag     *
+*09-09-2022  V002      Yasaswini K    Local     To add no data found  *
+*                                                      changes        *
+*10-20-2022  V003      Soumya Ray     Local     To adjust the script  *
+*                                               for lower version     *
+*---------------------------------------------------------------------*
+
+REPORT zcm_spad_exp_opdevice_servers.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c        VALUE '|',
+             lc_export     TYPE char20   VALUE 'EXPORT',
+             lc_msg_nodata TYPE string   VALUE
+             'No data found',                                 "+V001
+             lc_server     TYPE char20   VALUE 'Servername',
+             lc_classe     TYPE char20   VALUE 'Classes',
+             lc_host       TYPE char20   VALUE 'Hostname',
+             lc_device     TYPE char20   VALUE 'Deviceno',
+             lc_text       TYPE char20   VALUE 'Description',
+             lc_spoolserv  TYPE char20   VALUE 'Spoolservers',
+             lc_header     TYPE char20   VALUE 'ListOfOutputDevices',
+             lc_spoolhead  TYPE char20   VALUE 'Listofspoolservers',
+             lc_name       TYPE char20   VALUE 'Outputdevicename',
+             lc_method     TYPE char20   VALUE 'Accessmethod',
+             lc_type       TYPE char20   VALUE 'Devicetypename',
+             lc_servnam    TYPE char20   VALUE 'Withoutspoolservers',
+             lc_spool      TYPE char20   VALUE 'Spoolservers',
+             lc_msg        TYPE char20   VALUE 'Message',
+             lc_lock       TYPE char80   VALUE
+             'Printerlocked or Serverinactive',
+*  Begin of changes in V001
+             lc_inc_input  TYPE c        VALUE
+             'Incorrect input'                             LENGTH 20,
+             lc_noinput    TYPE c        VALUE
+             'No input passed'                             LENGTH 20,
+*  End of changes in V001
+*  Begin of changes in V002
+             lc_autospool  TYPE c        VALUE
+             '__AUTOSPOOLSERVER'                           LENGTH 17.
+*  End of changes in V002
+
+  DATA: ls_input      TYPE tab512,
+        ls_output     TYPE tab512,
+        ls_prefinal   TYPE string,
+        ls_devices    TYPE tsp03d,
+        ls_info       LIKE rsposerver,
+        lv_activeflag TYPE char1,
+        lv_closedflag TYPE char1,
+        lv_action     TYPE char8,
+        lv_flag       TYPE string,
+        lv_lines      TYPE i,
+        lv_deviceno   TYPE string,
+        ls_srvlist    LIKE rsposerver OCCURS 10 WITH HEADER LINE,
+        lt_spool      TYPE STANDARD TABLE OF tsp03d,
+        lt_list       TYPE STANDARD TABLE OF tsp03d,
+        lt_tmp        TYPE STANDARD TABLE OF tsp03d,
+        ls_spool      TYPE tsp03d,
+        lt_devices    TYPE STANDARD TABLE OF tsp03d.
+
+  DATA: BEGIN OF ls_spserver OCCURS 30.      " Servertabelle
+      INCLUDE STRUCTURE rsposerver.
+  DATA: text  LIKE tspsv-text,
+        prts  TYPE i,
+        respo TYPE i.
+  DATA: END OF ls_spserver.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    "Title
+    ls_output = lc_header.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+  "To update all output devices in post migration with active server
+  "When input flag is ALL
+  SPLIT ls_input AT lc_Sep INTO lv_action lv_flag.           "+V001
+
+  CASE lv_action.
+    WHEN lc_export.
+      "Get entries
+      SELECT * FROM tsp03d INTO TABLE lt_devices.
+      IF sy-subrc = 0.
+        "For output devices
+        SORT lt_devices BY name.
+        lt_spool[] = lt_devices[].
+        "For spool Devices
+        SORT lt_spool BY pamsserver.
+        lt_list[]  = lt_spool[].
+        DELETE ADJACENT DUPLICATES FROM lt_list COMPARING pamsserver.
+
+        "Tablename
+        ls_output = lc_header.
+        APPEND ls_output TO lt_output.
+        "Header
+        CONCATENATE lc_name     lc_sep
+                    lc_method   lc_sep
+                    lc_type     lc_sep
+                    lc_spool    lc_sep
+                    lc_msg      lc_sep
+                    lc_lock
+        INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT lt_devices INTO ls_devices.
+          " Check if printer is active
+          lv_activeflag = 'X'.
+
+          IF NOT ls_devices-padisabled IS INITIAL.
+            lv_activeflag = ' '.
+          ENDIF.
+
+          IF ls_devices-pamethod <> 'X' AND
+             ls_devices-pamethod <> 'F' AND
+             ls_devices-pamethod <> 'I' AND
+             ls_devices-pamethod <> 'P' AND
+             ls_devices-pamethod <> 'G' AND
+             lv_activeflag = 'X'.
+
+            CALL FUNCTION 'RSPO_SERVER_MAP'
+              EXPORTING
+                server  = ls_devices-pamsserver
+                active  = 'X'
+                spool   = 'X'
+                force   = 'X'
+                mapping = 'X'
+              IMPORTING
+                entry   = ls_info.
+            IF sy-subrc = 0.
+              CLEAR: lv_activeflag.
+              IF ls_info-active = 'X'.
+                lv_activeflag = 'D'.
+              ENDIF.
+              IF ls_info-spool = 'X'.
+                lv_activeflag = 'X'.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+          IF lv_activeflag IS INITIAL.
+            lv_closedflag = 'X'.
+          ELSE.
+            lv_closedflag = ' '.
+          ENDIF.
+
+          "Items
+          CONCATENATE ls_devices-name        lc_sep
+                      ls_devices-pamethod    lc_sep
+                      ls_devices-patype      lc_sep
+                      ls_devices-pamsserver  lc_sep
+                      ls_devices-pamsg       lc_sep
+                      lv_closedflag
+          INTO ls_prefinal.
+
+          "adding null to blanks - at end of record
+          PERFORM end_null_check CHANGING ls_prefinal.
+          ls_output = ls_prefinal.
+          "output
+          APPEND ls_output TO lt_output.
+
+          CLEAR: lv_closedflag,
+                 ls_devices,
+                 ls_info,
+                 lv_activeflag,
+                 ls_prefinal,
+                 ls_output.
+        ENDLOOP.
+
+        "get unique spool and no.of device count
+        LOOP AT lt_list INTO ls_spool.
+          lt_tmp[] = lt_spool[].
+          DELETE lt_tmp WHERE pamsserver NE ls_spool-pamsserver.
+          DESCRIBE TABLE lt_tmp LINES lv_lines.
+          ls_spserver-server = ls_spool-pamsserver.
+          ls_spserver-prts = lv_lines.
+          APPEND ls_spserver.
+          CLEAR: ls_spool, lv_lines, ls_spserver.
+          REFRESH : lt_tmp[].
+        ENDLOOP.
+
+        "Active spool devices
+        CALL FUNCTION 'RSPO_SERVER_GET_LIST'
+          EXPORTING
+            active  = 'X'
+            mapping = 'X'
+          TABLES
+            entries = ls_srvlist.
+        "only one active server will be looped
+        LOOP AT ls_srvlist.
+          CLEAR ls_spserver.
+          READ TABLE ls_spserver WITH KEY server = ls_srvlist-server.
+          IF sy-subrc NE 0.
+            ls_spserver-server = ls_srvlist-server.
+            ls_spserver-spoolsrv = ls_srvlist-spoolsrv.
+            APPEND ls_spserver.
+          ENDIF.
+          CLEAR: ls_srvlist, ls_spserver.
+        ENDLOOP.
+        CLEAR ls_srvlist.
+
+        LOOP AT ls_spserver.
+          IF ls_spserver-spoolsrv IS INITIAL.
+            ADD ls_spserver-prts TO ls_spserver-respo.
+            IF ls_spserver-server =
+*              cl_rspo_utilities=>c_autospoolserver "-V002
+            lc_autospool "+V002
+            AND ls_spserver-text IS INITIAL.
+              ls_spserver-text =
+              'Automatic Spool Server Mapping'.
+            ENDIF.
+            MODIFY ls_spserver.
+          ELSE.
+            DATA: tmp LIKE ls_spserver.
+            READ TABLE ls_spserver INTO tmp WITH KEY
+            server = ls_spserver-spoolsrv.
+            IF sy-subrc EQ 0.
+              ADD ls_spserver-prts TO tmp-respo.
+              MODIFY ls_spserver INDEX sy-tabix FROM tmp
+               TRANSPORTING respo.
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+        "Blank
+        APPEND ls_output TO lt_output.
+        "Tablename
+        ls_output = lc_spoolhead.
+        APPEND ls_output TO lt_output.
+        "column heading
+        CONCATENATE  lc_server    lc_sep
+                     lc_classe    lc_sep
+                     lc_host      lc_sep
+                     lc_device    lc_sep
+                     lc_text      lc_sep
+                     lc_spoolserv
+                     INTO ls_output.
+        APPEND ls_output TO lt_output.
+        "item details
+        LOOP AT ls_spserver.
+          lv_deviceno = ls_spserver-prts.
+          IF ls_spserver-server IS INITIAL.
+            ls_spserver-server = lc_servnam.
+          ENDIF.
+          CONCATENATE   ls_spserver-server  lc_sep
+                        ls_spserver-class   lc_sep
+                        ls_spserver-host    lc_sep
+                        lv_deviceno         lc_sep
+                        ls_spserver-text    lc_sep
+                        ls_spserver-spoolsrv
+                        INTO ls_prefinal.
+          "adding null to blanks - at end of record
+          PERFORM end_null_check CHANGING ls_prefinal.
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR : ls_prefinal, ls_output, lv_deviceno.
+        ENDLOOP.
+        "adding null to blanks - in betweeen
+        PERFORM null_check TABLES  lt_output.
+      ELSE.
+        "Title
+        ls_output = lc_header.
+        APPEND ls_output TO lt_output.
+        "no data
+        ls_output = lc_msg_nodata.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+    WHEN OTHERS.
+*  Begin of changes in V001
+   "Title
+    ls_output = lc_header.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+
+    ls_output = lc_inc_input. "Incorrect input
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+ENDFORM.
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+FORM null_check TABLES lt_table TYPE table.
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

@@ -1,0 +1,318 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_EXP_SOAMANAGER_WEBSERVICE                *
+* Title               :  Capture webservice configuration details     *
+* Purpose             :  To export Webservice Congiguration details   *
+*                        from SOAMANAGER                              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SOAMANAGER                                                          *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*                           X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-01-2021  Initial   Soumya Ray   Local       To export Webservice  *
+*                                               configuration details *
+*04-13-2022  V001      Soumya Ray   Local       To correct the message*
+*                                               in case of no data    *
+*---------------------------------------------------------------------*
+REPORT zcm_exp_soamanager_webservice.
+" The standard functionality is present in Web Dynpro component
+" 'C_SRT_WS_SEARCH',  View 'V_MAIN',  Method 'SEARCH'
+
+LOAD-OF-PROGRAM.
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                    LENGTH 1,
+             lc_export    TYPE c VALUE 'EXPORT'               LENGTH 6,
+             lc_null      TYPE c VALUE 'NULL'                 LENGTH 4,
+             lc_title     TYPE c VALUE
+             'Webservice Configuration'                       LENGTH 30,
+             lc_intrnm    TYPE c VALUE 'Internal Name'        LENGTH 13,
+             lc_type      TYPE c VALUE 'Type'                 LENGTH 4,
+             lc_name      TYPE c VALUE 'Name'                 LENGTH 4,
+             lc_namesp    TYPE c VALUE 'Namespace'            LENGTH 9,
+             lc_descrp    TYPE c VALUE 'Description'          LENGTH 11,
+             lc_ninput    TYPE c VALUE 'No input passed'      LENGTH 20,
+             lc_tsrtp_conf_type_ws_rt_cm
+               TYPE srt_wsp_config_type VALUE 'CM',
+             lc_tsrtp_conf_type_ws_rt
+               TYPE srt_wsp_config_type VALUE 'SR',
+             lc_tsrtp_conf_type_co_group
+               TYPE srt_wsp_config_type VALUE 'GR',
+             lc_tsrtp_conf_type_co_factory
+               TYPE srt_wsp_config_type VALUE 'CF',
+             lc_tsrtp_conf_type_mp_rt
+               TYPE srt_wsp_config_type VALUE'MR',
+*   Begin of changes in V001
+             lc_nodata    TYPE c VALUE 'No data found'        LENGTH 15,
+             lc_naction   TYPE c VALUE 'Incorrect input'      LENGTH 30.
+*   End of changes in V001
+
+
+  DATA: ls_output            TYPE tab512,
+        ls_input             TYPE tab512,
+        lv_action            TYPE string,
+        lt_pattern           TYPE ert_range_option,
+        lt_access_url        TYPE ert_range_option,
+        lt_created_by        TYPE ert_range_option,
+        lt_created_on        TYPE ert_range_option,
+        lt_changed_by        TYPE ert_range_option,
+        lt_changed_on        TYPE ert_range_option,
+        lt_binding_key       TYPE ert_range_option,
+        lt_auth_method       TYPE ert_range_option,
+        lt_config_key        TYPE ert_range_option,
+        lt_binding_name      TYPE ert_range_option,
+        lt_service_name      TYPE ert_range_option,
+        lt_hostname          TYPE ert_range_option,
+        lt_protocol          TYPE ert_range_option,
+        lt_port              TYPE ert_range_option,
+        lt_lp_name           TYPE ert_range_option,
+        lt_lp_user_name      TYPE ert_range_option,
+        lt_consumer_proxy    TYPE ert_range_option,
+        lv_scs_related       TYPE boolean VALUE '-',
+        lv_configured        TYPE boolean VALUE '-',
+        lv_isolated          TYPE boolean VALUE '-',
+        lv_local_sc          TYPE boolean VALUE '-',
+        lv_max_hits          TYPE int4    VALUE 9999,
+        ls_result            TYPE sstr_srt_ws_ui_objects,
+        lt_result_provider   TYPE stty_srt_ws_ui_objects,
+        lt_result_consumer   TYPE stty_srt_ws_ui_objects,
+        lt_result_gen_client TYPE stty_srt_ws_ui_objects,
+        lt_result_group      TYPE stty_srt_ws_ui_objects,
+        lt_result_factory    TYPE stty_srt_ws_ui_objects,
+        lt_result_mapping    TYPE stty_srt_ws_ui_objects,
+        lt_search_result     TYPE STANDARD TABLE OF
+        sstr_srt_ws_ui_objects.
+
+  CLEAR: ls_output, lv_action, ls_input, ls_result.
+  FREE:  lt_pattern, lt_search_result, lt_result_mapping,
+  lt_result_factory, lt_result_group, lt_result_gen_client,
+  lt_result_consumer, lt_result_provider, lt_consumer_proxy,
+  lt_access_url, lt_created_by, lt_created_on, lt_changed_by,
+  lt_changed_on, lt_binding_key, lt_auth_method, lt_config_key,
+  lt_binding_name, lt_service_name, lt_hostname, lt_protocol,
+  lt_port, lt_lp_name, lt_lp_user_name.
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+  "Read the input passed
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_ninput. "No input passed
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+  CASE lv_action.
+    WHEN lc_export. "EXPORT
+      "To fetch provider details
+      cl_srt_wsp_ws_admin_manager=>search_for_provider(
+      EXPORTING it_object_name  = lt_pattern
+        it_access_url   = lt_access_url
+        it_created_by   = lt_created_by
+        it_created_on   = lt_created_on
+        it_changed_by   = lt_changed_by
+        it_changed_on   = lt_changed_on
+        it_binding_key  = lt_binding_key
+        it_auth_method  = lt_auth_method
+        it_config_key   = lt_config_key
+        it_binding_name = lt_binding_name
+        it_service_name = lt_service_name
+        i_scs_related   = lv_scs_related
+        i_configured    = lv_configured
+        i_isolated      = lv_isolated
+        i_max_hits      = lv_max_hits
+      IMPORTING et_provider     = lt_result_provider ).
+
+      "To fetch consumer details
+      cl_srt_wsp_ws_admin_manager=>search_for_consumer(
+      EXPORTING it_object_name  = lt_pattern
+        it_access_url   = lt_access_url
+        it_hostname     = lt_hostname
+        it_created_by   = lt_created_by
+        it_created_on   = lt_created_on
+        it_changed_by   = lt_changed_by
+        it_changed_on   = lt_changed_on
+        it_protocol     = lt_protocol
+        it_port         = lt_port
+        it_lp_name      = lt_lp_name
+        it_lp_user_name = lt_lp_user_name
+        it_binding_key  = lt_binding_key
+        it_auth_method  = lt_auth_method
+        it_config_key   = lt_config_key
+        i_configured    = lv_configured
+        i_isolated      = lv_isolated
+        i_local_sc      = lv_local_sc
+        i_max_hits      = lv_max_hits
+      IMPORTING et_consumer     = lt_result_consumer ).
+
+      "To fetch the generic client details
+      cl_srt_wsp_ws_admin_manager=>search_for_generic_client(
+      EXPORTING it_object_name  = lt_pattern
+        it_access_url   = lt_access_url
+        it_hostname     = lt_hostname
+        it_created_by   = lt_created_by
+        it_created_on   = lt_created_on
+        it_changed_by   = lt_changed_by
+        it_changed_on   = lt_changed_on
+        it_protocol     = lt_protocol
+        it_port         = lt_port
+        it_lp_name      = lt_lp_name
+        it_lp_user_name = lt_lp_user_name
+        it_binding_key  = lt_binding_key
+        it_config_key   = lt_config_key
+        it_auth_method  = lt_auth_method
+        i_configured    = lv_configured
+        i_isolated      = lv_isolated
+        i_local_sc      = lv_local_sc
+        i_max_hits      = lv_max_hits
+      IMPORTING et_gen_client   = lt_result_gen_client ).
+
+      "To fetch the service group details
+      cl_srt_wsp_ws_admin_manager=>search_for_service_groups(
+      EXPORTING it_object_names   = lt_pattern
+        it_access_url     = lt_access_url
+        it_hostname       = lt_hostname
+        it_created_by     = lt_created_by
+        it_created_on     = lt_created_on
+        it_changed_by     = lt_changed_by
+        it_changed_on     = lt_changed_on
+        it_protocol       = lt_protocol
+        it_port           = lt_port
+        it_lp_name        = lt_lp_name
+        it_lp_user_name   = lt_lp_user_name
+        it_binding_key    = lt_binding_key
+        it_auth_method    = lt_auth_method
+        it_config_key     = lt_config_key
+        it_consumer_proxy = lt_consumer_proxy
+        i_configured      = lv_configured
+        i_isolated        = lv_isolated
+        i_local_sc        = lv_local_sc
+        i_max_hits        = lv_max_hits
+      IMPORTING et_groups         = lt_result_group ).
+      " To fetch conumer factories details
+      cl_srt_wsp_ws_admin_manager=>search_for_consumer_factories(
+      EXPORTING it_object_names   = lt_pattern
+        it_access_url     = lt_access_url
+        it_hostname       = lt_hostname
+        it_created_by     = lt_created_by
+        it_created_on     = lt_created_on
+        it_changed_by     = lt_changed_by
+        it_changed_on     = lt_changed_on
+        it_protocol       = lt_protocol
+        it_port           = lt_port
+        it_lp_name        = lt_lp_name
+        it_lp_user_name   = lt_lp_user_name
+        it_auth_method    = lt_auth_method
+        it_binding_key    = lt_binding_key
+        it_config_key     = lt_config_key
+        it_consumer_proxy = lt_consumer_proxy
+        i_configured      = lv_configured
+        i_isolated        = lv_isolated
+        i_local_sc        = lv_local_sc
+        i_max_hits        = lv_max_hits
+      IMPORTING et_groups         = lt_result_factory ).
+      "To fetch mapping details
+      cl_srt_wsp_ws_admin_manager=>search_for_mappings(
+      EXPORTING it_object_names   = lt_pattern
+        it_created_by     = lt_created_by
+        it_created_on     = lt_created_on
+        it_changed_by     = lt_changed_by
+        it_changed_on     = lt_changed_on
+        it_lp_name        = lt_lp_name
+        it_binding_key    = lt_binding_key
+        it_config_key     = lt_config_key
+        it_consumer_proxy = lt_consumer_proxy
+        i_configured      = lv_configured
+        i_max_hits        = lv_max_hits
+      IMPORTING et_mappings       = lt_result_mapping ).
+
+
+*//-----Building the final search result---------------//*
+      LOOP AT lt_result_consumer INTO ls_result.
+        ls_result-object_type = lc_tsrtp_conf_type_ws_rt_cm.
+        APPEND ls_result TO lt_search_result.
+        CLEAR ls_result.
+      ENDLOOP.
+
+      LOOP AT lt_result_gen_client INTO ls_result.
+        ls_result-object_type = lc_tsrtp_conf_type_ws_rt_cm.
+        APPEND ls_result TO lt_search_result.
+        CLEAR ls_result.
+      ENDLOOP.
+
+      LOOP AT lt_result_provider INTO ls_result.
+        ls_result-object_type = lc_tsrtp_conf_type_ws_rt.
+        APPEND ls_result TO lt_search_result.
+        CLEAR ls_result.
+      ENDLOOP.
+
+      LOOP AT lt_result_group INTO ls_result.
+        ls_result-object_type = lc_tsrtp_conf_type_co_group.
+        APPEND ls_result TO lt_search_result.
+        CLEAR ls_result.
+      ENDLOOP.
+
+      LOOP AT lt_result_factory INTO ls_result.
+        ls_result-object_type = lc_tsrtp_conf_type_co_factory.
+        APPEND ls_result TO lt_search_result.
+        CLEAR ls_result.
+      ENDLOOP.
+
+      LOOP AT lt_result_mapping INTO ls_result.
+        ls_result-object_type = lc_tsrtp_conf_type_mp_rt.
+        APPEND ls_result TO lt_search_result.
+        CLEAR ls_result.
+      ENDLOOP.
+*//------------------------------------------------------//*
+      IF lt_search_result IS INITIAL.
+        ls_output = lc_nodata. " No data
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+
+      "Coloumn heading
+      CONCATENATE lc_intrnm lc_type lc_name lc_namesp lc_descrp
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      "DATA
+      LOOP AT lt_search_result INTO ls_result.
+        IF ls_result-description IS INITIAL.
+          ls_result-description = lc_null.
+        ENDIF.
+        CONCATENATE ls_result-object_name
+        ls_result-type_text ls_result-object_name_ext
+        ls_result-namespace ls_result-description
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_result, ls_output.
+      ENDLOOP.
+
+    WHEN OTHERS.
+      ls_output = lc_naction."Action not supported
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+  "To replace blank value in middle fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

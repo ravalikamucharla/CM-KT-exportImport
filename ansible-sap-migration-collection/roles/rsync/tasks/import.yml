@@ -1,0 +1,24 @@
+- name: creat a template for import rsync
+  template: 
+    src: "import_rsync.j2"
+    dest: "{{ imp_dir }}/Azure_Import_Script_Rsync.sh"
+    mode: '0777'
+  tags: db_imp
+
+- name: execute import rsync
+  command: "{{ item }}"
+  args:
+    chdir: "{{ imp_dir }}"
+  loop:
+    - ./Azure_Import_Script_Rsync.sh {{ imp_dir }} {{ container_url }} "{{ sas_token }}"
+    - sleep 300
+  async: 3600
+  poll: 0
+  tags: db_imp
+
+- name: create a folder
+  become_method: sudo
+  become: yes
+  file:
+    path: "{{ params.import.sapinst_pkg_exp }}/DB/{{ params.import.target_db_type }}"
+    state: directory

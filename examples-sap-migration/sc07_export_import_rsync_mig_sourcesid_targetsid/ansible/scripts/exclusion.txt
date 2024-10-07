@@ -1,0 +1,47 @@
+SAPDBHOST 
+dbms/type 
+dbms/name 
+dbs/hdb/dbname
+j2ee/dbtype 
+j2ee/dbname  
+j2ee/dbhost  
+SAPSYSTEMNAME 
+SAPGLOBALHOST 
+system/type  
+rdisp/mshost 
+rdisp/msserv
+enque/serverhost 
+enque/serverinst
+SAPSYSTEM 
+INSTANCE_NAME 
+DIR_CT_RUN 
+DIR_EXECUTABLE 
+rsec/ssfs_datapath 
+rsec/ssfs_keypath
+DIR_TRANS 
+DIR_PROFILE = $(DIR_INSTALL)$(DIR_SEP)profile
+_PF = $(DIR_PROFILE)/{{ sid }}_ASCS{{ instance_number}}_{{ ansible_hostname }}
+rdisp/enqname = $(rdisp/myname)
+SETENV_05 = SECUDIR=$(DIR_INSTANCE)/sec
+SETENV_00 = DIR_LIBRARY=$(DIR_LIBRARY)
+SETENV_01 = LD_LIBRARY_PATH=$(DIR_LIBRARY):%(LD_LIBRARY_PATH)
+SETENV_02 = SHLIB_PATH=$(DIR_LIBRARY):%(SHLIB_PATH)
+SETENV_03 = LIBPATH=$(DIR_LIBRARY):%(LIBPATH)
+SETENV_04 = PATH=$(DIR_EXECUTABLE):%(PATH)              
+SAPTRANSHOST 
+DIR_EPS_ROOT
+DIR_SORTTMP
+DIR_REORG
+DIR_Roll
+DIR_PAGING
+DIR_DATA
+SAPSYSTEMNAME
+SAPGLOBALHOST
+
+
+ 
+
+DIR_INSTANCE
+DIR_PROFILE
+_PF 
+ssl/ssl_lib

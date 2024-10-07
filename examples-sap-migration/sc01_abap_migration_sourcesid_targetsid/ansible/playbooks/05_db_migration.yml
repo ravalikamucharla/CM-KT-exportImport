@@ -1,0 +1,24 @@
+#tags: tab_split_order_by, exp_prep, table_split ,db_exp, db_imp
+---
+- name: Export
+  hosts: source_db
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    ansible_become: true
+    mode: export
+  roles:
+    - sap_abap_swpm_export_import
+
+- name: Import
+  hosts: target_db
+  ignore_errors: true
+  vars_files:
+  - ../inventory/group_vars/target_db.yml
+  vars:
+    ansible_become: true
+    source_hostname: "{{groups['source_db'][0]}}"
+    mode: import
+  roles:
+    - sap_abap_swpm_export_import
+  

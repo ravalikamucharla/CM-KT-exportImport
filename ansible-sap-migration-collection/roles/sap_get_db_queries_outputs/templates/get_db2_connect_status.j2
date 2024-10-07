@@ -1,0 +1,5 @@
+[{
+    "database_server": "{{ output.results[index].stdout_lines[3].split("= ")[1] }}",
+    "sql_authorization_id": "{{ output.results[index].stdout_lines[4].split("= ")[1] }}" ,
+    "local_database_alias": "{{ output.results[index].stdout_lines[5].split("= ")[1]  }}"
+}]

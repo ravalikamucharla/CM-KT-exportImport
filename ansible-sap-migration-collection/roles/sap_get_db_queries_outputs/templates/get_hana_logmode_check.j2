@@ -1,0 +1,28 @@
+[{% for data in output.results[index].stdout_lines %}
+    {% if loop.length == 1 %}
+        {
+            "HOST": "",
+            "LOG_MODE": "",
+            "PORT": "",
+            "SYSTEM_ID": "",
+            "DATABASE_NAME": ""
+        }
+    {% elif loop.index > 1 and loop.index <= loop.length-1 %}
+        {
+            "HOST": {{ data.split(',')[0] }},
+            "LOG_MODE": {{ data.split(',')[1] }},
+            "PORT": "{{ data.split(',')[2] }}",
+            "SYSTEM_ID": {{ data.split(',')[3] }},
+            "DATABASE_NAME": {{ data.split(',')[4] }}
+        },
+    {% elif loop.index == loop.length %}
+        {
+            "HOST": {{ data.split(',')[0] }},
+            "LOG_MODE": {{ data.split(',')[1] }},
+            "PORT": "{{ data.split(',')[2] }}",
+            "SYSTEM_ID": {{ data.split(',')[3] }},
+            "DATABASE_NAME": {{ data.split(',')[4] }}
+        }
+    {% endif %}
+{% endfor %}
+]

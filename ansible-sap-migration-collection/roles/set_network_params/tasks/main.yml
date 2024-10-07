@@ -1,0 +1,12 @@
+---
+
+- name: Take backup of network files
+  become_method: sudo 
+  become: yes
+  copy:
+    src: /proc/sys/net/
+    dest: /tmp/
+    remote_src: yes
+
+- name: settingup network parameters
+  include_tasks: "{{ set_params_on }}_network_params.yml"

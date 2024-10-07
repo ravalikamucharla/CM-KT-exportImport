@@ -1,0 +1,425 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SYBASE_TOP_TABLES_EXP_RCNT              *
+* Title               :   Top Tables for SQL Server Database          *
+* Purpose             :   This report is used to fetch top 100 tables *
+*                     :   in the system                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DBACOCKPIT                                                          *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+* Date        Version   Author       TR#/Local     Description        *
+*---------------------------------------------------------------------*
+* 24-10-2022 Initial Yasaswini K   Local      To fetch top 100 tables *
+*                                             based on row count and  *
+*                                             excluding pool and      *
+*                                             cluster tables          *
+*---------------------------------------------------------------------*
+
+REPORT zcm_sybase_top_tables_exp_rcnt.
+
+CONSTANTS: lc_sep        TYPE c VALUE '|'                LENGTH 1,
+           lc_top        TYPE c VALUE 'Top'              LENGTH 3,
+           lc_fetch      TYPE c VALUE 'FETCH'            LENGTH 5,
+           lc_table_name TYPE c VALUE 'Table name'       LENGTH 10,
+           lc_size       TYPE c VALUE 'Size in KB'       LENGTH 15,
+           lc_no_rows    TYPE c VALUE 'Number of rows'   LENGTH 15,
+           lc_err_msg    TYPE c VALUE 'No data found'    LENGTH 20,
+           lc_title      TYPE c VALUE 'Large Tables'     LENGTH 15,
+           lc_comma      TYPE c VALUE ','                LENGTH 1,
+           lc_schema     TYPE c VALUE 'SchemaName'       LENGTH 11,
+           lc_inc_input  TYPE c VALUE 'Incorrect input'  LENGTH 20,
+           lc_noinput    TYPE c VALUE 'No input given'   LENGTH 20,
+           lc_title1     TYPE c VALUE 'Fetch Top Tables' LENGTH 20,
+           lc_colon      TYPE c VALUE ':'                LENGTH 1,
+           lc_cons       TYPE c VALUE '-'                LENGTH 1,
+           lc_t          TYPE c VALUE 'T'                LENGTH 1,
+           lc_pool       TYPE c VALUE 'POOL'             LENGTH 4,
+           lc_cluster    TYPE c VALUE 'CLUSTER'          LENGTH 7,
+           lc_000        TYPE c VALUE '.000000'          LENGTH 7,
+           lc_null       TYPE c VALUE 'NULL'             LENGTH 4,
+           lc_max        TYPE c VALUE '2147483647'       LENGTH 10.
+
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+  TYPES: BEGIN OF lty_dd02l,
+           tabname  TYPE tabname,
+           tabclass TYPE tabclass,
+         END OF lty_dd02l.
+
+  DATA: ls_input         TYPE tab512,
+        ls_output        TYPE tab512,
+        lv_bdop_flag     TYPE i,
+        lv_bdoi_flag     TYPE i,
+        lv_dbname        TYPE char10,
+        lv_con_name      TYPE dbcon_name,
+        lv_tstamp        TYPE db6tstamp,
+        lv_action        TYPE char10,
+        lv_num_tab       TYPE char10,
+        lv_str           TYPE string,
+        lv_rawtime       TYPE string,
+        lv_time_from     TYPE string,
+        lv_time_to       TYPE string,
+        lv_sql_stmt      TYPE string,
+        lv_query         TYPE string,
+        lv_used_total_kb TYPE char22,
+        lv_row_count     TYPE char22,
+        lt_dd02l         TYPE STANDARD TABLE OF lty_dd02l,
+        ls_dd02l         TYPE lty_dd02l,
+        lt_table         TYPE TABLE OF sybmon_table_space,
+        ls_table         TYPE sybmon_table_space,
+        lr_ref           TYPE REF TO data,
+        lr_dref          TYPE REF TO data,
+        lr_result_ref    TYPE REF TO data,
+        lv_dbschema      TYPE char16,
+        lr_sql_excp      TYPE REF TO cx_sql_exception,
+        lr_second_con    TYPE REF TO cl_sql_connection,
+        lr_stmt_ref      TYPE REF TO cl_sql_statement,
+        lr_result        TYPE REF TO cl_sql_result_set,
+        lr_set           TYPE REF TO cl_sql_result_set,
+        lv_schema        TYPE string,
+        lv_num           TYPE char10,
+        lv_count         TYPE char11,
+        lt_table_tmp     TYPE STANDARD TABLE OF sybmon_table_space,
+        lt_table_tmp1    TYPE STANDARD TABLE OF sybmon_table_space,
+        lt_schema        TYPE STANDARD TABLE OF sybobjowner,
+        ls_schema        TYPE sybobjowner.
+
+  " Adding title to the output
+  ls_output = lc_title1.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Read input file from Python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+    lv_action       " Action
+    lv_num          " Number of tables to be fetched
+    lv_schema.      " Schema
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_fetch.
+
+      IF lv_schema IS INITIAL.
+
+        CALL FUNCTION 'DB_DBSCHEMA_CURRENT'
+          IMPORTING
+            dbschema = lv_dbschema.
+
+        IF sy-subrc = 0.
+          lv_schema = lv_dbschema.
+        ENDIF.
+
+      ENDIF.
+
+*  Fetching all the entries from DB
+      SPLIT lv_schema AT lc_comma INTO TABLE lt_schema.
+      lv_num_tab = lc_max.
+
+      TRY.
+          lr_second_con = cl_db6_con=>get_connection( lv_con_name ).
+          lr_stmt_ref   = lr_second_con->create_statement(  ).
+
+          " Setting values for fetching timestamp
+          lv_bdop_flag = 1.
+          lv_bdoi_flag = 0.
+
+          CLEAR lv_query.
+
+          " Building query to fetch Application server time
+          CONCATENATE
+           ' SELECT MAX(SNAPSHOT_TIMESTAMP) '
+           ' FROM saptools..DBH_STG_TABLES '
+           ' WHERE BDOP = ? AND BDOI = ? '
+           INTO lv_query.
+
+          CLEAR lv_dbname.
+
+          " FM to get the database name
+          CALL FUNCTION 'DB_DBNAME'
+            IMPORTING
+              dbname = lv_dbname.
+
+          TRY.
+
+              GET REFERENCE OF lv_bdop_flag INTO lr_ref.
+              lr_stmt_ref->set_param( lr_ref ).
+
+              GET REFERENCE OF lv_bdoi_flag INTO lr_ref.
+              lr_stmt_ref->set_param( lr_ref ).
+              lr_result = lr_stmt_ref->execute_query( lv_query ).
+
+              GET REFERENCE OF lv_rawtime INTO lr_ref.
+              lr_result->set_param( lr_ref ).
+              lr_result->next( ).
+
+              " Converting timestamp into DB6 timestamp
+              IF lv_rawtime IS NOT INITIAL.
+                lv_tstamp =
+                cl_syb_format=>conv_bigdatetime_to_db6tstamp(
+                           lv_rawtime ).
+
+                CONCATENATE lv_tstamp+0(4) lc_cons lv_tstamp+4(2)
+                lc_cons
+                lv_tstamp+6(2) lc_t lv_tstamp+8(2) lc_colon
+                lv_tstamp+10(2)
+                lc_colon lv_tstamp+12(2)
+                INTO lv_time_from.
+
+                " Adding 1 second to the timestamp
+                lv_str = cl_db6_calendar_tool=>add_seconds_to_datetime(
+                         db6tstamp = lv_tstamp
+                         seconds   = 1 ).
+
+
+                CONCATENATE lv_str+0(4) lc_cons lv_str+4(2) lc_cons
+                lv_str+6(2)
+                lc_t lv_str+8(2) lc_colon lv_str+10(2) lc_colon
+                lv_str+12(2) lc_000
+                INTO lv_time_to.
+              ENDIF.
+
+              " Setting date & time into the param tab
+              GET REFERENCE OF lv_time_from INTO lr_dref.
+              lr_stmt_ref->set_param( lr_dref ).
+
+              GET REFERENCE OF lv_time_to INTO lr_dref.
+              lr_stmt_ref->set_param( lr_dref ).
+
+              " Setting database name into the param tab
+              GET REFERENCE OF lv_dbname INTO lr_dref.
+              lr_stmt_ref->set_param( lr_dref ).
+
+            CATCH cx_parameter_invalid.
+
+          ENDTRY.
+
+          " Building query to fetch top n large tables
+
+          CONCATENATE
+'SELECT TOP ' lv_num_tab
+' DBNAME, USER_NAME AS TABOWNER, TAB_NAME AS TABNAME, '
+''' '' AS PART_NAME, 0 AS ID, 0 AS PARTITIONID, '
+''' '' AS SNAPSHOT_TIMESTAMP, '
+''' '' AS TIMESTAMP_FROM, '' '' AS TIMESTAMP_TO, SUM(TIME_PERIOD) '
+' AS TIME_PERIOD, AVG(NUM_PARTITIONS) AS NUM_PARTITIONS, '
+' MAX(NUM_PARTITIONS) AS NUM_PARTITIONS_MAX, AVG(ROW_COUNT) '
+' AS ROW_COUNT, MAX(ROW_COUNT) AS ROW_COUNT_MAX, '
+' AVG(TAB_RESERVED_LOB_KB) AS TAB_RESERVED_LOB_KB, '
+' MAX(TAB_RESERVED_LOB_KB) AS TAB_RESERVED_LOB_KB_MAX, '
+' AVG(TAB_USED_LOB_KB) AS TAB_USED_LOB_KB, MAX(TAB_USED_LOB_KB) '
+' AS TAB_USED_LOB_KB_MAX, AVG(TAB_DATA_LOB_KB) AS TAB_DATA_LOB_KB, '
+' MAX(TAB_DATA_LOB_KB) AS TAB_DATA_LOB_KB_MAX, AVG(TAB_DATA_UTL_KB) '
+' AS TAB_DATA_UTL_KB, MAX(TAB_DATA_UTL_KB) AS TAB_DATA_UTL_KB_MAX, '
+' AVG(TAB_DATAPGCLRATIO) AS TAB_DATAPGCLRATIO, MIN(TAB_DATAPGCLRATIO) '
+' AS TAB_DATAPGCLRATIO_MIN, AVG(TAB_LRGIOEFF) AS TAB_LRGIOEFF, '
+' MIN(TAB_LRGIOEFF) AS TAB_LRGIOEFF_MIN, AVG(DATACHANGE) '
+' AS DATACHANGE, '
+' MAX(DATACHANGE) AS DATACHANGE_MAX, AVG(forwrowcnt) AS forwrowcnt, '
+' MAX(forwrowcnt) AS forwrowcnt_MAX, AVG(delrowcnt) AS delrowcnt, '
+' MAX(delrowcnt) AS delrowcnt_MAX, AVG(extent0pgcnt) AS extent0pgcnt, '
+' MAX(extent0pgcnt) AS extent0pgcnt_MAX, AVG(oamapgcnt) AS oamapgcnt, '
+' MAX(oamapgcnt) AS oamapgcnt_MAX, AVG(oampagecnt) AS oampagecnt, '
+' MAX(oampagecnt) AS oampagecnt_MAX, '
+' MAX(str_replace(str_replace(str_replace(convert'
+'(VARCHAR(19),statmoddate,23),'':'',NULL),''-'',NULL),''T'',NULL)) '
+' AS statmoddate, AVG(datarowsize) AS datarowsize, MAX(datarowsize) '
+' AS datarowsize_MAX, AVG(TAB_DATA_TOTAL_KB) AS TAB_DATA_TOTAL_KB, '
+' MAX(TAB_DATA_TOTAL_KB) AS TAB_DATA_TOTAL_KB_MAX, '
+' AVG(TAB_DATA_UTL_TOTAL_KB) AS TAB_DATA_UTL_TOTAL_KB, '
+' MAX(TAB_DATA_UTL_TOTAL_KB) AS TAB_DATA_UTL_TOTAL_KB_MAX, '
+' AVG(TAB_USED_TOTAL_KB) AS TAB_USED_TOTAL_KB, MAX(TAB_USED_TOTAL_KB) '
+' AS TAB_USED_TOTAL_KB_MAX, AVG(TAB_RESERVED_TOTAL_KB) '
+' AS TAB_RESERVED_TOTAL_KB, MAX(TAB_RESERVED_TOTAL_KB) '
+' AS TAB_RESERVED_TOTAL_KB_MAX, AVG(TAB_UNUSED_TOTAL_KB) '
+' AS TAB_UNUSED_TOTAL_KB, MAX(TAB_UNUSED_TOTAL_KB) '
+' AS TAB_UNUSED_TOTAL_KB_MAX, SUM(TAB_DATA_DELTA_TOTAL_KB) '
+' AS TAB_DATA_DELTA_TOTAL_KB, SUM(TAB_USED_DELTA_TOTAL_KB) '
+' AS TAB_USED_DELTA_TOTAL_KB, SUM(TAB_RESERVED_DELTA_TOTAL_KB) '
+' AS TAB_RESERVED_DELTA_TOTAL_KB, MAX(SOURCE_HOSTNAME) '
+' AS SOURCE_HOSTNAME FROM ( SELECT DBNAME, USER_NAME, TAB_NAME, '
+' SNAPSHOT_TIMESTAMP AS SNAPSHOT_TIMESTAMP, AVG(TIME_PERIOD) '
+' AS TIME_PERIOD, SUM(1) AS NUM_PARTITIONS, SUM(ROW_COUNT) '
+' AS ROW_COUNT, SUM(TAB_RESERVED_LOB_KB) AS TAB_RESERVED_LOB_KB, '
+' SUM(TAB_USED_LOB_KB) AS TAB_USED_LOB_KB, SUM(TAB_DATA_LOB_KB) '
+' AS TAB_DATA_LOB_KB, SUM(TAB_DATA_UTL_KB) AS TAB_DATA_UTL_KB, '
+' CASE WHEN SUM(ROW_COUNT) > 0 THEN '
+' SUM(ROW_COUNT*TAB_DATAPGCLRATIO) / SUM(ROW_COUNT) ELSE 1 END '
+' AS TAB_DATAPGCLRATIO, CASE WHEN SUM(ROW_COUNT) > 0 THEN '
+' SUM(ROW_COUNT*TAB_LRGIOEFF) / SUM(ROW_COUNT) ELSE 1 END '
+' AS TAB_LRGIOEFF, CASE WHEN SUM(ROW_COUNT+delrowcnt) > 0 THEN '
+' SUM((ROW_COUNT+delrowcnt)*DATACHANGE) / SUM(ROW_COUNT+delrowcnt) '
+' ELSE 0 END AS DATACHANGE, SUM(forwrowcnt) AS forwrowcnt, '
+' SUM(delrowcnt) AS delrowcnt, SUM(extent0pgcnt) AS extent0pgcnt, '
+' SUM(oamapgcnt) AS oamapgcnt, SUM(oampagecnt) AS oampagecnt, '
+' MAX(statmoddate) AS statmoddate, CASE WHEN SUM(ROW_COUNT) > 0 THEN '
+' SUM(ROW_COUNT*datarowsize) / SUM(ROW_COUNT) ELSE 0 END '
+' AS datarowsize, SUM(TAB_DATA_KB+TAB_DATA_LOB_KB) '
+' AS TAB_DATA_TOTAL_KB, SUM(TAB_DATA_UTL_KB+TAB_DATA_LOB_KB) '
+' AS TAB_DATA_UTL_TOTAL_KB, SUM(TAB_USED_KB+TAB_USED_LOB_KB) '
+' AS TAB_USED_TOTAL_KB, SUM(TAB_RESERVED_KB+TAB_RESERVED_LOB_KB) '
+' AS TAB_RESERVED_TOTAL_KB, '
+' SUM((TAB_RESERVED_KB+TAB_RESERVED_LOB_KB) - '
+' (TAB_USED_KB+TAB_USED_LOB_KB)) AS TAB_UNUSED_TOTAL_KB, '
+' SUM(TAB_DATA_DELTA_KB+TAB_DATA_LOB_DELTA_KB) '
+' AS TAB_DATA_DELTA_TOTAL_KB, '
+' SUM(TAB_USED_DELTA_KB+TAB_USED_LOB_DELTA_KB) '
+' AS TAB_USED_DELTA_TOTAL_KB, '
+' SUM(TAB_RESERVED_DELTA_KB+TAB_RESERVED_LOB_DELTA_KB) '
+' AS TAB_RESERVED_DELTA_TOTAL_KB, MAX(SOURCE_HOSTNAME) '
+' AS SOURCE_HOSTNAME FROM saptools..DBH_STG_TABLES '
+' WHERE SNAPSHOT_TIMESTAMP >= ? AND SNAPSHOT_TIMESTAMP <= ? AND '
+' BDOP = 1 AND BDOI = 0 AND DBNAME = ? GROUP BY DBNAME, USER_NAME, '
+' TAB_NAME, SNAPSHOT_TIMESTAMP  ) AS STD_AGGR GROUP BY DBNAME, '
+' USER_NAME, TAB_NAME '
+' ORDER BY TAB_USED_TOTAL_KB DESC AT ISOLATION READ UNCOMMITTED '
+  INTO lv_sql_stmt RESPECTING BLANKS.
+
+          " Here we get the large tables
+          TRY.
+              lr_set = lr_stmt_ref->execute_query( lv_sql_stmt ).
+              GET REFERENCE OF lt_table INTO lr_result_ref.
+              lr_set->set_param_table( lr_result_ref ).
+              lr_set->next_package( ).
+            CATCH cx_sql_exception INTO lr_sql_excp.
+              DATA(lv_err) = lr_sql_excp->get_text( ).
+              ls_output = lv_err.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+              RETURN.
+          ENDTRY.
+
+*   Deleting entries based on input schema
+          IF lt_table IS NOT INITIAL.
+
+            SELECT tabname tabclass FROM dd02l
+              INTO TABLE lt_dd02l
+              WHERE ( tabclass NE lc_pool AND tabclass NE lc_cluster ).
+
+            IF sy-subrc = 0.
+              SORT lt_dd02l BY tabname.
+            ENDIF.
+
+            SORT lt_table BY tabowner.
+            lt_table_tmp[] = lt_table[].
+
+            FREE: lt_table[].
+
+            LOOP AT lt_schema INTO ls_schema.
+              lt_table_tmp1[] = lt_table_tmp[].
+              DELETE lt_table_tmp1[] WHERE tabowner NE ls_schema.
+              APPEND LINES OF lt_table_tmp1[] TO lt_table[].
+              CLEAR: ls_schema.
+            ENDLOOP.
+
+            SORT lt_table BY row_count DESCENDING.
+
+          ENDIF.
+
+          FREE: lt_output[].
+          " Adding title to the output
+          CONCATENATE lc_top lv_num_tab lc_title
+                      INTO ls_output
+                      SEPARATED BY space.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          IF lt_table IS NOT INITIAL.
+
+            " Adding headings to the output
+            CONCATENATE lc_schema        lc_sep
+                        lc_table_name    lc_sep
+                        lc_size          lc_sep
+                        lc_no_rows
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output.
+
+            LOOP AT lt_table INTO ls_table.
+
+              READ TABLE lt_dd02l INTO ls_dd02l WITH KEY
+              tabname = ls_table-tabname.
+
+              IF sy-subrc NE 0.
+
+                lv_count = lv_count + 1.
+
+                CONDENSE lv_count.
+
+                lv_used_total_kb    = ls_table-tab_used_total_kb.
+                lv_row_count        = ls_table-row_count.
+
+                CONDENSE: lv_used_total_kb, lv_row_count.
+
+                IF ls_table-tabowner IS INITIAL.
+                  ls_table-tabowner = lc_null.
+                ENDIF.
+
+                IF lv_row_count IS INITIAL.
+                  lv_row_count = lc_null.
+                ENDIF.
+
+                CONCATENATE ls_table-tabowner   lc_sep
+                            ls_table-tabname    lc_sep
+                            lv_used_total_kb    lc_sep
+                            lv_row_count
+                            INTO ls_output.
+                APPEND ls_output TO lt_output.
+
+                " Using lv_count to get top n tables
+                IF lv_count EQ lv_num.
+                  EXIT.
+                ENDIF.
+
+              ENDIF.
+
+              CLEAR: ls_output, lv_used_total_kb, lv_row_count.
+            ENDLOOP.
+
+          ELSE.
+            " No records found
+            ls_output = lc_err_msg.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+          ENDIF.
+
+        CATCH cx_sql_exception INTO lr_sql_excp.
+          DATA(lv_msg) = lr_sql_excp->get_text( ).
+          ls_output = lv_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+      ENDTRY.
+
+      "Adding NULL values in between
+      DO.
+        REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+        IN TABLE lt_output WITH '|NULL|'.
+        FIND '||' IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+      ENDDO.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+ENDFORM.

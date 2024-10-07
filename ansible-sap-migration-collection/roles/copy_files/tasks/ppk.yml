@@ -1,0 +1,92 @@
+- name: PPK | copy file with ppk
+  block:
+    - name: PPK | copy the ppk file to target
+      copy:
+        src: "{{ ppk_source_path }}/{{ ppk_name }}"
+        dest: "/tmp"
+
+    - name: PPK | install putty
+      become: yes
+      become_method: sudo
+      command: yum install putty.x86_64
+      async: 12000
+      poll: 10
+      register: output
+      when: ansible_os_family == 'RedHat'
+
+    - name: PPK | install putty.x86_64
+      become: yes
+      become_method: sudo
+      command: zypper install putty.x86_64
+      async: 12000
+      poll: 10
+      when: ansible_os_family == 'Suse'
+
+  when: auth_type == "ppk" or auth_type == "ppk_with_passphrase" or auth_type == "pem"
+
+- name: copy files with ppk or pem authentication
+  block:
+    - name: PPK | convert to pem file
+      command: puttygen /tmp/{{ ppk_name }} -O private-openssh -o /tmp/{{ primary_host }}.pem
+      async: 12000
+      poll: 10
+      when: auth_type == "ppk"
+
+    - name: PPK | change permission
+      become: yes
+      become_method: sudo
+      file:
+        path: "/tmp/{{ primary_host }}.pem"
+        mode: '600'
+        owner: "{{ sid | lower }}adm"
+        group: "sapsys"
+
+    - name: copy dat file
+      command: sudo su - {{sid | lower }}adm -c "scp -r -i /tmp/{{ primary_host }}.pem {{ sid | lower }}adm@{{ rep_source_db }}:{{ item }} {{ item }}"
+      async: 12000
+      poll: 10
+      loop:
+        - /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT
+        - /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY
+
+  when: auth_type == "ppk" or auth_type == "pem"
+
+- name: copy files with ppk and passphrase authentication
+  block: 
+    - name: PPK | convert to pem file
+      become_method: sudo
+      become: yes
+      expect:
+        command: puttygen /tmp/{{ ppk_name }} -O private-openssh -o /tmp/{{ primary_host }}.pem
+        responses:
+          (?i)passphrase: "{{ ppk_passphrase }}"
+
+    - name: PPK | change permission
+      become: yes
+      become_method: sudo
+      file:
+        path: "/tmp/{{ primary_host }}.pem"
+        mode: '600'
+        owner: "{{ sid | lower }}adm"
+        group: "sapsys"
+
+    - name: copy dat file
+      expect:
+        command: sudo su - {{sid | lower }}adm -c "scp -r -i /tmp/{{ primary_host }}.pem {{ sid | lower }}adm@{{ rep_source_db }}:/usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT"
+        responses:
+          (?i)passphrase: "{{ ppk_passphrase }}"
+
+    - name: copy dat file
+      expect:
+        command: sudo su - {{sid | lower }}adm -c "scp -r -i /tmp/{{ primary_host }}.pem {{ sid | lower }}adm@{{ rep_source_db }}:/usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY"
+        responses:
+          (?i)passphrase: "{{ ppk_passphrase }}"
+  when: auth_type == "ppk_with_passphrase" 
+
+- name: delete file
+  become: yes
+  become_method: sudo
+  file:
+    path: "/tmp/{{ primary_host }}.pem"
+    state: absent
+  when: auth_type == "ppk" or auth_type == "ppk_with_passphrase"

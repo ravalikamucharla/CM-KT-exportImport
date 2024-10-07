@@ -1,0 +1,5 @@
+virtual_hostname: "{{ source.sap.logical_hosts.pas.hostname }}"
+virtual_ip: "{{ source.sap.logical_hosts.pas.ip }}"
+os_user: "{{ users.os.source.pas }}"
+os_type: "{{ source.sap.os_type.pas }}"
+instance_number: "{{ source.sap.instance_numbers.pas }}"

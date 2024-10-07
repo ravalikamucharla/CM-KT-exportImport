@@ -1,0 +1,74 @@
+---
+- name: Run Oracle command
+  shell: sudo su - {{ sid|lower }}adm -c "echo 'select cdb from v\$database;' | sqlplus -s / as sysdba"
+  register: abc 
+
+- debug: var=abc.stdout_lines[3]
+
+- block:
+  - name: Run Oracle command
+    shell: sudo su - {{ sid|lower }}adm -c "echo 'grant select on dba_extents to sapsr3;' | sqlplus -s / as sysdba"
+    when: abc.stdout_lines[3] == "NO"
+    register: grant 
+
+  - debug: var=grant.stdout_lines
+
+  - name: Copy oracle scripts from local to target node
+    copy:
+      src: "../templates/oraclepl.j2"
+      dest: "/tmp/oraclepl.sql"
+      mode: '0777'
+
+  - name: Run Oracle command
+    shell: sudo su - {{ sid|lower }}adm -c "sqlplus -s / as sysdba @/tmp/oraclepl.sql"
+    when: abc.stdout_lines[3] == "NO"
+    register: create    
+    args:
+      executable: /bin/bash
+  
+  - debug: var=create
+
+  - name: Run Oracle command
+    shell: sudo su - {{ sid|lower }}adm -c "echo 'grant read, write on directory \"~TABLE_SPLITTER_RANGES_DIRECY\" to sapsr3;' | sqlplus -s / as sysdba"
+    register: permission 
+
+  - debug: var=permission.stdout_lines
+  when: abc.stdout_lines[3] == "NO"
+
+- block:
+  - name: Run Oracle command
+    shell: sudo su - {{ sid|lower }}adm -c "echo 'select value from v$option where parameter = 'Oracle Database Vault';' | sqlplus -s / as sysdba"
+    register: permission 
+
+  - debug: var=permission.stdout_lines
+
+  - name: Run Oracle command
+    shell: sudo su - {{ sid|lower }}adm -c "echo 'select grantee, owner, table_name, privilege from dba_tab_privs where table_name = 'UTL_FILE' and grantee = 'PUBLIC';' | sqlplus -s / as sysdba"
+    register: permission 
+
+  - debug: var=permission.stdout_lines
+
+  - name: Run Oracle command
+    shell: sudo su - {{ sid|lower }}adm -c "echo 'grant execute on UTL_FILE to {{ schema_name }};' | sqlplus -s / as sysdba"
+    register: permission 
+
+  - debug: var=permission.stdout_lines
+  when: abc.stdout_lines[3] == "YES"
+
+- name: Copy oracle scripts from local to target node
+  copy:
+    src: "../files/splitter.j2"
+    dest: "/tmp/splitter.sql"
+    mode: '0777'
+
+- name: run splitter.sql 
+  shell: sudo su - {{ sid|lower }}adm -c "sqlplus -s / as sysdba @/tmp/splitter.sql"
+  args:
+    chdir: /tmp/
+    executable: /bin/bash
+  register: splitter
+
+- debug: var=splitter
+
+      
+  

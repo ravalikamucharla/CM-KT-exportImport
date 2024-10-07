@@ -1,0 +1,192 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SPAD_LOCK_UNLOCK_PRINTERS               *
+* Title               :   SPAD Printer lock/unlock                    *
+* Purpose             :   This report is used to lock and unlock      *
+*                         printer                                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SPAD                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*01-11-2020 Initial Yasaswini K    Local      To lock/unlock printers *
+*09-09-2022  V001   Yasaswini K    Local      To add no data found    *
+*                                                      changes        *
+*04-04-2023  V002   Yasaswini K    Local      To add authorization    *
+*                                             object                  *
+*---------------------------------------------------------------------*
+
+REPORT zcm_spad_lock_unlock_printers.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c      VALUE '|'  LENGTH 1,
+             lc_lock_type  TYPE c      VALUE 'E'  LENGTH 1,
+             lc_update     TYPE c      VALUE 'U'  LENGTH 1,
+             lc_abaptrue   TYPE c      VALUE 'X'  LENGTH 1,
+             lc_null       TYPE char20 VALUE 'NULL',
+             lc_title      TYPE char80 VALUE 'PrinterLockUnlock',
+             lc_nodata     TYPE char20 VALUE 'No data found',    "+V001
+             lc_device     TYPE char20 VALUE
+             'Output device',
+             lc_lock_tbl   TYPE rstable-tabname
+                                  VALUE 'TSP03D',
+             lc_lock_err   TYPE char20 VALUE
+             'not updated',
+             lc_unlock_msg TYPE char80 VALUE
+                             'Unlocked Successfully',
+             lc_noauth     TYPE c      VALUE
+             'Not authorized to lock or unlock output devices'
+                                                  LENGTH 80,     "+V002
+             lc_lock_msg   TYPE char80 VALUE
+                             'Locked Successfully'.
+
+  DATA: ls_input         TYPE tab512,
+        ls_output        TYPE tab512,
+        lv_action        TYPE string,
+        ls_tsp03d        TYPE tsp03d,
+        lv_text          TYPE string,
+        ls_lock_tsp03d   TYPE tsp03d,
+        ls_unlock_tsp03d TYPE tsp03d,
+        lt_tsp03d1       TYPE STANDARD TABLE OF tsp03d,
+        lt_tsp03d2       TYPE STANDARD TABLE OF tsp03d,
+        lt_tsp03d_unlock TYPE STANDARD TABLE OF tsp03d,
+        lt_tsp03d_lock   TYPE STANDARD TABLE OF tsp03d.
+
+  CLEAR:ls_input,
+        ls_output,
+        lv_action,
+        ls_tsp03d,
+        lv_text,
+        ls_lock_tsp03d,
+        ls_unlock_tsp03d.
+
+  FREE: lt_tsp03d1,
+        lt_tsp03d2,
+        lt_tsp03d_unlock,
+        lt_tsp03d_lock.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+*   Begin of changes in V002
+  "Authorization for cross-client spool administration
+  AUTHORITY-CHECK OBJECT 'S_ADMI_FCD'
+                  ID     'S_ADMI_FCD'
+                  FIELD  'SPAD'.
+  IF sy-subrc <> 0.
+    ls_output = lc_noauth.
+  ENDIF.
+*   End of changes in V002
+
+  DELETE lt_input INDEX 1.
+
+  LOOP AT lt_input INTO ls_input.
+
+    REPLACE ALL OCCURRENCES OF lc_null IN ls_input
+     WITH space.
+
+    SPLIT ls_input AT lc_sep INTO ls_tsp03d-name
+                                  ls_tsp03d-padisabled
+                                  lv_action.
+    IF lv_action = lc_update.
+      APPEND ls_tsp03d TO lt_tsp03d_lock.
+    ENDIF.
+    CLEAR: ls_input, ls_tsp03d.
+  ENDLOOP.
+
+  CLEAR: ls_tsp03d.
+
+  IF lt_tsp03d_lock[] IS NOT INITIAL.
+
+    SELECT * FROM tsp03d INTO TABLE lt_tsp03d1
+      FOR ALL ENTRIES IN lt_tsp03d_lock
+      WHERE name = lt_tsp03d_lock-name.
+
+    IF sy-subrc = 0.
+
+      LOOP AT lt_tsp03d_lock INTO ls_lock_tsp03d.
+
+        READ TABLE lt_tsp03d1 INTO ls_tsp03d WITH KEY
+                                 name = ls_lock_tsp03d-name.
+        IF sy-subrc = 0.
+          IF sy-uname <> ls_tsp03d-chgname1 OR
+             sy-sysid <> ls_tsp03d-chgsapsys1 OR
+             sy-saprl <> ls_tsp03d-chgsaprel1.
+            ls_tsp03d-chgtstmp3 = ls_tsp03d-chgtstmp2.
+            ls_tsp03d-chgtstmp2 = ls_tsp03d-chgtstmp1.
+            ls_tsp03d-chgname3  = ls_tsp03d-chgname2.
+            ls_tsp03d-chgname2  = ls_tsp03d-chgname1.
+            ls_tsp03d-chgsaprel3 = ls_tsp03d-chgsaprel2.
+            ls_tsp03d-chgsaprel2 = ls_tsp03d-chgsaprel1.
+            ls_tsp03d-chgsapsys3 = ls_tsp03d-chgsapsys2.
+            ls_tsp03d-chgsapsys2 = ls_tsp03d-chgsapsys1.
+          ENDIF.
+
+          ls_tsp03d-chgname1       = sy-uname.
+          ls_tsp03d-chgsaprel1     = sy-saprl.
+          ls_tsp03d-chgsapsys1     = sy-sysid.
+          ls_tsp03d-chgtstmp1      = sy-datum.
+          ls_tsp03d-chgtstmp1+8(6) = sy-uzeit.
+
+          IF ls_lock_tsp03d-padisabled = lc_abaptrue.
+            ls_tsp03d-padisabled = lc_abaptrue.
+            lv_text = lc_lock_msg.
+          ELSE.
+            CLEAR ls_tsp03d-padisabled.
+            lv_text = lc_unlock_msg.
+          ENDIF.
+          "update printer lock
+
+
+          CALL FUNCTION 'ENQUEUE_E_TABLE'
+            EXPORTING
+              mode_rstable   = lc_lock_type
+              tabname        = lc_lock_tbl
+            EXCEPTIONS
+              foreign_lock   = 1
+              system_failure = 2
+              OTHERS         = 3.
+          IF sy-subrc = 0.
+            UPDATE tsp03d FROM ls_tsp03d.
+            IF sy-subrc = 0.
+              CONCATENATE  lc_device ls_tsp03d-name lv_text
+              INTO ls_output SEPARATED BY space.
+              APPEND ls_output TO lt_output.
+            ELSE.
+              CONCATENATE lc_device ls_tsp03d-name lc_lock_err
+              INTO ls_output SEPARATED BY space.
+              APPEND ls_output TO lt_output.
+            ENDIF.
+            CALL FUNCTION 'DEQUEUE_E_TABLE'
+              EXPORTING
+                mode_rstable = lc_lock_type
+                tabname      = lc_lock_tbl.
+          ENDIF.
+        ENDIF.
+        CLEAR: ls_tsp03d, ls_output, ls_lock_tsp03d, lv_text.
+
+      ENDLOOP.
+    ELSE.
+      ls_output = lc_nodata.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+    ENDIF.
+  ELSE.
+    ls_output = lc_nodata.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+  ENDIF.
+
+  CLEAR: ls_tsp03d.
+ENDFORM.

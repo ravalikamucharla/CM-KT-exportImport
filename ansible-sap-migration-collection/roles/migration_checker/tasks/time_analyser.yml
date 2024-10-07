@@ -1,0 +1,58 @@
+---
+- name: unchar MIGTIME.sar
+  shell: /usr/sap/sapinst/SWPM/sapcar.exe -xvf /usr/sap/sapinst/SWPM/COMMON/INSTALL/MIGTIME.SAR 
+  args:
+    chdir: "{{ install_dir_path }}"
+  register: extracted_files
+
+- debug: 
+    var: extracted_files
+
+- name: Run import_time.sh file in target
+  shell: ./import_time.sh 
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: import_time
+
+- debug: 
+    var: import_time
+
+- name: xml and html format of imort time 
+  shell: ./import_time.sh {{ migration_checkers.target.mig_check_format }}
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: xml_html_output
+  when: migration_checkers.target.mig_check_format is defined
+
+- debug: 
+    var: xml_html_output
+
+- name: create folder
+  file:
+    path: "../Migration_checkers"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: create folder
+  file:
+    path: "../Migration_checkers/Time_analyser/target"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path }}/{{ item }}"
+    dest: "../Migration_checkers/Time_analyser/target/{{ item }}"
+    flat: yes
+  loop:
+    - import_time.txt
+    - import_time.xml
+    - import_time.html

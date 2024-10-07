@@ -1,0 +1,41 @@
+params:  # input for import and export
+  product_ids:
+    export_prep: NW_Prepare_Export:NW750.ORA.CP #NW_Prepare_Export:NW750.DB6.CP #NW_Prepare_Export:NW750.ORA.CP
+    table_split: TableSplitter:NW750.ORA.CP
+    export_db: NW_Export:NW750.ORA.CP
+    import_db: NW_ABAP_DB_DBRefresh:NW750.HDB.CP
+  export_import_dir: #(need to chcek)
+    - path: /Data
+    - path: /Data/export
+    - path: /Data/export/ABAP
+  sapsys:
+    gid: 79  #79
+  sidadm:
+    uid: 1001  #1001
+  dump_directory: "/Data/export_05jul/"     #/Data/ORA_DUMP_HANA(creating folder)
+  export:
+    sapinst_pkg_exp: "/Data/export_05jul/ABAP"
+    downloadbasket: "/Media/backup/Kernel753"
+    sapinst_path: "/Media/backup/SWPM"
+    exp_migmonNetExchangeDir: "/Data/export_05jul/ABAP"  #{{ dump_directory }}(HANA), {{ dump_directory }}//TABLE_SPLITTING (sql)
+    mainExportDir: "/Data/export_05jul"
+    splitTableFile: "/Data/export_05jul/ABAP/DATA/whr.txt"
+    sqlFileDir: "/Data/smgir"
+    tableFile: "/Data/export_05jul/table_splitting.txt"
+    parallelR3szchkExecution: true
+    data_transfer_type: NET # NET(nfs), FTP, RSYNC
+    migmondatatransfertype: NET # NET(nfs), FTP, none
+    migmonFtpExportDir: "/Data/export_05jul/ABAP"
+    migmonFtpExchangeDir: "/Data/export_05jul/ABAP"
+    source_db_type: ORA 
+    product: NW750
+  import:
+    sapinst_pkg_exp: "/Data/export_05jul/ABAP"
+    downloadbasket: "/usr/sap/sapinst/KERNEL"
+    sapinst_path: "/usr/sap/sapinst/SWPM"
+    os_type: "linux"
+    mainExportDir: "/Data/export_05jul"
+    target_db_type: HDB  # 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB
+    migmonExchangeDir: "/Data/export_05jul/ABAP"
+    tenant_user: SYSTEM
+    product: NW750

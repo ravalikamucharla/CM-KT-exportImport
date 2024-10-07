@@ -1,0 +1,1136 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SGEN_EXP_GENERATED_OBJECTS               *
+* Title               :  Run SGEN for selected components             *
+* Purpose             :  This report is used to submit sgen program   *
+*                       for all component objects if no job is running*
+*                    In case there is a job running the log is fetched*
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SGEN                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* CVERS                     X                                         *
+* TBTCO                     X                                         *
+* RSJOBTABM                 X                                         *
+* TDEVC                     X                                         *
+* TADIR                     X                                         *
+* TRDIR                     X                                         *
+* GENSETM                   X                      X                  *
+* RZLLITAB                  X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*07-29-2021  Initial  Soumya Ray   Local       Run SGEN for selected  *
+*                                              components             *
+*09-30-2022  V001     Yasaswini K  Local       To remove dead code    *
+*                                              and inline declarations*
+*---------------------------------------------------------------------*
+
+REPORT zcm_sgen_exp_generated_objects.
+
+TYPE-POOLS: abap.
+
+TYPES:BEGIN OF gy_tdevc_s,
+        devclass TYPE devclass,
+        dlvunit  TYPE dlvunit,
+      END OF gy_tdevc_s ,
+      BEGIN OF gy_tadir,
+        devclass TYPE tadir-devclass,
+        pgmid    TYPE tadir-pgmid,
+        object   TYPE tadir-object,
+        obj_name TYPE tadir-obj_name,
+      END OF gy_tadir,
+      BEGIN OF gy_trdir,
+        name TYPE trdir-name,
+        subc TYPE trdir-subc,
+      END OF gy_trdir,
+      BEGIN OF gy_tbtco,
+        jobname  TYPE tbtco-jobname,
+        jobcount TYPE tbtco-jobcount,
+        reluname TYPE tbtco-reluname,
+      END OF gy_tbtco,
+      BEGIN OF gy_cvers,
+        component TYPE dlvunit,
+      END OF gy_cvers,
+      BEGIN OF gy_job,
+        applserver TYPE syhost,
+        machtype   TYPE rfcmach,
+        jobname    TYPE btcjob,
+        jobcount   TYPE btcjobcnt,
+      END OF gy_job.
+
+DATA: gt_tdevc        TYPE STANDARD TABLE OF gy_tdevc_s,
+      gw_tdevc        TYPE gy_tdevc_s,
+      gt_tadir        TYPE STANDARD TABLE OF gy_tadir,
+      gw_tadir        TYPE gy_tadir,
+      gt_tadir_temp   TYPE STANDARD TABLE OF gy_tadir,
+      gt_gensetm      TYPE STANDARD TABLE OF gensetm,
+      gw_gensetm      TYPE gensetm,
+      gw_gensetm_temp TYPE gensetm,
+      gt_trdir        TYPE SORTED TABLE OF gy_trdir
+      WITH UNIQUE KEY name,
+      gt_tbtco        TYPE STANDARD TABLE OF gy_tbtco,
+      gw_tbtco        TYPE  gy_tbtco,
+      gt_jobtab       TYPE STANDARD TABLE OF rsjobtabm,
+      gw_jobtab       TYPE rsjobtabm.
+
+
+DATA: gt_cvers TYPE STANDARD TABLE OF gy_cvers,
+      lv_serverchk TYPE gy_cvers,
+      gw_cvers TYPE gy_cvers.
+
+DATA:
+      gt_list          TYPE         msxxlist_t,
+      gw_list          LIKE LINE OF gt_list,
+      gw_hostattributs TYPE rfcsi.
+
+DATA: gt_server         TYPE if_sgen_constants=>gty_server_type_t,
+      gw_server         TYPE if_sgen_constants=>gty_server_type_s,
+      gw_info           TYPE rfcsi,
+      gv_tabix          TYPE sy-tabix,
+      gv_triggered_jobs TYPE TABLE OF gy_job, "zbapi_job,
+      gv_return         TYPE TABLE OF bapiret2,
+      gv_gen_task       TYPE i,
+      gv_x              TYPE char1.
+
+CONSTANTS: gc_jobname  TYPE tbtco-jobname VALUE 'RSPARAGENER8M',
+           gc_repname  TYPE btcrep        VALUE 'RSPARAGENER8M',
+           gc_i        TYPE char1         VALUE 'I',
+           gc_msgcl    TYPE sy-msgid      VALUE 'ZBASIS_HP_MSG',
+           gc_type     TYPE char4         VALUE 'Type',
+           gc_msg      TYPE char10        VALUE 'Message',
+           gc_system   TYPE char10        VALUE 'System',
+           gc_head     TYPE string        VALUE 'Sgentask',
+           gc_job      TYPE char10        VALUE 'Jobname',
+           gc_jobcount TYPE char10        VALUE 'Jobcount',
+           gc_hardware TYPE char10        VALUE 'Hardware',
+           gc_server   TYPE string        VALUE 'Applicationserver',
+           gc_date     TYPE char10        VALUE 'Logdate',
+           gc_time     TYPE char10        VALUE 'Time',
+           gc_msgtxt   TYPE char15        VALUE 'Messagetext',
+           gc_msgid    TYPE char10        VALUE  'Msgid',
+           gc_msgno    TYPE char10        VALUE  'Msgno',
+           gc_msgtyp   TYPE char10        VALUE  'Msgtyp',
+           gc_njobmsg  TYPE string
+                         VALUE 'Job log cannot be read',
+           gc_all      TYPE char3        VALUE 'ALL'.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512 "Input from PYTHON
+                      lt_output STRUCTURE tab512. "Output to PYTHON
+
+  CONSTANTS : lc_sep    TYPE c       VALUE '|',
+              lc_comma  TYPE c       VALUE ',',
+              lc_ninput TYPE c       VALUE 'No input passed' LENGTH 15.
+
+  DATA: lt_server_types TYPE if_sgen_constants=>gty_server_type_t,
+        ls_input        TYPE tab512,
+        lv_jobcount     TYPE tbtco-jobcount,
+        lv_rc           TYPE sy-subrc,
+        lw_bapijob      TYPE gy_job, "zbapi_job.
+        lv_object       TYPE trobjtype,
+        lv_sched_date   TYPE sy-datum,
+        lv_sched_time   TYPE sy-uzeit,
+        ls_output       TYPE tab512,
+        ls_return       TYPE bapiret2,
+        lv_component    TYPE string,
+        lt_joblog       TYPE TABLE OF tbtc5,
+        ls_joblog       TYPE tbtc5.
+
+  CLEAR: lv_sched_date,  lv_sched_time, gv_x, gv_return,
+  gv_gen_task, lv_object.
+
+* Header of the script
+  ls_output = gc_head.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1. " Input read
+  IF sy-subrc NE 0.
+   ls_output = lc_ninput.
+   APPEND ls_output TO lt_output.
+   CLEAR ls_output.
+   RETURN.
+  ENDIF.
+
+  SPLIT ls_input AT lc_sep INTO
+  lv_component  "Components passed
+  gv_x          " X if job is to be run immediately
+  lv_sched_date " Schedule date
+  lv_sched_time. "Schedule time
+
+  SPLIT lv_component AT lc_comma INTO TABLE gt_cvers.
+
+      gv_gen_task = 1.   " All objects of components
+**********************************************************************
+**  get the server intance list and machine type
+**********************************************************************
+*get list of servers
+      CALL FUNCTION 'TH_SERVER_LIST'
+        TABLES
+          list           = gt_list
+        EXCEPTIONS
+          no_server_list = 1
+          OTHERS         = 2.
+      IF sy-subrc <> 0.
+*if no server found, get the hostname and machine type to local server
+        CALL FUNCTION 'RFC_SYSTEM_INFO'
+          IMPORTING
+            rfcsi_export = gw_hostattributs.
+
+        gw_server-applserver = gw_hostattributs-rfcdest.
+        gw_server-machtype   = gw_hostattributs-rfcmach.
+        gw_server-paragen    = abap_true.
+
+        APPEND gw_server  TO gt_server.
+
+      ELSE.
+
+* get the machine type for each server
+        LOOP AT gt_list INTO gw_list.
+
+          CALL FUNCTION 'RFC_SYSTEM_INFO'
+            DESTINATION gw_list-name
+            IMPORTING
+              rfcsi_export          = gw_info
+            EXCEPTIONS
+              communication_failure = 1
+              system_failure        = 2.
+
+          IF sy-subrc NE 0.
+*       Server exists but shows communication or system Failure
+
+          ELSE.
+
+            gw_server-applserver = gw_list-name.
+            gw_server-machtype   = gw_info-rfcmach.
+
+            APPEND gw_server TO gt_server.
+          ENDIF.
+          CLEAR: gw_list, gw_server, gw_info.
+        ENDLOOP.
+      ENDIF.
+
+*Exit processing if no server found
+      IF gt_server IS INITIAL.
+        PERFORM fill_message TABLES gv_return
+        USING gc_i
+              gc_msgcl
+              '015'
+              gw_jobtab-jobname
+              gw_jobtab-machtype ''.
+        CONCATENATE gc_type lc_sep
+        gc_msg  lc_sep
+        gc_system INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        LOOP AT gv_return INTO ls_return.
+          CONCATENATE ls_return-type lc_sep
+          ls_return-message  lc_sep
+          ls_return-system INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDLOOP.
+        RETURN.
+      ENDIF.
+
+**********************************************************************
+*  Check if any job is already running for any machine types
+**********************************************************************
+* Start of Logic to check if all components are to be selected
+      READ TABLE gt_cvers INTO lv_serverchk INDEX 1.
+      IF lv_serverchk EQ gc_all. " If PYTHON input is 'ALL'
+        FREE:gt_cvers.
+        SELECT component FROM cvers INTO TABLE gt_cvers.
+        APPEND 'LOCAL' TO gt_cvers. " LOCAL component is added
+        APPEND 'HOME' TO gt_cvers. " HOME component is added
+      ENDIF.
+* End of Logic to check if all components are to be selected
+      lt_server_types = gt_server.
+      SORT lt_server_types ASCENDING BY machtype.
+      DELETE ADJACENT DUPLICATES FROM lt_server_types
+      COMPARING machtype.
+
+      SELECT jobname jobcount reluname
+      FROM tbtco
+      INTO TABLE gt_tbtco
+      WHERE jobname    = gc_jobname
+      AND ( status = 'R' OR status = 'Y' ).
+      IF sy-subrc EQ 0.
+        SELECT * FROM rsjobtabm INTO TABLE gt_jobtab
+        FOR ALL ENTRIES IN gt_tbtco
+        WHERE jobname  = gt_tbtco-jobname
+        AND jobcount = gt_tbtco-jobcount.
+        IF sy-subrc EQ 0.
+*Remove any machine type for which job is already running
+          LOOP AT gt_jobtab INTO gw_jobtab.
+            READ TABLE lt_server_types INTO gw_server
+            WITH KEY machtype = gw_jobtab-machtype.
+            IF sy-subrc EQ 0.
+              DELETE TABLE lt_server_types FROM gw_server.
+
+              READ TABLE gt_tbtco INTO gw_tbtco
+              WITH KEY jobname = gw_jobtab-jobname
+              jobcount = gw_jobtab-jobcount.
+
+              IF sy-subrc EQ 0.
+                lw_bapijob-jobname = gw_jobtab-jobname.
+                lw_bapijob-jobcount = gw_jobtab-jobcount.
+                lw_bapijob-machtype = gw_server-machtype.
+                lw_bapijob-applserver = gw_server-applserver.
+                APPEND lw_bapijob TO gv_triggered_jobs.
+              ENDIF.
+            ENDIF.
+            CLEAR: gw_jobtab, gw_server,lw_bapijob .
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+
+*Exit out of processing if jobs already running for all Machine Types
+      IF lt_server_types IS INITIAL.
+        IF gv_triggered_jobs IS NOT INITIAL.
+          CLEAR: lw_bapijob.
+          LOOP AT gv_triggered_jobs INTO lw_bapijob.
+            CONCATENATE gc_job       lc_sep
+            gc_jobcount  lc_sep
+            gc_hardware  lc_sep
+            gc_server    INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output.
+            CONCATENATE lw_bapijob-jobname lc_sep
+            lw_bapijob-jobcount lc_sep
+            lw_bapijob-machtype lc_sep
+            lw_bapijob-applserver INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output.
+            APPEND ls_output TO lt_output.
+            CALL FUNCTION 'BP_JOBLOG_READ'
+              EXPORTING
+                jobcount              = lw_bapijob-jobcount
+                jobname               = lw_bapijob-jobname
+              TABLES
+                joblogtbl             = lt_joblog
+              EXCEPTIONS
+                cant_read_joblog      = 1
+                jobcount_missing      = 2
+                joblog_does_not_exist = 3
+                joblog_is_empty       = 4
+                joblog_name_missing   = 5
+                jobname_missing       = 6
+                job_does_not_exist    = 7
+                OTHERS                = 8.
+            IF sy-subrc EQ 0.
+              CONCATENATE gc_date lc_sep
+              gc_time lc_sep
+              gc_msgtxt lc_sep
+              gc_msgid  lc_sep
+              gc_msgno  lc_sep
+              gc_msgtyp INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+              LOOP AT lt_joblog INTO ls_joblog.
+                CONCATENATE ls_joblog-entertime lc_sep
+                ls_joblog-enterdate lc_sep
+                ls_joblog-text lc_sep
+                ls_joblog-msgid lc_sep
+                ls_joblog-msgno lc_sep
+                ls_joblog-msgtype INTO ls_output.
+                APPEND ls_output TO lt_output.
+                CLEAR: ls_output, ls_joblog.
+              ENDLOOP.
+            ELSE.
+              ls_output = gc_njobmsg.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+            ENDIF.
+            APPEND ls_output TO lt_output.
+            CLEAR:lw_bapijob.
+          ENDLOOP.
+        ENDIF.
+
+        RETURN.
+      ENDIF.
+
+**********************************************************************
+**  Get all the objects for components
+**********************************************************************
+*All the Components should be selected and Generated as per the input
+* from PYTHON
+
+      IF gt_cvers IS INITIAL.
+*Exit processing if no component found
+        PERFORM fill_message TABLES gv_return
+        USING gc_i
+              gc_msgcl
+              '012'
+              '' '' ''.
+        CONCATENATE gc_type lc_sep
+        gc_msg  lc_sep
+        gc_system INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        LOOP AT gv_return INTO ls_return.
+          CONCATENATE ls_return-type lc_sep
+          ls_return-message  lc_sep
+          ls_return-system INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDLOOP.
+        RETURN.
+
+      ELSE.
+        SORT gt_cvers ASCENDING BY component.
+      ENDIF.
+
+
+*Step 1: get all development packages for the selected components
+      SELECT devclass dlvunit FROM tdevc INTO TABLE gt_tdevc.
+      SORT gt_tdevc BY dlvunit.
+      IF sy-subrc EQ 0.
+
+        SORT gt_cvers ASCENDING BY component.
+        LOOP AT gt_tdevc INTO gw_tdevc.
+          READ TABLE gt_cvers INTO gw_cvers
+          WITH KEY component = gw_tdevc-dlvunit BINARY SEARCH.
+          IF sy-subrc NE 0.
+            DELETE TABLE gt_tdevc FROM gw_tdevc.
+          ELSE.
+            IF gw_tdevc-devclass = 'SAUS' OR
+            gw_tdevc-devclass = 'SLGN'.
+              DELETE TABLE gt_tdevc FROM gw_tdevc.
+            ENDIF.
+          ENDIF.
+
+        ENDLOOP.
+      ENDIF.
+      SORT gt_tdevc BY devclass dlvunit.
+
+*step 2: get the objects from tadir table
+      IF gt_tdevc IS NOT INITIAL AND lv_object EQ space.
+
+        SELECT devclass pgmid object obj_name  FROM tadir
+        INTO TABLE gt_tadir
+        FOR ALL ENTRIES IN gt_tdevc
+        WHERE devclass = gt_tdevc-devclass
+        AND pgmid = 'R3TR'
+        AND ( object = 'PROG' OR object = 'FUGR' OR
+        object = 'FUGS' OR object = 'CLAS' OR
+        object = 'INTF' OR object = 'TYPE' OR
+        object = 'LDBA' ).
+      ELSE.
+        SELECT devclass pgmid object obj_name  FROM tadir
+        INTO TABLE gt_tadir
+        FOR ALL ENTRIES IN gt_tdevc
+        WHERE devclass = gt_tdevc-devclass
+        AND object = lv_object
+        AND pgmid = 'R3TR'.
+
+      ENDIF.
+
+
+*check if program exists in TRDIR table
+      SELECT  name subc FROM trdir INTO TABLE gt_trdir
+      WHERE ( subc NE gc_i AND
+      ( subc EQ '1' OR subc EQ 'C'
+      OR subc EQ 'F' OR subc EQ 'J'
+      OR subc EQ 'K' OR subc EQ 'M'
+      OR subc EQ 'S' OR subc EQ 'T' ) ).
+
+      gt_tadir_temp = gt_tadir.
+
+      SORT : gt_tadir_temp ASCENDING BY devclass,
+      gt_tdevc      ASCENDING BY devclass.
+
+*collect all the objects into main internal table
+      CLEAR: gw_gensetm, gw_tadir, gw_gensetm_temp.
+      LOOP AT gt_tdevc INTO gw_tdevc.
+
+        READ TABLE gt_tadir_temp INTO gw_tadir
+        WITH KEY devclass = gw_tdevc-devclass BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          gv_tabix = sy-tabix.
+
+
+
+          LOOP AT gt_tadir_temp INTO gw_tadir FROM gv_tabix.
+            IF gw_tadir-devclass NE gw_tdevc-devclass.
+              EXIT.
+            ELSE.
+              gw_gensetm-pgmid     = gw_tadir-pgmid.
+              gw_gensetm-object    = gw_tadir-object.
+              gw_gensetm-objname   = gw_tadir-obj_name.
+              gw_gensetm-component = gw_tdevc-dlvunit. " softw. comp.
+              gw_gensetm-genstatus =
+              if_sgen_constants=>gc_genstatus_initial.
+*special treatment of LDBA object due to historical reasons
+*in order to consider the second program for an LDBA
+              IF gw_gensetm-object      = 'LDBA'.
+                gw_gensetm_temp        = gw_gensetm.
+                gw_gensetm_temp-object = 'LDBB'.
+**get the program name as well
+                PERFORM get_programname USING    gw_gensetm_temp-object
+                      gw_gensetm_temp-objname
+                CHANGING gw_gensetm_temp-name.
+**check if program exist in TRDIR table
+                READ TABLE gt_trdir
+                WITH KEY name = gw_gensetm_temp-name
+                BINARY SEARCH TRANSPORTING NO FIELDS.
+                IF sy-subrc EQ 0.
+                  APPEND gw_gensetm_temp TO gt_gensetm.
+                ENDIF.
+              ENDIF.
+*get the program name as well
+              PERFORM get_programname USING    gw_gensetm-object
+                    gw_gensetm-objname
+              CHANGING gw_gensetm-name.
+*check if program exist in TRDIR table
+              READ TABLE gt_trdir WITH KEY name = gw_gensetm-name
+              BINARY SEARCH TRANSPORTING NO FIELDS.
+              IF sy-subrc EQ 0.
+                APPEND gw_gensetm TO gt_gensetm.
+              ENDIF.
+
+              CLEAR: gw_gensetm, gw_tadir, gw_gensetm_temp.
+
+            ENDIF.
+          ENDLOOP.
+
+        ENDIF.
+
+        CLEAR:  gw_tdevc, gv_tabix.
+      ENDLOOP.
+
+*remove some objects (as per logic in SGEN standard code)
+      DELETE gt_gensetm WHERE objname = 'RSDBRUNT'
+      OR objname = 'UPGADDUSR'
+      OR objname = 'RSPARAGENLODM_CUST_SHADOW'
+      OR objname = 'RSPARAGENLODM_SHADOW'
+      OR objname = 'SUGP'
+      OR objname = 'BTCH'
+      OR objname = 'SAPMSSY2'
+      OR objname CS 'SGEN'.
+
+*now make one entry for each selected machine type, with the exception
+* of option CUR (regenerate existing loads is server-type-independent)
+      DATA: lt_gensetm TYPE  STANDARD TABLE OF gensetm.
+      lt_gensetm[] = gt_gensetm[].
+
+      LOOP AT lt_server_types INTO gw_server.
+        IF sy-tabix EQ 1.
+          READ TABLE gt_gensetm INTO gw_gensetm INDEX 1.
+          gw_gensetm-machtype = gw_server-machtype.
+          MODIFY gt_gensetm FROM gw_gensetm TRANSPORTING machtype
+          WHERE machtype IS INITIAL.
+
+          CLEAR: gw_gensetm, gw_server.
+
+        ELSE.
+          READ TABLE lt_gensetm INTO gw_gensetm INDEX 1.
+          gw_gensetm-machtype = gw_server-machtype.
+          MODIFY lt_gensetm FROM gw_gensetm TRANSPORTING machtype
+          WHERE machtype IS INITIAL.
+
+          APPEND LINES OF lt_gensetm TO gt_gensetm.
+
+          CLEAR: gw_gensetm, gw_server.
+
+        ENDIF.
+      ENDLOOP.
+      REFRESH: lt_gensetm.
+
+*Get any entries already present in GENSETM table and add
+*it to our table
+      SELECT * FROM gensetm INTO TABLE lt_gensetm.
+      IF sy-subrc EQ 0.
+        APPEND LINES OF lt_gensetm TO gt_gensetm.
+        REFRESH: lt_gensetm.
+      ENDIF.
+
+* To avoid duplicate entries we need to merge them with the existing
+* entries first avoid duplicate entries in the DB
+      SORT gt_gensetm BY pgmid object objname machtype.
+      DELETE ADJACENT DUPLICATES FROM gt_gensetm
+      COMPARING pgmid object objname machtype.
+* second avoid semantical duplicate entries
+      SORT gt_gensetm BY machtype name.
+      DELETE ADJACENT DUPLICATES FROM gt_gensetm
+      COMPARING machtype name.
+
+*check if gt_gensetm should not be blank
+      IF gt_gensetm IS INITIAL.
+        PERFORM fill_message TABLES gv_return
+        USING gc_i
+              gc_msgcl
+              '016'
+              '' '' ''.
+        CONCATENATE gc_type lc_sep
+        gc_msg  lc_sep
+        gc_system INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        LOOP AT gv_return INTO ls_return.
+          CONCATENATE ls_return-type lc_sep
+          ls_return-message  lc_sep
+          ls_return-system INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDLOOP.
+        RETURN.
+      ENDIF.
+
+*Lock Gensetm table before making database changes
+      CALL FUNCTION 'ENQUEUE_ESGENM_LOCK'
+        EXCEPTIONS
+          foreign_lock   = 1
+          system_failure = 2
+          OTHERS         = 3.
+      IF sy-subrc <> 0.
+*Exit processing if table could not be locked
+        PERFORM fill_message TABLES gv_return
+        USING gc_i
+              gc_msgcl
+              '017'
+              sy-subrc
+              '' ''.
+        CONCATENATE gc_type lc_sep
+        gc_msg  lc_sep
+        gc_system INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        LOOP AT gv_return INTO ls_return.
+          CONCATENATE ls_return-type lc_sep
+          ls_return-message  lc_sep
+          ls_return-system INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDLOOP.
+        RETURN.
+      ELSE.
+
+*Now remove all entries from Gensetm table, before we insert our values
+        PERFORM delete_gensetm TABLES gv_return.
+
+*insert the values ot Gensetm table
+        INSERT gensetm FROM TABLE gt_gensetm ACCEPTING DUPLICATE KEYS.
+
+        CALL FUNCTION 'DB_COMMIT'.
+
+        CALL FUNCTION 'DEQUEUE_ESGENM_LOCK'.
+      ENDIF.
+**********************************************************************
+*   Schedule the Job(s) for the various Machin Types
+**********************************************************************
+
+      LOOP AT lt_server_types INTO gw_server.
+* create RFC group
+        PERFORM create_rfc_group TABLES gt_server gv_return
+        USING gw_server-machtype.
+
+        IF gv_x EQ 'X'.
+          CALL FUNCTION 'SUBST_SCHEDULE_GENERATORM'
+            EXPORTING
+              jobname      = gc_jobname
+              repname      = gc_repname
+              iv_schedever = gv_x
+              gentask      = gv_gen_task
+              machtype     = gw_server-machtype
+*             sdlstrtdt    = lv_sched_date
+*             sdlstrttm    = lv_sched_time
+              strtimmed    = gv_x
+            IMPORTING
+              jobcount     = lv_jobcount
+              rc_start     = lv_rc.
+
+        ELSE.
+          CALL FUNCTION 'SUBST_SCHEDULE_GENERATORM'
+            EXPORTING
+              jobname      = gc_jobname
+              repname      = gc_repname
+              iv_schedever = gv_x
+              gentask      = gv_gen_task
+              machtype     = gw_server-machtype
+              sdlstrtdt    = lv_sched_date
+              sdlstrttm    = lv_sched_time
+*             strtimmed    = gv_x
+            IMPORTING
+              jobcount     = lv_jobcount
+              rc_start     = lv_rc.
+        ENDIF.
+
+        IF lv_rc IS INITIAL.
+          CLEAR: gw_jobtab.
+          gw_jobtab-jobname  = gc_jobname.
+          gw_jobtab-jobcount = lv_jobcount.
+          gw_jobtab-machtype =  gw_server-machtype.
+
+          INSERT rsjobtabm FROM gw_jobtab.
+          COMMIT WORK.
+
+          CLEAR: lw_bapijob.
+          lw_bapijob-applserver = gw_server-applserver.
+          lw_bapijob-jobname  = gc_jobname.
+          lw_bapijob-jobcount = lv_jobcount.
+          lw_bapijob-machtype =  gw_server-machtype.
+          APPEND lw_bapijob TO gv_triggered_jobs.
+
+
+          PERFORM fill_message TABLES gv_return
+          USING gc_i
+                gc_msgcl
+                '013'
+                gc_jobname
+                lv_jobcount ''.
+
+        ELSE.
+          PERFORM fill_message TABLES gv_return
+          USING gc_i
+                gc_msgcl
+                '014' gc_jobname
+                lv_rc ''.
+
+
+        ENDIF.
+        IF gv_return IS NOT INITIAL.
+          READ TABLE gv_return WITH KEY number = '014'
+          TRANSPORTING NO FIELDS.
+          IF sy-subrc EQ 0.
+            CONCATENATE gc_type lc_sep
+            gc_msg  lc_sep
+            gc_system INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            LOOP AT gv_return INTO ls_return.
+              CONCATENATE ls_return-type lc_sep
+              ls_return-message  lc_sep
+              ls_return-system INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+            ENDLOOP.
+          ELSE.
+            CONCATENATE gc_job       lc_sep
+            gc_jobcount  lc_sep
+            gc_hardware  lc_sep
+            gc_server    INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output, lw_bapijob.
+            LOOP AT gv_triggered_jobs INTO lw_bapijob.
+              CONCATENATE lw_bapijob-jobname lc_sep
+              lw_bapijob-jobcount lc_sep
+              lw_bapijob-machtype lc_sep
+              lw_bapijob-applserver INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output, lw_bapijob.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+
+ENDFORM.
+
+FORM fill_message  TABLES   p_return STRUCTURE bapiret2
+                   USING    VALUE(p_e)
+                            VALUE(p_class)
+                            VALUE(p_num)
+                            VALUE(p_par1)
+                            VALUE(p_par2)
+                            VALUE(p_par3).
+
+  CONSTANTS: lc_nserver    TYPE string VALUE
+  'No Server found OR Error in getting Server details',
+             lc_ncomponent TYPE string VALUE
+                             'No Component found in table CVERS',
+             lc_nobject    TYPE string VALUE
+                             'No object found to generate',
+             lc_nlock      TYPE string VALUE
+                             'Table Gensetm could not be locked. RC:',
+             lc_job        TYPE char5  VALUE 'Job:',
+             lc_jobdetails TYPE string VALUE
+                             'released, job count:',
+             lc_ncreated   TYPE string VALUE
+                             'NOT created, RETURN CODE:',
+             lc_oldentry   TYPE string VALUE
+      'Deleting old entries IN TABLE RZLLITAB failed FOR Mach.type',
+             lc_subrc      TYPE string VALUE ', subrc',
+             lc_nstore     TYPE string VALUE
+ 'Error WHILE storing the GROUP parallel_generators IN TABLE RZLLITAB',
+             lc_nrfc       TYPE string VALUE
+       'Error IN creating RFC GROUP FOR Machine Type'.
+  DATA: lw_return TYPE bapiret2,
+        lv_par1   TYPE sy-msgv1,
+        lv_data   TYPE string,                  "+V001
+        lv_par2   TYPE sy-msgv2,
+        lv_par3   TYPE sy-msgv3,
+        lv_system TYPE tbdls-logsys.
+
+  lv_par1 = p_par1.
+  lv_par2 = p_par2.
+  lv_par3 = p_par3.
+
+  CONDENSE : lv_par1, lv_par2.
+
+* logical system-id
+
+  CALL FUNCTION 'OWN_LOGICAL_SYSTEM_GET'
+    IMPORTING
+      own_logical_system             = lv_system
+    EXCEPTIONS
+      own_logical_system_not_defined = 1
+      OTHERS                         = 2.
+
+*populate the bapiretun table with error message
+  IF p_class EQ gc_msgcl.
+    lw_return-type   = p_e.
+    lw_return-id     = gc_msgcl.
+    lw_return-number = p_num.
+    lw_return-system = lv_system.
+    CASE p_num.
+      WHEN 012.
+        lw_return-message = lc_ncomponent.
+      WHEN 013.
+        CONCATENATE lc_job lv_par1 lc_jobdetails lv_par2
+        INTO lv_data SEPARATED BY space.
+        lw_return-message = lv_data.
+      WHEN 014.
+        CONCATENATE lc_job lv_par1 lc_ncreated lv_par2
+        INTO lv_data SEPARATED BY space.
+        lw_return-message = lv_data.
+      WHEN 015.
+        lw_return-message = lc_nserver.
+      WHEN 016.
+        lw_return-message = lc_nobject.
+      WHEN 017.
+        CONCATENATE lc_nlock lv_par1 INTO lv_data
+        SEPARATED BY space.
+        lw_return-message = lv_data.
+      WHEN 021.
+        CONCATENATE lc_oldentry lv_par1 lc_subrc lv_par2
+        INTO lv_data SEPARATED BY space.
+        lw_return-message = lv_data.
+      WHEN 022.
+        lw_return-message = lc_nstore.
+      WHEN 023.
+        CONCATENATE lc_nrfc lv_par1
+        INTO lv_data SEPARATED BY space.
+        lw_return-message = lv_data.
+    ENDCASE.
+  ELSE.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET2'
+      EXPORTING
+        type   = p_e
+        cl     = p_class
+        number = p_num
+        par1   = lv_par1
+        par2   = lv_par2
+        par3   = lv_par3
+      IMPORTING
+        return = lw_return.
+
+  ENDIF.
+
+  APPEND lw_return TO p_return.
+  CLEAR: lw_return, lv_data, lv_system.
+
+ENDFORM.
+FORM create_rfc_group  TABLES gt_server gv_return
+                       USING  p_machtype.
+
+  DATA: ls_log_grp_assign TYPE rzllimodif,
+        lt_log_grp_assign TYPE STANDARD TABLE OF rzllimodif,
+        lt_dummytab       TYPE STANDARD TABLE OF rzllimodgp,
+        lv_i              TYPE char1    VALUE 'I',
+        lv_s              TYPE char1    VALUE 'S',
+        lv_mcl            TYPE sy-msgid VALUE 'ZBASIS_HP_MSG'.
+
+  FIELD-SYMBOLS: <fs_server> TYPE any.
+
+  DATA:
+        lv_comp1 TYPE char8 VALUE 'MACHTYPE',
+        lv_comp2 TYPE char10 VALUE 'APPLSERVER'.
+
+* check if already entries exist
+  SELECT * FROM rzllitab
+  INTO CORRESPONDING FIELDS OF TABLE lt_log_grp_assign
+  WHERE classname = p_machtype
+  AND   grouptype = lv_s.
+  IF sy-subrc EQ 0.  " old entries exist
+    LOOP AT lt_log_grp_assign INTO ls_log_grp_assign.
+
+      ls_log_grp_assign-modificatn = 'D'. " delete the entries
+      MODIFY lt_log_grp_assign FROM ls_log_grp_assign
+      TRANSPORTING modificatn.
+      CLEAR : ls_log_grp_assign.
+
+    ENDLOOP.
+
+*       delete the old entries in table RZLLITAB
+    CALL FUNCTION 'SMLG_MODIFY'
+      EXPORTING
+        set_lock                     = ' '
+        grouptype                    = lv_s
+      TABLES
+        modifications                = lt_log_grp_assign
+        erfc_modifications           = lt_dummytab
+      EXCEPTIONS
+        invalid_mod_identifier       = 1
+        deletion_failed              = 2
+        update_failed                = 3
+        insertion_failed             = 4
+        foreign_lock                 = 5
+        system_failure               = 6
+        invalid_group_type           = 7
+        internal_error_in_number_gen = 8.
+
+    IF sy-subrc NE 0.
+*error handling
+      PERFORM fill_message TABLES gv_return
+      USING lv_i
+            lv_mcl
+            '021'
+            p_machtype
+            sy-subrc ''.
+    ENDIF.
+
+  ENDIF.
+
+* Insert the new entries for the rfc-group definition
+  CLEAR: lt_log_grp_assign.
+
+  FIELD-SYMBOLS: <fs_comp> TYPE any.
+
+  LOOP AT gt_server ASSIGNING <fs_server> .
+    ASSIGN COMPONENT lv_comp1 OF STRUCTURE <fs_server> TO <fs_comp>.
+    IF sy-subrc EQ 0.
+      IF  <fs_comp> = p_machtype.
+
+        UNASSIGN <fs_comp>.
+        ASSIGN COMPONENT lv_comp2 OF STRUCTURE <fs_server>
+        TO <fs_comp>.
+
+        IF sy-subrc EQ 0.
+
+          ls_log_grp_assign-applserver = <fs_comp>.
+          ls_log_grp_assign-classname  = p_machtype.
+          ls_log_grp_assign-grouptype  = 'S'.
+          ls_log_grp_assign-modificatn = 'I'.  " insert new entries
+
+          APPEND ls_log_grp_assign TO lt_log_grp_assign.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_log_grp_assign IS NOT INITIAL.
+
+    CALL FUNCTION 'SMLG_MODIFY'
+      EXPORTING
+        set_lock                     = ' '
+        grouptype                    = lv_s
+      TABLES
+        modifications                = lt_log_grp_assign
+        erfc_modifications           = lt_dummytab
+      EXCEPTIONS
+        invalid_mod_identifier       = 1
+        deletion_failed              = 2
+        update_failed                = 3
+        insertion_failed             = 4
+        foreign_lock                 = 5
+        system_failure               = 6
+        invalid_group_type           = 7
+        internal_error_in_number_gen = 8.
+    IF sy-subrc NE 0.
+      PERFORM fill_message TABLES gv_return
+      USING lv_i
+            lv_mcl
+            '022' '' '' ''.
+
+    ENDIF.
+  ELSE.
+    PERFORM fill_message TABLES gv_return
+    USING lv_i
+          lv_mcl
+          '023'
+          p_machtype '' ''.
+
+
+  ENDIF.
+
+ENDFORM.
+FORM delete_gensetm TABLES gv_return.
+
+* delete all entries from table GENSETM
+  DATA subrc               TYPE sy-subrc.
+  DATA : lv_is_shadow_system TYPE abap_bool,
+         c_e                 TYPE char1 VALUE 'E'.
+
+  CALL FUNCTION 'UPG_IS_SHADOW_SYSTEM'
+    IMPORTING
+      ev_shadow = lv_is_shadow_system.
+
+  IF lv_is_shadow_system = abap_false.
+    CALL FUNCTION 'FUNCTION_EXISTS'
+      EXPORTING
+        funcname = 'DB_TRUNCATE_TABLE'
+      EXCEPTIONS
+        OTHERS   = 1.
+
+    IF sy-subrc <> 0.
+*   function does not exist, use old method
+      CALL FUNCTION 'DD_DB_OPERATION'
+        EXPORTING
+          fct      = 'DEL'
+          obj_name = 'GENSETM'
+          obj_type = 'TABL'
+          prid     = 0.
+      IF sy-subrc <> 0.
+        PERFORM fill_message  TABLES gv_return
+        USING c_e
+              'TSGEN'
+              '237'
+              sy-subrc
+              'GENSETM'
+              ''.
+
+*     RC & bei DD_DB_OPERATION DEL für Tabelle &
+      ENDIF.
+      CALL FUNCTION 'DD_DB_OPERATION'
+        EXPORTING
+          fct      = 'CRE'
+          obj_name = 'GENSETM'
+          obj_type = 'TABL'
+          prid     = 0.
+      IF sy-subrc <> 0.
+*populate the bapiretun table with error message
+        PERFORM fill_message  TABLES gv_return
+        USING  c_e
+              'TSGEN'
+              '238'
+              sy-subrc
+              'GENSETM'
+              ''.
+
+      ENDIF.
+    ELSE.
+*   use new function module
+      CALL FUNCTION 'DB_TRUNCATE_TABLE'
+        EXPORTING
+          tabname = 'GENSETM'
+        IMPORTING
+          subrc   = subrc.
+      IF subrc <> 0.
+*populate the bapiretun table with error message
+        PERFORM fill_message  TABLES gv_return
+        USING c_e
+              'TSGEN'
+              '235'
+              sy-subrc
+              'GENSETM'
+              ''.
+
+      ENDIF.
+    ENDIF.
+
+  ELSE.
+    DELETE FROM gensetm.
+  ENDIF.
+
+
+ENDFORM.
+FORM get_programname USING    iv_object      TYPE trobjtype
+                              iv_obj_name    TYPE sobj_name
+                     CHANGING rv_progname    TYPE programm.
+
+  DATA lv_prefix       TYPE namespace.
+  DATA lv_stem         TYPE sobj_name.
+  DATA lv_e071objname  TYPE trobj_name.
+
+  CASE iv_object.
+    WHEN 'PROG'.
+*----------------------------programs--------------------------------
+      rv_progname = iv_obj_name.
+    WHEN 'FUGR'.
+*----------------------------function groups ------------------------
+      PERFORM get_prefix_and_stem USING iv_object iv_obj_name
+      CHANGING lv_prefix  lv_stem.
+
+      CONCATENATE lv_prefix 'SAPL' lv_stem INTO rv_progname.
+
+
+    WHEN 'FUGS'.
+*-----------------function groups with customer include ---------------
+*     if FUGX exists then also FUGS exists
+*   Since the prognames of FUGX and FUGS are identical, FUGX needn't be
+*     considered here.
+      PERFORM get_prefix_and_stem USING iv_object iv_obj_name
+      CHANGING lv_prefix  lv_stem.
+
+      CONCATENATE lv_prefix 'SAPL' lv_stem INTO rv_progname.
+
+    WHEN 'LDBA'.
+*---------------------------logical database, 2 programs---------------
+      PERFORM get_prefix_and_stem USING iv_object iv_obj_name
+      CHANGING lv_prefix  lv_stem.
+
+      CONCATENATE lv_prefix 'SAPDB' lv_stem INTO rv_progname.
+
+    WHEN 'LDBB'.
+      PERFORM get_prefix_and_stem USING iv_object iv_obj_name
+      CHANGING lv_prefix  lv_stem.
+
+      CONCATENATE lv_prefix 'DB' lv_stem 'SEL' INTO rv_progname.
+
+    WHEN 'CLAS' OR 'INTF'.
+*-----------------------classes and interfaces-------------------------
+      lv_e071objname = iv_obj_name.
+
+      rv_progname = cl_oo_cts=>get_pool_by_trkey(
+      pgmid    = 'R3TR'
+      object   = iv_object
+      obj_name = lv_e071objname ).
+    WHEN 'TYPE'.
+*------------------------------type-pool-------------------------------
+      CONCATENATE '%_C' iv_obj_name INTO rv_progname.
+
+    WHEN 'WAPA'.
+*-------------------------------BSPs-----------------------------------
+      rv_progname = iv_obj_name.
+
+    WHEN 'WDYN'.
+*----------------------------WebDynpros--------------------------------
+      rv_progname = iv_obj_name.
+
+
+  ENDCASE.
+
+ENDFORM.
+FORM get_prefix_and_stem USING    iv_object   TYPE trobjtype
+                                  iv_obj_name TYPE sobj_name
+                         CHANGING ev_prefix   TYPE namespace
+  ev_stem     TYPE sobj_name.
+
+  DATA lv_obj_name  TYPE trobj_name.
+  DATA lv_stem_e071 TYPE trobj_name.
+
+  lv_obj_name = iv_obj_name.           " TADIR -> E071
+
+  CALL FUNCTION 'TRINT_SPLIT_OBJECT'
+    EXPORTING
+      iv_object      = iv_object
+      iv_obj_name    = lv_obj_name
+    IMPORTING
+      ev_prefix      = ev_prefix
+      ev_stem        = lv_stem_e071
+    EXCEPTIONS
+      invalid_prefix = 1
+      OTHERS         = 2.
+  IF sy-subrc <> 0.
+    ev_stem = lv_obj_name.             "no split of prefix possible
+  ELSE.
+    ev_stem = lv_stem_e071.
+  ENDIF.
+
+
+ENDFORM.

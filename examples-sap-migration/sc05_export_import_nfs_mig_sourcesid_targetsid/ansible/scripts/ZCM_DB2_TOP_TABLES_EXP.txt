@@ -1,0 +1,217 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_DB2_TOP_TABLES_EXP                       *
+* Title               :  Top Tables for DB2 Database                  *
+* Purpose             :  This report is used to fetch top 100 tables  *
+*                     :   in the system                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DBACOCKPIT                                                          *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE     *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author         TR#/lrcal     Description       *
+*---------------------------------------------------------------------*
+*14-11-2022  Initial   Yasaswini K     lrcal   To fetch top 100 tables*
+*                                              in the syatem          *
+*---------------------------------------------------------------------*
+
+REPORT zcm_db2_top_tables_exp.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+TABLES lt_input  STRUCTURE tab512
+       lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_msgtitle   TYPE c VALUE
+             'Top tables for DB2'                            LENGTH 20,
+             lc_fetch      TYPE c VALUE 'FETCH'              LENGTH 5,
+             lc_comma      TYPE c VALUE ','                  LENGTH 1,
+             lc_snapshot   TYPE c VALUE 'SNAPSHOT_TIMESTAMP' LENGTH 20,
+             lc_inc_input  TYPE c VALUE 'Incorrect input'    LENGTH 20,
+             lc_sep        TYPE c VALUE '|'                  LENGTH 1,
+             lc_schema     TYPE c VALUE 'SchemaName'         LENGTH 11,
+             lc_table_name TYPE c VALUE 'TableName'          LENGTH 10,
+             lc_size       TYPE c VALUE 'Size'         	     LENGTH 4,
+             lc_noinput    TYPE c VALUE 'No input given'     LENGTH 20,
+             lc_err_msg    TYPE c VALUE 'No data found'      LENGTH 20.
+
+  DATA: ls_input          TYPE tab512,
+        ls_output         TYPE tab512,
+        lv_action         TYPE char10,
+        lv_schema         TYPE string,
+        lv_sys_id         TYPE sy-sysid,
+        lv_msize          TYPE string,
+        lr_sys            TYPE REF TO cl_db6_sys,
+        lr_exec           TYPE REF TO cx_db6_sys,
+        lr_root_excp      TYPE REF TO cx_dba_root,
+        ls_time_selection TYPE dba_wd_timeslider,
+        lv_snapshot       TYPE string,
+        lv_dbschema       TYPE char16,
+        lt_schema         TYPE STANDARD TABLE OF hdb_schema_name,
+        lt_top_tables     TYPE STANDARD TABLE OF db6_top_table_entry,
+        lt_table_tmp      TYPE STANDARD TABLE OF db6_top_table_entry,
+        lt_table          TYPE STANDARD TABLE OF db6_top_table_entry,
+        ls_table          TYPE db6_top_table_entry,
+        lr_rdi            TYPE REF TO cl_dba_rdi,
+        lr_db6_action     TYPE REF TO cl_db6_action_top_tables_list,
+        ls_schema         TYPE hdb_schema_name,
+        lv_con_msg        TYPE string,
+        lv_count          TYPE i,
+        lv_num_tab        TYPE char10.
+
+  "Title
+  ls_output = lc_msgtitle.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read input file from Python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+  IF sy-subrc NE 0.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  SPLIT ls_input AT lc_sep INTO
+  lv_action       " Action
+  lv_num_tab      " Number of tables to be fetched
+  lv_schema.      " Schema
+
+  CASE lv_action.
+
+    WHEN lc_fetch.
+
+      IF lv_schema IS INITIAL.
+
+        CALL FUNCTION 'DB_DBSCHEMA_CURRENT'
+          IMPORTING
+            dbschema = lv_dbschema.
+
+        IF sy-subrc = 0.
+          lv_schema = lv_dbschema.
+        ENDIF.
+
+      ENDIF.
+
+      SPLIT lv_schema AT lc_comma INTO TABLE lt_schema.
+
+      lv_count = lv_num_tab + 1.
+
+      lv_sys_id = sy-sysid. "System ID
+
+      TRY .
+          cl_db6_sys=>get_sys_ref(
+      EXPORTING
+        system_id     = lv_sys_id
+      RECEIVING
+        sys_ref       = lr_sys        ).
+
+        CATCH cx_db6_sys INTO lr_exec.
+
+          lv_con_msg = lr_exec->get_text( ).
+          ls_output = lv_con_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+
+      ENDTRY.
+
+      lv_snapshot = lc_snapshot.
+
+      TRY.
+          lr_rdi = cl_dba_rdi=>get_instance( lr_sys ).
+
+
+          CREATE OBJECT lr_db6_action.
+
+          lr_rdi->query->reset( ).
+
+          lr_rdi->query->set_aggregation( ddic_field = lv_snapshot ).
+
+          lr_rdi->query->set_top_n(
+          lr_db6_action->view_data-max_rows ).
+
+          lr_rdi->query->set_time_selection( ls_time_selection ).
+
+          lr_rdi->query->set_param(
+          param = cl_db6_rdi_meta=>co_param_tabname
+          value = cl_dba_rdi_meta=>co_null_value ).
+
+
+          lr_rdi->query->get_snapshot(
+          EXPORTING
+            ddic_src = cl_db6_rdi_meta=>co_ddic_db6_top_table_entry
+          IMPORTING
+            data = lr_db6_action->view_data-it_top_tables ).
+
+          lt_top_tables = lr_db6_action->view_data-it_top_tables.
+
+          IF lt_top_tables IS NOT INITIAL.
+
+            SORT lt_top_tables BY tabschema.
+
+            LOOP AT lt_schema INTO ls_schema.
+              lt_table_tmp[] = lt_top_tables[].
+              DELETE lt_table_tmp[] WHERE tabschema NE ls_schema.
+              APPEND LINES OF lt_table_tmp[] TO lt_table[].
+              CLEAR: ls_schema.
+            ENDLOOP.
+
+            SORT lt_table BY total_p_size DESCENDING.
+
+            DELETE lt_table FROM lv_count.
+
+            " Adding heading to the output
+            CONCATENATE lc_schema         lc_sep
+                        lc_table_name     lc_sep
+                        lc_size
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            LOOP AT lt_table INTO ls_table.
+
+              lv_msize = ls_table-total_p_size.
+              CONDENSE lv_msize.
+
+              CONCATENATE ls_table-tabschema     lc_sep
+                          ls_table-tabname       lc_sep
+                          lv_msize
+                          INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR: lv_msize, ls_table.
+            ENDLOOP.
+
+          ELSE.
+
+            ls_output = lc_err_msg.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+          ENDIF.
+
+        CATCH cx_dba_root INTO lr_root_excp.
+          lv_con_msg = lr_root_excp->get_text( ).
+          ls_output = lv_con_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+
+      ENDTRY.
+
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+ENDFORM.

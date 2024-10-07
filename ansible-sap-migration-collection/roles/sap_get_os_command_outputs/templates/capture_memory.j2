@@ -1,0 +1,17 @@
+{% if os_type == "linux" %}
+{{ ansible_memory_mb  |to_json | replace("u'","'")}}
+{% elif os_type == "solaris" %}
+[{
+  "Total Memory": "{{ ansible_memtotal_mb }}",
+  "Total Swap Memory": "{{ ansible_swaptotal_mb }}"
+}]
+{% elif os_type == "AIX" %}
+{
+  "Total Memory": "{{ ansible_memtotal_mb }}"
+  "Free Memory": "{{ ansible_memfree_mb }}"
+  "Total swap memory": "{{ ansible_swaptotal_mb }}"
+  "Free swap memory": "{{ ansible_swapfree_mb }}"
+}
+{% elif os_type == "windows" %} 
+{ "memtotal_mb":"{{ ansible_facts.memtotal_mb }}"}
+{%endif%}

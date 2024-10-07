@@ -1,0 +1,15 @@
+- name: check replication status is active before takeover
+  include_role: 
+    name: replication_status
+    apply:
+      delegate_to: "{{ primary_host }}"
+
+- debug:
+    msg: The Target system will takeover as Primary System and Unregistering source from target
+
+- name: Take over as primary
+  include_tasks: take_over.yml
+  when: replication.take_over_params.take_over == 'yes'
+
+- name: Unregister
+  include_tasks: unregister.yml

@@ -1,0 +1,129 @@
+###########################################################################################################################################################################################################
+#                                                                                                                                                                                                         #
+# Installation service 'SAP NetWeaver 7.5 > IBM Db2 for Linux, UNIX, and Windows > System Copy > Source System > Based on AS ABAP > Table Splitting Preparation', product id 'TableSplitter:NW750.DB6.CP' #
+#                                                                                                                                                                                                         #
+###########################################################################################################################################################################################################
+# IMPORTANT DO NOT DELETE!!! SAPInstDes25Hash=$AHfXrr87Y1Cs$fx5wHDejtHJrtX8ePapbq+9Sly8FI8CrKCp+Y8PrT97/GBbH/P1AkKVTt0YL6gCQc5OUER3TM++PkxCH3l8K+NWsaeYBA1fR
+
+# Password for the Diagnostics Agent specific <dasid>adm user. Provided value may be encoded.
+# DiagnosticsAgent.dasidAdmPassword = 
+
+# Windows domain in which the Diagnostics Agent users must be created. This is an optional property (Windows only).
+# DiagnosticsAgent.domain = 
+
+# Windows only: Password for the Diagnostics Agent specific 'SAPService<DASID>' user.
+# DiagnosticsAgent.sapServiceDASIDPassword = 
+
+# Specify whether you want to decluster during the export.
+# InitDeclusteringForExport.decluster = 
+
+# Target database type, possible values are: 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB'
+NW_ABAP_Export_Dialog.targetDbType = {{ params.import.target_db_type }}
+
+# Name of the database connect user for ABAP. Default value is 'sap<sapsid>'.
+NW_DB6_DB.db6.abap.connect.user = sap{{ sid|lower }}
+
+# Name of the database schema for ABAP. Default value is 'sap<sapsid>'.
+NW_DB6_DB.db6.abap.schema = sap{{ sid|lower }}
+
+# Name of the database connect user for Java. Default value is 'sap<sapsid>db'.
+# NW_DB6_DB.db6.java.connect.user = 
+
+# Name of the database schema for Java. Default value is 'sap<sapsid>db'.
+# NW_DB6_DB.db6.java.schema = 
+
+# UNIX only: If this parameter is set to 'RESTRICTED' the export subdirectories will belong to '<sapsid>adm:sapsys' with permission 700. Leave empty for default.
+# NW_Export.accessLevel4ExportDir = default
+
+# Main export directory with ABAP and JAVA subdirectories
+NW_Export.mainExportDir = {{ params.export.mainExportDir }}
+
+# File with predefined tables to be split
+NW_Export.tableFile = {{ params.export.tableFile }}
+
+# The FQDN of the system
+# NW_getFQDN.FQDN = 
+
+# SAP INTERNAL USE ONLY
+# NW_getFQDN.resolve = true
+
+# Specify whether you want to set FQDN for the system.
+# NW_getFQDN.setFQDN = true
+
+# The load type chosen by the user. Valid values are: 'SAP', 'STD', 'OBR', 'HCP', 'FLASHCOPY', 'MDA', 'HBR', 'SBR'
+NW_getLoadType.loadType = STD
+
+# ABAP system is Unicode (true|false), only needed if it cannot be determined from the system.
+# NW_getUnicode.isUnicode = 
+
+# Provide  'profile' directory of SAP Netweaver-based system.
+NW_readProfileDir.profileDir = /usr/sap/{{ app_sid|upper }}/SYS/profile
+
+# Windows only: The drive to use
+# NW_readProfileDir.sapdrive = 
+
+# Number of parallel 'R3ta' processes
+# TableSplitter.jobNum = 10
+
+# Location of the database software
+# db6.DB2SoftwarePath = 
+
+# Allow unsigned database software packages.
+db6.allowUnsignedDatabaseSoftware = true
+
+# Windows only: If you are installing in a domain, you can set the domain type of the connect user to 'global' or 'local'.
+# db6.domainTypeConnectUser = 
+
+# The group id of the 'sysadm' user
+# db6.gid_sysadm = 
+
+# The group id of 'sysctrl'
+# db6.gid_sysctrl = 
+
+# The group id of 'sysmaint'
+# db6.gid_sysmaint = 
+
+# The group id of 'sysmon'
+# db6.gid_sysmon = 
+
+# Windows only: The domain of the SAP Host Agent user
+# hostAgent.domain = 
+
+# Password for the 'sapadm' user of the SAP Host Agent
+# hostAgent.sapAdmPassword = 
+
+# The password of the 'db2<dbsid>' user
+nwUsers.db6.db2sidPassword = {{ passwords.db.source }}
+
+# The user id of the 'db2<dbsid>' user
+# nwUsers.db6.db2sidUid = 
+
+# The password of the ABAP connection user
+nwUsers.db6.sapsidPassword = Cloudcoe123#
+
+# The user id of the ABAP connection user
+# nwUsers.db6.sapsidUid = 
+
+# The password of the Java connection user
+# nwUsers.db6.sapsiddbPassword = 
+
+# The user id of the Java connection user
+# nwUsers.db6.sapsiddbUid = 
+
+# Windows only: The domain of all users of this SAP system. Leave empty for default.
+# nwUsers.sapDomain = 
+
+# Windows only: The password of the 'SAPServiceSID' user
+# nwUsers.sapServiceSIDPassword = 
+
+# UNIX only: The user ID of the 'sapadm' user, leave empty for default. The ID is ignored if the user already exists.
+# nwUsers.sapadmUID = 
+
+# UNIX only: The group id of the 'sapsys' group, leave empty for default. The ID is ignored if the group already exists.
+nwUsers.sapsysGID = {{ params.sapsys.gid }}
+
+# UNIX only: The user id of the <sapsid>adm user, leave empty for default. The ID is ignored if the user already exists.
+nwUsers.sidAdmUID = {{ params.sidadm.uid }}
+
+# The password of the '<sapsid>adm' user
+nwUsers.sidadmPassword = {{ passwords.adm.target.db }}

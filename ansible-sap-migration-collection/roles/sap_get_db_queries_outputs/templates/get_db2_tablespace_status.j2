@@ -1,0 +1,11 @@
+[{
+{% for data in output.results[index].stdout_lines %}
+  {% if loop.index > 0 and loop.index <= loop.length-1 %}
+              {% if data.split('=')[1] | trim  == '0x0000' %}
+                "msg": "Status is Normal(0x0000)"
+              {% else %}
+                "msg": "Status is Abnormal(One of the output is not having 0x0000 )
+              {% endif %}
+  {% endif %}
+{% endfor %}
+}]

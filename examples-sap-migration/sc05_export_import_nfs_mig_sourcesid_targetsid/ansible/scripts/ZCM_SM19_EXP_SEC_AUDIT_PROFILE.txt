@@ -1,0 +1,444 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SM19_EXP_SEC_AUDIT_PROFILE              *
+* Title               :   Export Security Audit Profile               *
+* Purpose             :   This report is used to Export Audit Profile *
+*                         in SM19 during Cloud Migration              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM19/SAPMSM19                                                       *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* RSAUPROF                  X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*07-15-2021  Initial   Ruchir Kamble  Local     To export Audit       *
+*                                               profile Status in SM19*
+*12-16-2021  V001      Soumya Ray     Local     To export all entries *
+*                                               of RSAUPROF table     *
+*02-09-2022  V002      Soumya Ray     Local   To get the error message*
+*                                               in case table is empty*
+*---------------------------------------------------------------------*
+
+"Code referred from standard report SAPMSM19
+
+REPORT zcm_sm19_exp_sec_audit_profile.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_other(4)      TYPE x VALUE 1,
+    lc_login(4)      TYPE x VALUE 2,
+    lc_tastart(4)    TYPE x VALUE 4,
+    lc_rep_start(4)  TYPE x VALUE 8,
+    lc_rfclogin(4)   TYPE x VALUE 16,
+    lc_user(4)       TYPE x VALUE 32,
+    lc_rfccall(4)    TYPE x VALUE 128,
+    lc_ugroup_pos(1) TYPE x VALUE 4,
+    lc_ugroup_neg(1) TYPE x VALUE 8,
+    lc_sep           TYPE c VALUE '|'                      LENGTH 1,
+    lc_x             TYPE c VALUE 'X'                      LENGTH 1,
+    lc_n             TYPE c VALUE 'N'                      LENGTH 1,
+    lc_2             TYPE c VALUE '2'                      LENGTH 1,
+    lc_5             TYPE c VALUE '5'                      LENGTH 1,
+    lc_9             TYPE c VALUE '9'                      LENGTH 1,
+    lc_slotno        TYPE c VALUE '0000'                   LENGTH 4,
+    lc_export        TYPE c VALUE 'EXPORT'                 LENGTH 6,
+    lc_profname      TYPE c VALUE '$CURPROF'               LENGTH 8,
+    lc_profile       TYPE c VALUE 'Profile name'           LENGTH 12,
+    lc_active_prof   TYPE c VALUE 'Active profile'         LENGTH 14,
+    lc_activated_by  TYPE c VALUE 'Activated By'           LENGTH 12,
+    lc_changed_by    TYPE c VALUE 'Changed By'             LENGTH 10,
+    lc_active_date   TYPE c VALUE 'Activation Date'        LENGTH 15,
+    lc_change_date   TYPE c VALUE 'Changed Date'           LENGTH 12,
+    lc_filter        TYPE c VALUE 'Filter'                 LENGTH 8,
+    lc_filter_active TYPE c VALUE 'Filter active'          LENGTH 13,
+    lc_client        TYPE c VALUE 'Client'                 LENGTH 6,
+    lc_selection     TYPE c VALUE 'Selection criteria'     LENGTH 18,
+    lc_username      TYPE c VALUE 'User Name'              LENGTH 9,
+    lc_usergroup_inc TYPE c VALUE 'User Group (Incl.)'     LENGTH 18,
+    lc_usergroup_exc TYPE c VALUE 'User Group (Excl.)'     LENGTH 18,
+    lc_usergroup     TYPE c VALUE 'User Group'             LENGTH 10,
+    lc_dialog_logon  TYPE c VALUE 'Dialog logon'           LENGTH 12,
+    lc_rfc_cpic      TYPE c VALUE 'RFC/CPIC logon'         LENGTH 14,
+    lc_rfc_call      TYPE c VALUE 'RFC call'               LENGTH 8,
+    lc_transaction   TYPE c VALUE 'Transaction start'      LENGTH 17,
+    lc_report        TYPE c VALUE 'Report start'           LENGTH 12,
+    lc_usermaster    TYPE c VALUE
+    'User Master Record Change'                            LENGTH 25,
+    lc_system        TYPE c VALUE 'System'                 LENGTH 6,
+    lc_otherevents   TYPE c VALUE 'Other events'           LENGTH 12,
+    lc_events        TYPE c VALUE 'Events'                 LENGTH 6,
+    lc_all           TYPE c VALUE 'All'                    LENGTH 3,
+    lc_severe        TYPE c VALUE 'Severe and Critical'    LENGTH 19,
+    lc_critical      TYPE c VALUE 'Only Critical'          LENGTH 13,
+    lc_deactivate    TYPE c VALUE
+    'Current audit profile is deactivated'                 LENGTH 40,
+    lc_title         TYPE c VALUE 'Security Audit Profile' LENGTH 28,
+    lc_inc_input     TYPE c VALUE 'Incorrect input'        LENGTH 20,
+*  Begin of changes in V001
+    lc_null          TYPE c VALUE 'NULL'                   LENGTH 4,
+    lc_no_data       TYPE c VALUE
+    'No data found'                                        LENGTH 30,
+    lc_noinput       TYPE c VALUE 'No input passed'        LENGTH 30,
+    lc_rsauprof_data TYPE c VALUE 'Data in RSAUPROF table' LENGTH 50,
+    lc_curr_prof     TYPE c VALUE 'Current audit profile'  LENGTH 21,
+    lc_audit_indctr  TYPE c VALUE
+    'Audit event classification indicator'                 LENGTH 37,
+    lc_security_lvl  TYPE c VALUE 'Security level'         LENGTH 14,
+    lc_usermaster_nm TYPE c VALUE
+    'User name in user master record'                      LENGTH 35,
+    lc_det_sel_var   TYPE c VALUE
+    'Determining seclection variant'                       LENGTH 30,
+    lc_selvec_evnt   TYPE c VALUE
+    'Selection vector of audit events'                     LENGTH 32.
+*  End of changes in V001
+
+  DATA: ls_output       TYPE tab512,
+        ls_input        TYPE tab512,
+        lv_action       TYPE char6,
+        lv_dialog_logon TYPE c,
+        lv_rfc_call     TYPE c,
+        lv_rfc_login    TYPE c,
+        lv_tastart      TYPE c,
+        lv_report       TYPE c,
+        lv_user         TYPE c,
+        lv_system       TYPE c VALUE 'X',
+        lv_other        TYPE c,
+        lv_class        LIKE lc_other,
+        lv_selvar       TYPE string,
+        lv_filter       TYPE string,
+        lv_severity     TYPE string,
+        lt_status       TYPE STANDARD TABLE OF rsauprof,
+        ls_status       TYPE rsauprof,
+*  Begin of changes in V001
+        lv_msgvect      TYPE string,
+        lv_class_ind    TYPE string,
+        lt_rsauprof     TYPE STANDARD TABLE OF rsauprof.
+
+  FIELD-SYMBOLS :<fs_status> TYPE rsauprof.
+*  End of changes in V001
+  " Clearing variables before use
+  CLEAR: ls_input, ls_output, ls_status, lv_action, lv_dialog_logon,
+  lv_rfc_call, lv_rfc_login, lv_tastart, lv_report, lv_user,
+  lv_other, lv_selvar, lv_filter, lv_severity,
+  lv_class_ind, lv_msgvect. "+V001
+
+  FREE: lt_output, lt_status,
+  lt_rsauprof . "+V001
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      " To read audit profiles
+      SELECT * FROM rsauprof
+      INTO TABLE lt_status.
+
+      IF lt_status IS NOT INITIAL.
+
+        lt_rsauprof[] = lt_status[]. "+V001
+
+        READ TABLE lt_status INTO ls_status
+        WITH KEY profname = lc_profname.
+
+        IF sy-subrc EQ 0.
+          " Adding heading to the output
+          CONCATENATE lc_active_prof lc_activated_by lc_active_date
+          INTO ls_output
+          SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+*   Begin of changes in V001
+          IF ls_status-cdate IS INITIAL.
+            ls_status-cdate = lc_null.
+          ENDIF.
+*   End of changes in V001
+          " Displaying active profile output
+          CONCATENATE ls_status-currprof  lc_sep
+          ls_status-cuname    lc_sep
+          ls_status-cdate
+          INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSE.
+
+          " Current audit profile is deactivated
+          ls_output = lc_deactivate.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " Adding empty line to the output
+        ls_output = space.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding sub title to the output
+        ls_output = lc_filter.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+*  Begin of changes in V002
+        " Sorting records by current profile and slot number
+        SORT lt_status BY currprof slotno.
+
+        DELETE lt_status WHERE currprof NE space OR
+        slotno   LE lc_slotno.
+
+        IF lt_status IS NOT INITIAL.
+
+*   End of changes in V002
+          " Adding heading to the output
+          CONCATENATE lc_profile
+          lc_filter
+          lc_changed_by
+          lc_change_date
+          lc_filter_active
+          lc_client
+          lc_selection
+          lc_usergroup
+          lc_dialog_logon
+          lc_rfc_cpic
+          lc_rfc_call
+          lc_transaction
+          lc_report
+          lc_usermaster
+          lc_system
+          lc_otherevents
+          lc_events
+          INTO ls_output
+          SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          " Sorting records by profile name
+          SORT lt_status BY profname.
+
+          LOOP AT lt_status ASSIGNING <fs_status>.
+
+            " To display audit classes
+            lv_class = <fs_status>-classes.
+
+            " Dialog Logon
+            IF lv_class O lc_login.
+              lv_dialog_logon = lc_x.
+            ELSE.
+              lv_dialog_logon = lc_n.
+            ENDIF.
+
+            " Transaction start
+            IF lv_class O lc_tastart.
+              lv_tastart = lc_x.
+            ELSE.
+              lv_tastart = lc_n.
+            ENDIF.
+
+            " Report start
+            IF lv_class O lc_rep_start.
+              lv_report = lc_x.
+            ELSE.
+              lv_report = lc_n.
+            ENDIF.
+
+            " RFC/CPIC login
+            IF lv_class O lc_rfclogin.
+              lv_rfc_login = lc_x.
+            ELSE.
+              lv_rfc_login = lc_n.
+            ENDIF.
+
+            " User Master Record Change
+            IF lv_class O lc_user.
+              lv_user = lc_x.
+            ELSE.
+              lv_user = lc_n.
+            ENDIF.
+
+            " RFC Call
+            IF lv_class O lc_rfccall.
+              lv_rfc_call = lc_x.
+            ELSE.
+              lv_rfc_call = lc_n.
+            ENDIF.
+
+            " Other events
+            IF lv_class O lc_other.
+              lv_other = lc_x.
+            ELSE.
+              lv_other = lc_n.
+            ENDIF.
+
+            " To read radio buttons in selection criteria
+            IF <fs_status>-selvar O lc_ugroup_pos.
+              lv_selvar  = lc_usergroup_inc.
+            ELSEIF ls_status-selvar O lc_ugroup_neg.
+              lv_selvar  = lc_usergroup_exc.
+            ELSE.
+              lv_selvar = lc_username.
+            ENDIF.
+
+            " Events
+            IF <fs_status>-severity EQ lc_2.
+              lv_severity = lc_all.
+            ELSEIF <fs_status>-severity EQ lc_5.
+              lv_severity = lc_severe.
+            ELSEIF <fs_status>-severity EQ lc_9.
+              lv_severity = lc_critical.
+            ENDIF.
+
+            IF <fs_status>-status IS INITIAL.
+              <fs_status>-status = lc_n.
+            ENDIF.
+
+            " To display filter number
+            SHIFT <fs_status>-slotno BY 3 PLACES.
+
+            CONCATENATE lc_filter <fs_status>-slotno
+            INTO lv_filter
+            SEPARATED BY space.
+
+*     Begin of changes in V001
+            IF lv_severity IS INITIAL.
+              lv_severity = lc_null.
+            ENDIF.
+*     End of changes in V001
+
+            " Displaying filter settings of audit profiles
+            CONCATENATE <fs_status>-profname
+            lv_filter
+            <fs_status>-cuname
+            <fs_status>-cdate
+            <fs_status>-status
+            <fs_status>-client
+            lv_selvar
+            <fs_status>-uname
+            lv_dialog_logon
+            lv_rfc_login
+            lv_rfc_call
+            lv_tastart
+            lv_report
+            lv_user
+            lv_system
+            lv_other
+            lv_severity
+            INTO ls_output
+            SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output, lv_class, lv_filter, lv_other,
+            lv_dialog_logon, lv_rfc_login, lv_rfc_call, lv_user,
+            lv_tastart, lv_report, lv_severity, lv_selvar.
+
+          ENDLOOP.
+*  Begin of changes in V002
+        ELSE.
+          ls_output = lc_no_data.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDIF.
+*  End of changes in V002
+
+*   Begin of changes in V001
+        "To get table output
+        APPEND ls_output TO lt_output. "blank line
+        "Title
+        ls_output = lc_rsauprof_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF lt_rsauprof IS NOT INITIAL. "+V002
+
+          "coloumn heading.
+          CONCATENATE lc_profile
+          lc_filter
+          lc_curr_prof
+          lc_audit_indctr
+          lc_security_lvl
+          lc_client
+          lc_usermaster_nm
+          lc_filter_active
+          lc_changed_by
+          lc_change_date
+          lc_det_sel_var
+          lc_selvec_evnt
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_rsauprof INTO ls_status.
+
+            lv_class_ind = ls_status-classes.
+            lv_severity = ls_status-severity.
+            lv_selvar   = ls_status-selvar.
+            lv_msgvect  = ls_status-msgvect.
+
+            CONCATENATE ls_status-profname ls_status-slotno
+            ls_status-currprof lv_class_ind lv_severity
+            ls_status-client ls_status-uname ls_status-status
+            ls_status-cuname ls_status-cdate lv_selvar
+            lv_msgvect INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+
+            CLEAR: lv_msgvect, lv_class_ind, lv_severity, lv_selvar,
+            ls_output.
+          ENDLOOP.
+*   End of changes in V001
+*   Begin of changes in V002
+        ELSE.
+          ls_output = lc_no_data.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDIF.
+*  End of changes in V002
+      ELSE.
+        " No audit profile in the system
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+  FREE: lt_status.
+ENDFORM.

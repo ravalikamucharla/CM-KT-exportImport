@@ -1,0 +1,15 @@
+- name: hana-hsr
+  hosts: "{{ groups['target_master_db'][0] }}"
+  vars:
+    # unregister_db: "{{ groups['source_master_db'][0] }}" # by default site_id is used
+    site_id: "{{ source.sap.logical_hosts.db2.hostname }}"
+  vars_files:
+    - ../inventory/group_vars/target_db.yml
+    - ../inventory/host_vars/{{ groups['target_master_db'][0] }}.yml
+  roles:
+    - takeover_unregister_hsr
+    - { role: sap_db_start_stop, action: start }
+    - { role: sap_db_start_stop, action: status }
+    - { role: set_network_params, set_params_on: target_primary, when: target_primary_network_params.required == 'yes'}
+    - { role: delete_hana_resolution_hosts, when: host_resolution.target_host.required == 'yes' }
+    - backups

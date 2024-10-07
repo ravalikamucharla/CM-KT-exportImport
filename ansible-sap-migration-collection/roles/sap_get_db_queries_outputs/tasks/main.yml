@@ -1,0 +1,26 @@
+---
+- name: To check if ports are open
+  command: nc -vz {{ hostip }} {{ db_port }}
+  register: port_status_db
+  delegate_to: localhost
+
+- debug:
+    msg: "{{ db_port }} Port is not open"
+  when: port_status_db.stderr is search('connection refused')
+
+- debug:
+    msg: "{{ db_port }} Port is open"
+  when: port_status_db.stderr is search('succeeded!')
+
+- name: Create folder to store outputs
+  file:
+    path: '{{ db_export_path }}{{ db_type }}'
+    mode: '0755'
+    owner: "{{ cloudmigrate_server_sudo_user }}"
+    group: "{{ cloudmigrate_server_sudo_user_group }}"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+  
+- name: Execute DB queries
+  include_tasks: "{{ db_type | lower}}.yml"

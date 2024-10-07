@@ -1,0 +1,14 @@
+---
+
+- name:  enable site
+  command: sudo su - {{ sid|lower }}adm -c "hdbnsutil -sr_enable --name={{ replication.enable_site_hostname | default(rep_source_db) }}"
+  async: 12000
+  poll: 3
+  register: en_out
+  failed_when: 
+    - not (en_out.stdout.find("this site is already enabled as source site")) 
+  delegate_to: "{{ primary_host }}"
+
+- debug:
+    var: en_out
+    

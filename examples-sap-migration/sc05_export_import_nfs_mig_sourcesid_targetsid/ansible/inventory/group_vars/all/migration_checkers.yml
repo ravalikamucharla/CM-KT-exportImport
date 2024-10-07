@@ -1,0 +1,25 @@
+migration_checkers:
+  source: #export
+    time_anayser: "no"
+    db_type: ORA  # 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB
+    product: NW750 
+    mig_check_format: -xml -html # -xml, -html, -xml -html 
+    java_home_path: /tmp/JVM/sapjvm_8/jre
+    #checker_extract_files_path:  # mention the extract path if it is different from install directory
+  target: #import
+    table_bg_mode: "no"
+    table_declustered: "no"
+    table_chk: "yes"
+    object_check: "no"
+    package_check: "no"
+    table_check: "yes"
+    time_anayser: "no"
+    time_join: "no"
+    product: NW750  
+    tier: STD # STD , DISTRIBUTED 
+    abap_path: /usr/sap/export 
+    mig_check_format: -xml -html # -xml, -html, -xml -html 
+    java_home_path: /tmp/JVM/sapjvm_8/jre
+    jdbc_jar_path: /usr/sap/ERQ/hdbclient/ngdbc.jar
+    db_type: HDB  # 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB
+    fqdn: internal.cloudapp.net

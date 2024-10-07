@@ -1,0 +1,17 @@
+---
+- name: create the sh file
+  template: 
+    src: "scheduling_{{ topology }}.j2"
+    dest: "/tmp/scheduling_{{ topology }}.sh"
+
+- name: changing permission of sh file
+  file:
+    path: "/tmp/scheduling_{{ topology }}.sh"
+    mode: "755"
+
+- name: scheduling cut-over
+  command: "/tmp/scheduling_{{ topology }}.sh"
+  register: output
+
+- debug: 
+    var: output

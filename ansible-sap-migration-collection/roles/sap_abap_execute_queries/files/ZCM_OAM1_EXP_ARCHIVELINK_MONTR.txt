@@ -1,0 +1,578 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_OAM1_EXP_ARCHIVELINK_MONTR              *
+* Title               :   Export archivelink monitor details          *
+* Purpose             :   This report is used to Export OAM1          *
+*                         archivelink monitor details                 *
+*---------------------------------------------------------------------*
+* Related Transaction                                                 *
+* OAM1                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version    Author       TR#/Local     Description        *
+*---------------------------------------------------------------------*
+*08-25-2021  Initial   Yasaswini K    Local     To Export OAM1 details*
+*09-09-2022  V001      Soumya Ray     Local     To pass the heading   *
+*                                               for error message     *
+*---------------------------------------------------------------------*
+REPORT zcm_oam1_exp_archivelink_montr.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_actv        TYPE c VALUE 'Active'
+                                                              LENGTH 6,
+             lc_missing     TYPE c VALUE 'MISSING'
+                                                              LENGTH 10,
+             lc_cara        TYPE c VALUE 'CARA'
+                                                              LENGTH 4,
+             lc_inactv      TYPE c VALUE 'Inactive'
+                                                              LENGTH 8,
+             lc_null        TYPE c VALUE 'NULL'               LENGTH 4,
+             lc_archlink    TYPE c VALUE 'ARCHIVELINK'        LENGTH 11,
+             lc_single      TYPE c VALUE 'Single Step Mode'
+                                                              LENGTH 20,
+             lc_multi       TYPE c VALUE 'Multiple Step Mode'
+                                                              LENGTH 20,
+             lc_auto        TYPE c VALUE 'Automatically'
+                                                              LENGTH 15,
+             lc_manual      TYPE c VALUE 'Manually'
+                                                              LENGTH 12,
+             lc_req         TYPE c VALUE 'RequestManagement'
+                                                              LENGTH 30,
+             lc_setting     TYPE c VALUE
+             'SettingsForAsynchronousRequests'                LENGTH 40,
+             lc_del         TYPE c VALUE 'Delete'
+                                                              LENGTH 8,
+             lc_async       TYPE c VALUE 'Asynchronous'
+                                                              LENGTH 20,
+             lc_sep         TYPE c VALUE '|'
+                                                              LENGTH 1,
+             lc_export      TYPE c VALUE 'EXPORT'             LENGTH 6,
+             lc_openprint   TYPE c VALUE 'OpenPrintJobs'
+                                                              LENGTH 20,
+             lc_druck       TYPE c VALUE 'LISTEN_DRUCK'
+                                                              LENGTH 12,
+             lc_f           TYPE c VALUE 'F'                  LENGTH 1,
+             lc_caraf       TYPE c VALUE 'CARA%'              LENGTH 5,
+             lc_a           TYPE c VALUE 'A'                  LENGTH 1,
+             lc_failedprint TYPE c VALUE 'FailedPrintJobs'
+                                                              LENGTH 20,
+             lc_archreq     TYPE c VALUE 'ArchiveRequests'
+                                                              LENGTH 20,
+             lc_conf        TYPE c VALUE 'Confirmations'
+                                                              LENGTH 20,
+             lc_connection  TYPE c VALUE 'ConnectionTest'
+                                                              LENGTH 20,
+             lc_barcode     TYPE c VALUE 'Barcodes'
+                                                              LENGTH 15,
+             lc_logging     TYPE c VALUE 'Logging'
+                                                              LENGTH 10,
+             lc_open        TYPE c VALUE 'OpenInternalBarcode'
+                                                              LENGTH 20,
+             lc_exopen      TYPE c VALUE 'OpenExternalBarcode'
+                                                              LENGTH 20,
+             lc_test        TYPE c VALUE 'TestwithErrors'
+                                                              LENGTH 20,
+             lc_no_in       TYPE c VALUE 'No input passed'    LENGTH 15,
+             lc_request     TYPE c VALUE
+             'AsynchronousRequests'                           LENGTH 20,
+             lc_object      TYPE c VALUE 'Object'
+                                                              LENGTH 8,
+             lc_print       TYPE c VALUE 'PrintArchievedLists'
+                                                              LENGTH 20,
+             lc_outbound    TYPE c VALUE 'OutboundDocumentArchieve'
+                                                              LENGTH 30,
+             lc_logentries  TYPE c VALUE 'LoggingEntries'     LENGTH 20,
+             lc_value       TYPE c VALUE 'Value'              LENGTH 8,
+             lc_failed      TYPE c VALUE 'Failed'             LENGTH 8,
+             lc_queue       TYPE c VALUE 'ArchiveQueue'       LENGTH 20,
+             lc_linkjob     TYPE c VALUE 'ArchiveLinkJob'     LENGTH 20,
+             lc_job         TYPE c VALUE 'ArchiveJob'         LENGTH 20,
+             lc_asyreq      TYPE c VALUE 'AsynchronousRequests'
+                                                              LENGTH 30,
+             lc_naction     TYPE c VALUE
+             'Incorrect Input'                                LENGTH 20,
+             lc_feedback    TYPE c VALUE 'FeedbackMessages'
+                                                              LENGTH 30,
+             lc_table       TYPE c VALUE 'ARCHIV_CREATE_TABLE'
+                                                              LENGTH 20,
+             lc_mult        TYPE c VALUE 'ARCHIV_CREATE_TABLE_MULT'
+                                                              LENGTH 30,
+             lc_scms        TYPE c VALUE 'SCMS_AO_FILE_CREATE_ASYNC'
+                                                              LENGTH 30,
+*  Begin of changes in V001
+             lc_msgtitle    TYPE c VALUE 'Messagedeatils'     LENGTH 20.
+*  d of changes in V001
+
+  TYPES: BEGIN OF lty_toacr,
+           unit      TYPE toacr-unit,
+           lnr       TYPE toacr-lnr,
+           reqstatus TYPE toacr-reqstatus,
+         END OF lty_toacr,
+
+         BEGIN OF lty_toacb,
+           unit      TYPE toacr-unit,
+           lnr       TYPE toacr-lnr,
+           reqstatus TYPE toacr-reqstatus,
+         END OF lty_toacb,
+
+         BEGIN OF lty_toam,
+           conok  TYPE char10,
+           conerr TYPE char10,
+         END OF lty_toam.
+
+  DATA: lv_log_count                TYPE i,
+        lv_log                      TYPE string,
+        ls_toars                    TYPE toars,
+        lv_cara                     TYPE string,
+        lv_newcaraactive            TYPE string,
+        lv_caradebug                TYPE string,
+        lt_toam                     TYPE STANDARD TABLE OF lty_toam,
+        ls_toam                     TYPE lty_toam,
+        it_toacr_head               TYPE STANDARD TABLE OF toacr_head,
+        ls_toacr_head               TYPE toacr_head,
+        it_toacr                    TYPE STANDARD TABLE OF lty_toacr,
+        ls_toacr                    TYPE lty_toacr,
+        it_toacb_head               TYPE STANDARD TABLE OF toacb_head,
+        lv_error                    TYPE i,
+        lv_error1                   TYPE string,
+        ls_toacb_head               TYPE toacb_head,
+        it_toacb                    TYPE STANDARD TABLE OF lty_toacb,
+        ls_toacb                    TYPE lty_toacb,
+        lv_cfbcdebug                TYPE string,
+        lv_deletefinished           TYPE string,
+        ls_output                   TYPE tab512,
+        ls_input                    TYPE tab512,
+        lv_action                   TYPE string,
+        lv_asyn_total               TYPE i,
+        lv_asyn                     TYPE string,
+        lv_feedback_total           TYPE i,
+        lv_cara_01                  TYPE i,
+        lv_early_02                 TYPE i,
+        lv_early                    TYPE string,
+        lv_batch_cara               TYPE i,
+        lv_batch                    TYPE string,
+        lv_trfc_all                 TYPE i,
+        lv_trfc                     TYPE string,
+        lv_pprlcount                TYPE i,
+        lv_pprl1                    TYPE string,
+        lv_pprlfcount               TYPE i,
+        lv_pprlf1                   TYPE string,
+        lv_internal                 TYPE string,
+        lv_external                 TYPE string,
+        lv_external_barcode_entries TYPE p,
+        lv_internal_barcode_entries TYPE p,
+        lv_feedback                 TYPE string.
+
+  CLEAR: lv_log_count, lv_log, ls_toars, lv_cara, lv_newcaraactive,
+         lv_caradebug, ls_toam, ls_toacr_head, ls_toacr, lv_error,
+         lv_action, lv_asyn_total, lv_asyn, lv_cara_01,
+         lv_feedback_total, lv_early_02, lv_early,
+         lv_batch_cara, lv_batch, lv_trfc_all, lv_trfc, lv_pprlcount,
+         lv_pprl1, lv_pprlfcount, lv_pprlf1, lv_internal, lv_external,
+         lv_external_barcode_entries, lv_internal_barcode_entries,
+         lv_error1, ls_toacb_head, ls_toacb, lv_cfbcdebug, lv_feedback,
+         lv_deletefinished, ls_output, ls_input.
+
+  FREE: lt_toam[], it_toacr_head[], it_toacr[], it_toacb_head[],
+        it_toacb[].
+
+* Begin of changes in V001
+  "Title
+  ls_output = lc_msgtitle.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of changes in V001
+
+  " Read input values from Python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    " No input passed
+    ls_output = lc_no_in.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export. "EXPORT
+
+      FREE: lt_output. "+V001
+
+      "Settings for Asynchronous Requests
+      SELECT SINGLE * FROM toars INTO ls_toars.
+      IF sy-subrc NE 0.
+        CLEAR: ls_toars.
+      ENDIF.
+
+      IF ls_toars-oldway <> abap_true.             "Request management
+        lv_newcaraactive = lc_actv.
+      ELSE.
+        lv_newcaraactive = lc_inactv.
+      ENDIF.
+      IF ls_toars-caradebug = abap_true.           "Asynchronous
+        lv_caradebug = lc_single.
+      ELSE.
+        lv_caradebug = lc_multi.
+      ENDIF.
+      IF ls_toars-cfbcdebug = abap_true.           "Conformations
+        lv_cfbcdebug = lc_single.
+      ELSE.
+        lv_cfbcdebug = lc_multi.
+      ENDIF.
+      IF ls_toars-nodeletion = abap_true.          "Delete
+        lv_deletefinished = lc_manual.
+      ELSE.
+        lv_deletefinished = lc_auto.
+      ENDIF.
+
+      "Title
+      ls_output = lc_setting.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Column Headings
+      CONCATENATE lc_req lc_del lc_async lc_conf INTO ls_output
+                                           SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Data
+      CONCATENATE lv_newcaraactive lv_deletefinished lv_caradebug
+                  lv_cfbcdebug
+                  INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+
+*------------------ Asynchrone Requests-------------------------------*
+      "Title
+      ls_output = lc_request.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Column Headings
+      CONCATENATE lc_object lc_value lc_failed
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+* Archieve Queue
+* CARA-Queue
+      "Get Queue info definition
+      SELECT COUNT(*) FROM apqi WHERE qid = lc_cara.
+      IF sy-subrc = 0.
+        "Get DATA DEFINITION Queue
+        SELECT COUNT(*) FROM apqd  INTO lv_cara_01
+                                  WHERE qid = lc_cara.
+        IF sy-subrc NE 0.
+          CLEAR: lv_cara_01.
+        ENDIF.
+        lv_cara = lv_cara_01.
+      ELSE.
+        lv_cara = lc_missing.
+      ENDIF.
+
+      CONCATENATE lc_queue lv_cara lc_null INTO ls_output
+         SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+* ArchiveLink-Job
+      "Get Job Status Overview
+      SELECT COUNT(*) FROM tbtco  INTO lv_early_02 WHERE
+                           jobname = lc_archlink AND
+                           status <> lc_f.
+      IF sy-subrc NE 0.
+        CLEAR: lv_early_02.
+      ENDIF.
+      lv_early = lv_early_02.
+      CONDENSE lv_early.
+      CONCATENATE lc_linkjob lv_early lc_null INTO ls_output
+         SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+* Archieve Job
+      "Get Job Status Overview
+      SELECT COUNT(*) FROM tbtco  INTO lv_batch_cara WHERE
+                             jobname LIKE lc_caraf AND
+                             status <> lc_f.
+      IF sy-subrc NE 0.
+        CLEAR: lv_batch_cara.
+      ENDIF.
+      lv_batch = lv_batch_cara.
+      CONDENSE lv_batch.
+      CONCATENATE lc_job lv_batch lc_null INTO ls_output
+         SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+* Asynchronous
+      "Get Asynchronous ArchiveLink Requests
+      SELECT * FROM toacr_head INTO TABLE it_toacr_head.
+      IF sy-subrc = 0.
+        DESCRIBE TABLE it_toacr_head LINES lv_asyn_total.
+
+        SELECT unit lnr reqstatus FROM toacr INTO TABLE it_toacr.
+        IF sy-subrc = 0.
+          SORT it_toacr BY unit.
+          SORT it_toacr_head BY unit.
+
+          LOOP AT it_toacr_head INTO ls_toacr_head.
+            READ TABLE it_toacr INTO ls_toacr WITH KEY
+            unit = ls_toacr_head-unit
+            BINARY SEARCH.
+            IF sy-subrc = 0 AND ls_toacr-reqstatus < 1000.
+              lv_error = lv_error + 1.
+            ENDIF.
+            CLEAR: ls_toacr_head, ls_toacr.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+
+      lv_asyn = lv_asyn_total.
+      CONDENSE lv_asyn.
+      lv_error1 = lv_error.
+
+      CONCATENATE lc_asyreq  lc_sep lv_asyn lc_sep lv_error1
+      INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output, lv_asyn, lv_error, lv_error1.
+
+* Feedback
+      "Get ArchiveLink Asynchronous CFBC Responses
+      SELECT * FROM toacb_head INTO TABLE it_toacb_head.
+      IF sy-subrc = 0.
+        DESCRIBE TABLE it_toacb_head LINES lv_feedback_total.
+
+        "Get Asynchronous ArchiveLink Requests
+        SELECT unit lnr reqstatus FROM toacr INTO TABLE it_toacb.
+        IF sy-subrc = 0.
+          SORT it_toacb BY unit.
+          SORT it_toacr_head BY unit.
+
+          LOOP AT it_toacb_head INTO ls_toacb_head.
+            READ TABLE it_toacb INTO ls_toacb WITH KEY
+            unit = ls_toacb_head-unit
+            BINARY SEARCH.
+            IF sy-subrc = 0 AND ls_toacb-reqstatus < 1000.
+              lv_error = lv_error + 1.
+            ENDIF.
+            CLEAR: ls_toacb_head,ls_toacb.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+
+      lv_feedback = lv_feedback_total.
+      CONDENSE lv_feedback.
+      lv_error1 = lv_error.
+
+      CONCATENATE lc_feedback lc_sep lv_feedback lc_sep lv_error1  INTO
+      ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output, lv_error, lv_error1, lv_feedback.
+
+
+
+*----------------------Print Archieved Lists-------------------------*
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Table Heading
+      ls_output = lc_print.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Column Headings
+      CONCATENATE lc_object lc_value
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Fetching from Job Status Overview for print archievec lists
+      SELECT COUNT(*) FROM tbtco INTO lv_pprlcount
+                   WHERE jobname = lc_druck AND status <> lc_f
+                                                  AND status <> lc_a.
+      IF sy-subrc NE 0.
+        CLEAR: lv_pprlcount.
+      ENDIF.
+      lv_pprl1 = lv_pprlcount.
+      CONCATENATE lc_openprint lc_sep lv_pprl1 INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Fetching from Job Status Overview for failed print archievec
+      "lists
+      SELECT COUNT(*) FROM tbtco INTO lv_pprlfcount
+                 WHERE jobname = lc_druck AND status = lc_a.
+      IF sy-subrc NE 0.
+        CLEAR: lv_pprlfcount.
+      ENDIF.
+
+      lv_pprlf1 = lv_pprlfcount.
+      CONCATENATE lc_failedprint lc_sep lv_pprlf1 INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+
+*----------------Outbound Document Archieve----------------------*
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Table Heading
+      ls_output = lc_outbound.
+      APPEND ls_output TO lt_output.
+
+      "Column Headings
+      CONCATENATE lc_object lc_value
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Get count of all TRFC's
+      SELECT COUNT(*) FROM arfcsstate INTO lv_trfc_all
+              WHERE arfcfnam = lc_table OR
+                    arfcfnam = lc_mult OR
+                    arfcfnam = lc_scms.
+      IF sy-subrc NE 0.
+        CLEAR: lv_trfc_all.
+      ENDIF.
+
+      lv_trfc = lv_trfc_all.
+      CONCATENATE lc_archreq lc_sep lv_trfc INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+*----------------------------- Logging----------------------------*
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Table Heading
+      ls_output = lc_logging.
+      APPEND ls_output TO lt_output.
+
+      "Column Headings
+      CONCATENATE lc_object lc_value
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+* Logging
+      "Get count of logs from log table
+      SELECT COUNT(*) FROM toa_l03 INTO lv_log_count.
+      IF sy-subrc NE 0.
+        CLEAR: lv_log_count.
+      ENDIF.
+      lv_log = lv_log_count.
+      CONCATENATE lc_logentries lc_sep lv_log INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+*-------------------------Bar Codes----------------------------------*
+
+      "Table Heading
+      ls_output = lc_barcode.
+      APPEND ls_output TO lt_output.
+
+      "Column Headings
+      CONCATENATE lc_object lc_value
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+* Bar Codes
+      CALL FUNCTION 'BDS_BARCODE_COUNT'
+        IMPORTING
+          internal_barcode_entries = lv_internal_barcode_entries
+          external_barcode_entries = lv_external_barcode_entries.
+
+      lv_internal = lv_internal_barcode_entries.
+      lv_external = lv_external_barcode_entries.
+
+      "Open internal barcode
+      CONCATENATE lc_open lc_sep lv_internal INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "open external bar code
+      CONCATENATE lc_exopen lc_sep lv_external INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+*-------------------------Connections--------------------------------*
+
+      "Table Heading
+      ls_output = lc_connection.
+      APPEND ls_output TO lt_output.
+
+      "Column Headings
+      CONCATENATE lc_object lc_value
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Connections
+      "Get connection and error connection details
+      SELECT SINGLE conok conerr FROM toamo INTO ls_toam.
+      IF sy-subrc = 0.
+        "Display Connection Test
+        CONCATENATE lc_connection lc_sep ls_toam-conok INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        "Test with errors
+        CONCATENATE lc_test lc_sep ls_toam-conerr INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, ls_toam.
+
+      ELSE.
+
+        "Display Connection Test
+        CONCATENATE lc_connection lc_sep lc_null INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        "Test with errors
+        CONCATENATE lc_test lc_sep lc_null INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, ls_toam.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      ls_output = lc_naction.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+  ENDCASE.
+ENDFORM.

@@ -1,0 +1,48 @@
+---
+- command: sudo chmod -R 777 /tmp/sapinst_instdir/
+
+- name: unchar migcheck.sar
+  shell: /usr/sap/sapinst/SWPM/sapcar.exe -xvf /usr/sap/sapinst/SWPM/COMMON/INSTALL/MIGCHECK.SAR 
+  args:
+    chdir: "{{ install_dir_path }}"
+  register: extracted_files
+
+- debug: 
+    var: extracted_files
+
+- name: object checker
+  shell: ./mig_checker.sh -checkObjects -dbType {{ migration_checkers.target.db_type | upper }} -tskDir {{ install_dir_path }} -strDirs {{ abap_dir_path }}/ABAP/DATA/STR/ -ddlFile {{ install_dir_path }}/DDLHDB.TPL -trace all 
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: obj_check
+
+- debug:
+    var: obj_check
+
+- name: create folder
+  file:
+    path: "../Migration_checkers"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: create folder
+  file:
+    path: "../Migration_checkers/object_checker"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path }}/{{ item }}"
+    dest: "../Migration_checkers/object_checker/{{ item }}"
+    flat: yes
+  loop:
+    - invalid_objects.txt
+    - object_checker.log
+    - MigrationChecker.console.log

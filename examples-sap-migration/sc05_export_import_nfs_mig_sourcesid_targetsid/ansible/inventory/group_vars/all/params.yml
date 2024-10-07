@@ -1,0 +1,46 @@
+ora_plsql: "no" #yes,no
+params:  # input for import and export
+  product_ids:
+    export_prep: NW_Prepare_Export:NW750.ORA.CP #NW_Prepare_Export:NW750.DB6.CP #NW_Prepare_Export:NW750.ORA.CP
+    table_split: TableSplitter:NW750.ORA.CP
+    export_db: NW_Export:NW750.ORA.CP
+    import_db: NW_ABAP_DB_DBRefresh:NW750.HDB.CP
+  export_import_dir: #creates direcory in source server for to store export data
+    - path: /Media/
+    - path: /Media/export_susmita
+    - path: /Media/export_susmita/ABAP
+  import_import_dir: #creates direcory in target server for to store import data
+    - path: /Media/
+    - path: /Media/export_susmita
+    - path: /Media/export_susmita/ABAP
+  sapsys:
+    gid: 79  #79
+  sidadm:
+    uid: 1001  #1001
+  dump_directory: "/Media/export_susmita/"     #/Media/ORA_DUMP_HANA(creating folder)
+  export:
+    sapinst_pkg_exp: "/Media/export_susmita/ABAP"
+    downloadbasket: "/Media/backup/Kernel753"
+    sapinst_path: "/Media/backup/SWPM"
+    exp_migmonNetExchangeDir: "/Media/export_susmita"  #{{ dump_directory }}(HANA), {{ dump_directory }}//TABLE_SPLITTING (sql)
+    mainExportDir: "/Media/export_susmita"
+    splitTableFile: "/Media/export_susmita/ABAP/DATA/whr.txt"
+    sqlFileDir: "/Data/smgir"
+    tableFile: "/Media/export_susmita/table_splitting.txt"
+    parallelR3szchkExecution: true
+    data_transfer_type: NET # NET(nfs), FTP, RSYNC
+    migmondatatransfertype: NET # NET(nfs), FTP, none
+    migmonFtpExportDir: "/Media/export_susmita/ABAP"
+    migmonFtpExchangeDir: "/Media/export_susmita/ABAP"
+    source_db_type: ORA #db type
+    product: NW750 #product
+  import:
+    sapinst_pkg_exp: "/Media/export_susmita/ABAP"
+    downloadbasket: "/usr/sap/sapinst/KERNEL"
+    sapinst_path: "/usr/sap/sapinst/SWPM"
+    os_type: "linux"
+    mainExportDir: "/Media/export_susmita"
+    target_db_type: HDB  # 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB
+    migmonExchangeDir: "/Media/export_susmita"
+    tenant_user: SYSTEM
+    product: NW750

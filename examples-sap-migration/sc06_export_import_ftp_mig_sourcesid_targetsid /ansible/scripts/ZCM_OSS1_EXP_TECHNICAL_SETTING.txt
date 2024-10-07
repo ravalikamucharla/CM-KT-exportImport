@@ -1,0 +1,255 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_OSS1_EXP_TECHNICAL_SETTING               *
+* Title               :  Technical settings SAP Service Marketplace   *
+*                        Logon                                        *
+* Purpose             :  This report is used to Capture Technical     *
+*                        Settings of SAP Service Marketplace Logon    *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* OSS1/RSEFA910                                                       *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* EWOSS                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*01-03-2021  Initial   Ruchir Kamble  Local    To Capture Technical   *
+*                                              Setings of SAP Service *
+*                                              Marketplace Logon      *
+*28-12-2021  V001     Yasaswini K    Local     To remove title when   *
+*                                              data is present        *
+*08-17-2022  V002     Soumya Ray     Local    To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sytem.    *
+*                                             Remove inline declarati-*
+*                                             ons                     *
+*---------------------------------------------------------------------*
+
+"Code referred from standard report RSEFA910
+"Events - Initialization & Start of selection
+
+REPORT zcm_oss1_exp_technical_setting.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep       TYPE c VALUE '|'                             LENGTH 1,
+    lc_hyphen    TYPE c VALUE '-'                             LENGTH 1,
+    lc_na        TYPE c VALUE 'NA'                            LENGTH 2,
+    lc_export    TYPE c VALUE 'EXPORT'                        LENGTH 6,
+    lc_inc_input TYPE c VALUE 'Incorrect input'               LENGTH 20,
+    lc_no_input  TYPE c VALUE 'No input given'                LENGTH 20,
+    lc_name      TYPE c VALUE 'Name'                          LENGTH 4,
+    lc_address   TYPE c VALUE 'IP Address'                    LENGTH 10,
+    lc_instance  TYPE c VALUE 'Instance no.'                  LENGTH 13,
+    lc_dbname    TYPE c VALUE 'DB Name'                       LENGTH 7,
+    lc_maintitle TYPE c VALUE
+    'Router Data for SAP Service Marketplace Logon'           LENGTH 50,
+    lc_title1    TYPE c VALUE
+    'SAP routers at Customer Site'                            LENGTH 30,
+    lc_title2    TYPE c VALUE
+    'SAP router and SAP Service Marketplace Message Server at SAP'
+                   LENGTH 70,
+    lc_head1     TYPE c VALUE 'SAP router 1'                  LENGTH 12,
+    lc_head2     TYPE c VALUE 'SAP router 2'                  LENGTH 12,
+    lc_head3     TYPE c VALUE 'SAP router at SAP'             LENGTH 20,
+    lc_head4     TYPE c VALUE 'SAP Service Marketplace Message Srvr'
+                   LENGTH 70,
+*   Begin of changes in V002
+    lc_err_msg   TYPE c VALUE 'No data found'                 LENGTH 20.
+*   End of changes in V002
+
+  DATA: ls_output TYPE tab512,
+        lv_action TYPE char6,
+        ls_ewoss  TYPE ewoss,
+        ls_input  TYPE tab512. "+V002
+
+  " Clearing variables before use
+  CLEAR: ls_output, lv_action, ls_ewoss,
+         ls_input. "+V002
+
+  FREE: lt_output.
+
+  " Adding main title to the output
+  ls_output = lc_maintitle.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    " No input given
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      SELECT SINGLE * FROM ewoss
+      INTO ls_ewoss
+      WHERE dummykey = space.
+
+      IF sy-subrc NE 0.
+        " No data found
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSE.
+
+        FREE: lt_output[]. "+V001
+
+        " SAP routers at Customer site
+
+        " Adding sub title and heading to the output
+        CONCATENATE lc_title1 lc_hyphen lc_head1 INTO ls_output
+        SEPARATED BY space. "+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding column headings to the output
+        CONCATENATE lc_name lc_address lc_instance INTO ls_output
+        SEPARATED BY lc_sep. "+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF ls_ewoss-sr1name IS NOT INITIAL.
+
+          " Adding Router 1 data to the output
+          CONCATENATE ls_ewoss-sr1name ls_ewoss-sr1ip ls_ewoss-sr1inst
+          INTO ls_output SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSE.
+          " No data
+          CONCATENATE lc_na lc_na lc_na INTO ls_output
+          SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " Adding empty line to the output
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding sub title and heading to the output
+        CONCATENATE lc_title1 lc_hyphen lc_head2 INTO ls_output."+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding column headings to the output
+        CONCATENATE lc_name lc_address lc_instance INTO ls_output
+        SEPARATED BY lc_sep. "+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF ls_ewoss-sr2name IS NOT INITIAL.
+
+          " Adding Router 2 data to the output
+          CONCATENATE ls_ewoss-sr2name ls_ewoss-sr2ip ls_ewoss-sr2inst
+          INTO ls_output SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSE.
+          " No data
+          CONCATENATE lc_na lc_na lc_na INTO ls_output
+          SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " Adding empty line to the output
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " SAP router and SAP Service Marketplace Message Server at SAP
+
+        " Adding sub title and heading to the output
+        CONCATENATE lc_title2 lc_hyphen lc_head3 INTO ls_output."+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding column headings to the output
+        CONCATENATE lc_name lc_address lc_instance INTO ls_output
+        SEPARATED BY lc_sep. "+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF ls_ewoss-sapxname IS NOT INITIAL.
+
+          " Adding SAP router data to the output
+          CONCATENATE ls_ewoss-sapxname ls_ewoss-sapxip
+          ls_ewoss-sapxinst INTO ls_output SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSE.
+          " No data
+          CONCATENATE lc_na lc_na lc_na INTO ls_output
+          SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " Adding empty line to the output
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " SAP GUI for Logging On To SAP Service Marketplace
+
+        " Adding sub title and heading to the output
+        CONCATENATE lc_title2 lc_hyphen lc_head4 INTO ls_output."+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding column headings to the output
+        CONCATENATE lc_name lc_dbname lc_instance INTO ls_output
+        SEPARATED BY lc_sep. "+V002
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF ls_ewoss-ossname IS NOT INITIAL.
+
+          " Adding Message server data to the output
+          CONCATENATE ls_ewoss-ossname ls_ewoss-ossdbname
+          ls_ewoss-ossinst INTO ls_output SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSE.
+          " No data
+          CONCATENATE lc_na lc_na lc_na INTO ls_output
+          SEPARATED BY lc_sep. "+V002
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  CLEAR ls_ewoss.
+ENDFORM.

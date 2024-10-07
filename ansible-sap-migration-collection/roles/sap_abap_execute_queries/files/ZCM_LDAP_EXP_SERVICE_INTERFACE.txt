@@ -1,0 +1,460 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_LDAP_EXP_SERVICE_INTERFACE               *
+* Title               :  Capture LDAP services                        *
+* Purpose             :  To export LDAP Services details              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* LDAP                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* LDAPSERVER                X                                         *
+* LDAPUSER                  X                                         *
+* LDAPGATEW                 X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-09-2021  Initial   Yasaswini K   Local       To export LDAP       *
+*                                                service details      *
+*07-15-2022   V001     Ashwini K P   Local       FM 'DOMAIN_VALUE_GET'*
+*                                                is replaced to       *
+*                                             'DDUT_DOMVALUE_TEXT_GET'*
+*                                             as it is not supported  *
+*                                             in 752 version          *
+*---------------------------------------------------------------------*
+REPORT zcm_ldap_exp_service_interface.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_ldapprod     TYPE c VALUE 'LDAPPROD'        LENGTH 8,
+             lc_ldapvers     TYPE c VALUE 'LDAPVERS'        LENGTH 8,
+             lc_ldapauth     TYPE c VALUE 'LDAPAUTH'        LENGTH 8,
+             lc_ldapappl     TYPE c VALUE 'LDAPAPPL'        LENGTH 8,
+             lc_ldapcrstor   TYPE c VALUE 'LDAPCRSTOR'      LENGTH 10,
+             lc_null         TYPE c VALUE 'NULL'            LENGTH 4,
+             lc_conavail     TYPE c VALUE 'ConnectorAvailable'
+                                                            LENGTH 20,
+             lc_connavail    TYPE c VALUE 'ConnectorNotAvailable'
+                                                            LENGTH 23,
+             lc_conbusy      TYPE c VALUE 'ConnectorCurrentlyBusy'
+                                                            LENGTH 25,
+             lc_sep          TYPE c VALUE '|'               LENGTH 1,
+             lc_server       TYPE c VALUE 'ServerName'      LENGTH 10,
+             lc_host         TYPE c VALUE 'HostName'        LENGTH 8,
+             lc_port         TYPE c VALUE 'PortNumber'      LENGTH 10,
+             lc_product      TYPE c VALUE 'ProductName'     LENGTH 12,
+             lc_version      TYPE c VALUE 'ProtocolVersion' LENGTH 16,
+             lc_appl         TYPE c VALUE 'LDAPApplication' LENGTH 16,
+             lc_default      TYPE c VALUE 'Default'         LENGTH 7,
+             lc_base         TYPE c VALUE 'BaseEntry'       LENGTH 9,
+             lc_logon        TYPE c VALUE 'SystemLogon'     LENGTH 11,
+             lc_read         TYPE c VALUE 'ReadAnonymously' LENGTH 20,
+             lc_connectors   TYPE c VALUE 'LDAPConnectors'  LENGTH 20,
+             lc_up           TYPE c VALUE 'UP'              LENGTH 2,
+             lc_busy         TYPE c VALUE 'BUSY'            LENGTH 4,
+             lc_down         TYPE c VALUE 'DOWN'            LENGTH 4,
+             lc_conname      TYPE c VALUE 'ConnectorName'   LENGTH 15,
+             lc_status       TYPE c VALUE 'CurrentStatus'   LENGTH 15,
+             lc_export       TYPE c VALUE 'EXPORT'
+                                                            LENGTH 6,
+             lc_naction      TYPE c VALUE 'Incorrect Input'
+                                                            LENGTH 30,
+             lc_noinput      TYPE c VALUE 'No input given'
+                                                            LENGTH 20,
+             lc_appserver    TYPE c VALUE 'ApplicationServer'
+                                                            LENGTH 20,
+             lc_constatus    TYPE c VALUE 'Status'          LENGTH 6,
+             lc_trace        TYPE c VALUE 'TraceLevel'      LENGTH 10,
+             lc_retperiod    TYPE c VALUE 'MaxRetentionPeriod'
+                                                            LENGTH 20,
+             lc_codepage     TYPE c VALUE 'CodePage'        LENGTH 10,
+             lc_pagesize     TYPE c VALUE 'PageSize'        LENGTH 10,
+             lc_nodata       TYPE c VALUE 'No data found'
+                                                            LENGTH 25,
+             lc_systemusers  TYPE c VALUE 'LDAPSystemUsers'
+                                                            LENGTH 20,
+             lc_userid       TYPE c VALUE 'UserID'          LENGTH 6,
+             lc_name         TYPE c VALUE 'DistinguishedName'
+                                                            LENGTH 20,
+             lc_readautho    TYPE c VALUE 'OnlyReadAutho'   LENGTH 15,
+             lc_mecha        TYPE c VALUE 'AuthMechanism'   LENGTH 15,
+             lc_store        TYPE c VALUE 'CredentialStorage'
+                                                            LENGTH 20,
+             lc_ldapserver   TYPE c VALUE 'LDAPServerDetails'
+                                                            LENGTH 24,
+             lc_noldapserver TYPE c VALUE 'LDAPServerDetailsNotFound'
+                                                            LENGTH 40,
+             lc_x            TYPE ddbool_d VALUE 'X'.   " +V001
+
+
+  DATA: lt_ldap          TYPE STANDARD TABLE OF ldapserver,
+        ls_ldap          TYPE ldapserver,
+        lt_ldapuser      TYPE STANDARD TABLE OF ldapuser,
+        ls_ldapuser      TYPE ldapuser,
+        lt_ldapgatew     TYPE STANDARD TABLE OF ldapgatew,
+        ls_ldapgatew     TYPE ldapgatew,
+        lv_actstat       TYPE ldap_stat,
+        lv_currentstatus TYPE string,
+        ls_output        TYPE tab512,
+        lv_domname       TYPE dd07v-domname,
+        lv_port          TYPE string,
+        lv_auth          TYPE string,
+        lv_store         TYPE string,
+        ls_input         TYPE tab512,
+        lv_action        TYPE char10,
+        lv_domvalue      TYPE dd07v-domvalue_l,
+        ls_dd07v         TYPE dd07v.  " +V001
+
+  CLEAR: ls_ldap, ls_ldapuser, ls_ldapgatew, lv_actstat,
+         lv_currentstatus, ls_output, lv_domname, " +V001
+         lv_port, lv_auth, lv_store, lv_domvalue, lv_action,
+         ls_input.
+
+  FREE: lt_ldap, lt_ldapuser, lt_ldapgatew.
+
+  "LDAPSERVER
+  ls_output = lc_ldapserver.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Reading input from the user
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.   " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export. "EXPORT
+
+      SELECT * FROM ldapserver INTO TABLE lt_ldap.
+      IF sy-subrc = 0.
+        "Column Headings
+        CONCATENATE lc_server lc_host lc_port lc_product
+                    lc_version lc_appl
+                    lc_default lc_base lc_logon lc_read
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_ldap INTO ls_ldap.
+
+          "To fetch values from domain
+          IF ls_ldap-product IS NOT INITIAL.
+
+            CLEAR: lv_domname, lv_domvalue.
+*                   lv_text. "-V001
+
+            lv_domname = lc_ldapprod.
+            lv_domvalue = ls_ldap-product.
+
+* Begin of changes V001
+            CLEAR: ls_dd07v.
+            CALL FUNCTION 'DDUT_DOMVALUE_TEXT_GET'
+              EXPORTING
+                name                = lv_domname
+                value               = lv_domvalue
+                langu               = sy-langu
+                texts_only          = lc_x  "'X'
+              IMPORTING
+                dd07v_wa            = ls_dd07v
+              EXCEPTIONS
+                not_found           = 1
+                illegal_input       = 2
+                others              = 3.
+            IF sy-subrc EQ 0.
+              ls_ldap-product = ls_dd07v-ddtext.
+            ENDIF.
+* End of changes V001
+
+          ENDIF.
+
+          "To fetch values from domain
+          IF ls_ldap-version IS NOT INITIAL.
+
+            CLEAR: lv_domname, lv_domvalue.
+*                   lv_text.  "-V001
+
+            lv_domname = lc_ldapvers.
+            lv_domvalue = ls_ldap-version.
+
+* Begin of changes V001
+            CLEAR: ls_dd07v.
+            CALL FUNCTION 'DDUT_DOMVALUE_TEXT_GET'
+              EXPORTING
+                name                = lv_domname
+                value               = lv_domvalue
+                langu               = sy-langu
+                texts_only          = lc_x  "'X'
+              IMPORTING
+                dd07v_wa            = ls_dd07v
+              EXCEPTIONS
+                not_found           = 1
+                illegal_input       = 2
+                others              = 3.
+            IF sy-subrc EQ 0.
+              ls_ldap-version = ls_dd07v-ddtext.
+            ENDIF.
+* End of changes V001
+          ENDIF.
+
+          "To fetch values from domain
+          IF ls_ldap-appl IS NOT INITIAL.
+
+            CLEAR: lv_domname, lv_domvalue.
+*                   lv_text. "-V001
+
+            lv_domname = lc_ldapappl.
+            lv_domvalue = ls_ldap-appl.
+
+* Begin of changes V001
+            CLEAR: ls_dd07v.
+            CALL FUNCTION 'DDUT_DOMVALUE_TEXT_GET'
+              EXPORTING
+                name                = lv_domname
+                value               = lv_domvalue
+                langu               = sy-langu
+                texts_only          = lc_x  "'X'
+              IMPORTING
+                dd07v_wa            = ls_dd07v
+              EXCEPTIONS
+                not_found           = 1
+                illegal_input       = 2
+                others              = 3.
+            IF sy-subrc EQ 0.
+              ls_ldap-appl = ls_dd07v-ddtext.
+            ENDIF.
+* End of changes V001
+
+          ENDIF.
+
+          lv_port = ls_ldap-port.
+          CONDENSE lv_port.
+
+          "End null check
+          IF ls_ldap-ranonym IS INITIAL.
+            ls_ldap-ranonym = lc_null.
+          ENDIF.
+
+          "Output details
+          CONCATENATE ls_ldap-serverid
+                      ls_ldap-host
+                      lv_port
+                      ls_ldap-product
+                      ls_ldap-version
+                      ls_ldap-appl
+                      ls_ldap-dfault
+                      ls_ldap-base
+                      ls_ldap-sysuser
+                      ls_ldap-ranonym
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+
+          CLEAR: lv_domname, lv_domvalue, "+V001
+                 ls_ldap,ls_output, lv_port.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_noldapserver.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "LDAPUSER
+      ls_output = lc_systemusers.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      SELECT * FROM ldapuser INTO TABLE lt_ldapuser.
+      IF sy-subrc = 0.
+        "Column Heading
+        CONCATENATE lc_userid lc_name lc_readautho
+                    lc_mecha lc_store INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_ldapuser INTO ls_ldapuser.
+
+          "To fetch values from domain
+          IF ls_ldapuser-auth IS NOT INITIAL.
+
+            CLEAR: lv_domname, lv_domvalue.
+*                   lv_text. "-V001
+
+            lv_domname = lc_ldapauth.
+            lv_domvalue = ls_ldapuser-auth.
+
+* Begin of changes V001
+
+            CLEAR: ls_dd07v.
+            CALL FUNCTION 'DDUT_DOMVALUE_TEXT_GET'
+              EXPORTING
+                name                = lv_domname
+                value               = lv_domvalue
+                langu               = sy-langu
+                texts_only          = lc_x  "'X'
+              IMPORTING
+                dd07v_wa            = ls_dd07v
+              EXCEPTIONS
+                not_found           = 1
+                illegal_input       = 2
+                others              = 3.
+            IF sy-subrc EQ 0.
+              ls_ldapuser-auth = ls_dd07v-ddtext.
+            ENDIF.
+* End of changes V001
+
+          ENDIF.
+
+          "To fetch values from domain
+          IF ls_ldapuser-store IS NOT INITIAL.
+
+            CLEAR: lv_domname, lv_domvalue.
+*                   lv_text. "-V001
+
+            lv_domname = lc_ldapcrstor.
+            lv_domvalue = ls_ldapuser-store.
+
+* Begin of changes V001
+            CLEAR: ls_dd07v.
+            CALL FUNCTION 'DDUT_DOMVALUE_TEXT_GET'
+              EXPORTING
+                name                = lv_domname
+                value               = lv_domvalue
+                langu               = sy-langu
+                texts_only          = lc_x  "'X'
+              IMPORTING
+                dd07v_wa            = ls_dd07v
+              EXCEPTIONS
+                not_found           = 1
+                illegal_input       = 2
+                others              = 3.
+            IF sy-subrc EQ 0.
+              ls_ldapuser-store = ls_dd07v-ddtext.
+            ENDIF.
+* End of changes V001
+
+          ENDIF.
+
+          lv_auth = ls_ldapuser-auth.
+
+          IF ls_ldapuser-store IS INITIAL.
+            lv_store = lc_null.
+          ELSE.
+            lv_store = ls_ldapuser-store.
+          ENDIF.
+
+          CONCATENATE ls_ldapuser-uname ls_ldapuser-binddn
+          ls_ldapuser-readonly
+          lv_auth lv_store INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+
+          CLEAR: ls_ldapuser, lv_auth, lv_store, ls_output,
+                 lv_domname, lv_domvalue.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "LDAPGATEW
+      ls_output = lc_connectors.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      SELECT * FROM ldapgatew INTO TABLE lt_ldapgatew.
+      IF  sy-subrc = 0.
+
+        "Column Headings
+        CONCATENATE lc_conname lc_status lc_appserver lc_constatus
+                lc_trace lc_retperiod lc_codepage lc_pagesize
+                INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_ldapgatew INTO ls_ldapgatew.
+
+          CALL FUNCTION 'LDAP_CHECKRFC_LOAD'
+            EXPORTING
+              ldapconn       = ls_ldapgatew-rfcdest
+            IMPORTING
+              ldapstat       = lv_actstat
+            EXCEPTIONS
+              internal_error = 1.
+
+          "get current status
+          IF sy-subrc NE 0.
+            lv_currentstatus = lc_null.
+          ELSE.
+            CASE lv_actstat.
+              WHEN lc_up.
+                lv_currentstatus = lc_conavail.
+              WHEN lc_busy.
+                lv_currentstatus = lc_conbusy.
+              WHEN lc_down.
+                lv_currentstatus = lc_connavail.
+            ENDCASE.
+          ENDIF.
+
+          IF ls_ldapgatew-pagesize IS INITIAL.
+            ls_ldapgatew-pagesize = lc_null.
+          ENDIF.
+
+          "Append output details
+          CONCATENATE ls_ldapgatew-rfcdest
+          lv_currentstatus
+          ls_ldapgatew-applserver
+          ls_ldapgatew-stat
+          ls_ldapgatew-tlev
+          ls_ldapgatew-outdate
+          ls_ldapgatew-codepage
+          ls_ldapgatew-pagesize
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+
+          CLEAR: ls_ldapgatew, ls_output, lv_currentstatus,
+                 lv_actstat.
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+      ENDIF.
+
+    WHEN OTHERS.
+      ls_output = lc_naction."Action not supported
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+  "To replace blank value in middle fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

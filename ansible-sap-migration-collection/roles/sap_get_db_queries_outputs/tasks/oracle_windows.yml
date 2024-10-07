@@ -1,0 +1,89 @@
+- name: Create empty file
+  win_file:
+     path: C:\{{ item.name }}.sql
+     state: touch
+     mode: 0777
+  loop:
+     - "{{ oracle_queries_win }}"
+     - "{{ oracle_queries_win_txt }}" 
+
+- name: Insert oracle queries in sql file
+  win_lineinfile:
+     path: C:\{{ item.name }}.sql
+     line: "{{ item.query }}"
+  loop:
+     - "{{ oracle_queries_win }}"
+     - "{{ oracle_queries_win_txt }}"
+
+- name: Insert exit; to sql file
+  win_lineinfile:
+     path: C:\{{ item.name }}.sql
+     line: exit;
+  loop:
+     - "{{ oracle_queries_win }}"
+     - "{{ oracle_queries_win_txt }}"
+
+-  name: Execute oracle queries
+   win_command: "sqlplus -s '/ as sysdba' @C:\\{{ item.name }}.sql"
+   register: output
+   loop:
+      - "{{ oracle_queries_win }}"
+      - "{{ oracle_queries_win_txt }}"
+   loop_control:
+      index_var: index   
+
+-  name: Execute oracle queries
+   win_command: "sqlplus -s '/ as sysdba' @C:\\{{ item.name }}.sql"
+   register: output_txt
+   loop:
+      - "{{ oracle_queries_win_txt }}"
+   loop_control:
+      index_var: index  
+
+- name: Write oracle outputs in json format
+  template: 
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.json'
+  become: yes
+  delegate_to: localhost
+  loop:
+     - "{{ oracle_queries_win }}" 
+  loop_control:
+      index_var: index
+  when:
+  - item.name == output.results[index].item.name
+
+- name: Write oracle outputs in text format
+  template:
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.txt'
+  become: yes
+  delegate_to: localhost
+  loop:
+     - "{{ oracle_queries_win_txt }}"
+  loop_control:
+      index_var: index
+  when: 
+  - item.name == output_txt.results[index].item.name
+
+- name: Execute command to get list of top lobs
+  shell:
+   " awk '/CHUNK/&&c++>0 {next} 1' get_list_of_top_lob_outputs.txt|awk '/OWNER/&&c++>0 {next} 1'|awk '/TABLE_NAME/&&c++>0 {next} 1'|sed '/^-/d'|sed '/^$/d'|sed '0~3G' | tee get_list_of_top_lob_outputs.txt "
+  args:
+    chdir: '{{ db_export_path }}{{ db_type }}'
+  delegate_to: localhost
+
+- name: Execute command to get list of top tables
+  shell: 
+   " awk '/CHUNK/&&c++>0 {next} 1' get_list_of_top_tables_outputs.txt|awk '/OWNER/&&c++>0 {next} 1'|awk '/TABLE_NAME/&&c++>0 {next} 1'|awk '/NVL/&&c++>0 {next} 1'|sed '/^-/d'|sed '/^$/d'|sed '0~3G' | tee get_list_of_top_tables_outputs.txt "
+  args:
+    chdir: '{{ db_export_path }}{{ db_type }}'
+  delegate_to: localhost
+
+- name: Delete sql file on the remote target
+  win_file:
+     path: C:\{{ item.name }}.sql
+     state: absent
+  loop:
+     - "{{ oracle_queries_win }}"
+     - "{{ oracle_queries_win_txt }}" 

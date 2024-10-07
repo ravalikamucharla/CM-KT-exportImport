@@ -1,0 +1,521 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_HDB_FIORI_LAUNCH_CHCK_751S               *
+* Title               :  Capture fiori launchpad checks               *
+* Purpose             :  To capture fiori launchpad check and intent  *
+*                        check details                                *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* /UI2/FLP_CONTCHECK                                                  *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*11-03-2021  Initial   Yasaswini    Local     Capture fiori launchpad *
+*                                             checks and intent checks*
+*---------------------------------------------------------------------*
+
+REPORT zcm_hdb_fiori_launch_chck_751s MESSAGE-ID /ui2/fiocont.
+
+"The code is taken from stanfdard program '/UI2/FLC'
+"Prerequisite: 'Text line in the documentation module has'
+"'Number of Text Lines in Line Table' to maintained
+"for table DOKTL and DOKIL respectively, as without it information
+"msg comes in pop up.
+"Combined script for both Fiori Launchpad and intent checks
+
+CLASS lcl_ui_util DEFINITION DEFERRED.
+
+DATA: go_ui_util   TYPE REF TO lcl_ui_util,
+      gr_alv_grid  TYPE REF TO cl_gui_alv_grid,
+      go_fcc_check TYPE REF TO /ui2/cl_fiori_lpd_checks.
+
+INCLUDE /ui2/flc_ui_util.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_catalogpage TYPE string VALUE
+             'X-SAP-UI2-CATALOGPAGE:',
+             lc_uname       TYPE c      VALUE '*'          LENGTH 1,
+             lc_null        TYPE c      VALUE 'NULL'       LENGTH 4,
+             lc_intent      TYPE c      VALUE '*-*'        LENGTH 3,
+             lc_title       TYPE c      VALUE
+             'Fiori Launchpad Checks'                      LENGTH 30,
+             lc_title1      TYPE c      VALUE
+             'Fiori Launchpad Intent Checks'              LENGTH 40,
+             lc_export      TYPE c      VALUE 'EXPORT'     LENGTH 6,
+             lc_sep         TYPE c      VALUE '|'          LENGTH 1,
+             lc_ninput      TYPE c      VALUE
+             'No input passed'                             LENGTH 20,
+             lc_naction     TYPE c      VALUE
+             'Incorrect Input'                             LENGTH 30,
+             lc_edata       TYPE c      VALUE
+             'Issue in fetching launchpad checks'          LENGTH 40,
+             lc_status      TYPE c      VALUE 'Status'     LENGTH 6,
+             lc_package     TYPE c      VALUE 'Package'    LENGTH 7,
+             lc_adaplyr     TYPE c      VALUE
+             'AdaptationLayer'                             LENGTH 16,
+             lc_idcat       TYPE c      VALUE
+             'IDofaCatalog'                                LENGTH 15,
+             lc_cattl       TYPE c      VALUE
+             'CatalogTitle'                                LENGTH 13,
+             lc_grpid       TYPE c      VALUE 'GroupID'    LENGTH 8,
+             lc_grptl       TYPE c      VALUE
+             'GroupTitle'                                  LENGTH 11,
+             lc_sysalias    TYPE c      VALUE
+             'SystemAlias'                                 LENGTH 12,
+             lc_tiletl      TYPE c      VALUE 'TileTitle'  LENGTH 10,
+             lc_tileid      TYPE c      VALUE 'TileID'     LENGTH 7,
+             lc_icon        TYPE c      VALUE 'Icon'       LENGTH 4,
+             lc_titlepar    TYPE c      VALUE
+             'TileParameter'                               LENGTH 14,
+             lc_keywords    TYPE c      VALUE 'Keywords'   LENGTH 8,
+             lc_tilerefid   TYPE c      VALUE
+             'TileReferenceId'                             LENGTH 17,
+             lc_tarmapref   TYPE c      VALUE
+             'TargetMappingRefId'                          LENGTH 18,
+             lc_tarmapinf   TYPE c      VALUE
+             'TargetMappingInformation'                    LENGTH 30,
+             lc_tlnavtar    TYPE c      VALUE
+             'TitleofNavigationTarget'                     LENGTH 26,
+             lc_launchrl    TYPE c      VALUE
+             'LaunchpadRole'                               LENGTH 14,
+             lc_launchins   TYPE c      VALUE
+             'LaunchpadInstance'                           LENGTH 18,
+             lc_appltyp     TYPE c      VALUE
+             'ApplicationType'                             LENGTH 16,
+             lc_applid      TYPE c      VALUE
+             'ApplicationID'                               LENGTH 14,
+             lc_launapal    TYPE c      VALUE
+             'LauchpadAppl.Alias'                          LENGTH 18,
+             lc_launadin    TYPE c      VALUE
+             'LaunchpadAdd.Info'                           LENGTH 20,
+             lc_launtxky    TYPE c      VALUE
+             'LaunchpadTextKey'                            LENGTH 18,
+             lc_wdcon       TYPE c      VALUE
+             'WDConfigKy'                                  LENGTH 17,
+             lc_obj         TYPE c      VALUE 'OBJName'    LENGTH 10,
+             lc_launchbspr  TYPE c      VALUE
+             'LaunchpadBusinessParam'                      LENGTH 24,
+             lc_semobj      TYPE c      VALUE
+             'SemanticObject'                              LENGTH 15,
+             lc_semact      TYPE c      VALUE
+             'SemanticAction'                              LENGTH 15,
+             lc_desktop     TYPE c      VALUE 'Desktop'    LENGTH 7,
+             lc_tablet      TYPE c      VALUE 'Tablet'     LENGTH 6,
+             lc_phone       TYPE c      VALUE 'Phone'      LENGTH 5,
+             lc_desktop1    TYPE c      VALUE 'Desktop'    LENGTH 7,
+             lc_mappsig     TYPE c      VALUE
+             'MappingSignature'                            LENGTH 20,
+             lc_tileinfo    TYPE c      VALUE
+             'TileInform.'                                 LENGTH 14,
+             lc_pfcgrl      TYPE c      VALUE 'PFCGRole'   LENGTH 9,
+             lc_pfcgtl      TYPE c      VALUE 'PFCGTitle'  LENGTH 10,
+             lc_pfcgrlasg   TYPE c      VALUE
+             'PFCGRoleAssign'                              LENGTH 16,
+             lc_mainwdcon   TYPE c      VALUE
+             'MainWDConfigKy'                              LENGTH 17,
+             lc_propwdcon   TYPE c      VALUE
+             'PropertyWDConfigKey'                         LENGTH 21,
+             lc_softcomp    TYPE c      VALUE
+             'SoftwareComp'                                LENGTH 14,
+             lc_message     TYPE c      VALUE 'Msg'        LENGTH 3,
+             lc_error       TYPE c      VALUE 'E'          LENGTH 1,
+             lc_warning     TYPE c      VALUE 'W'          LENGTH 1,
+             lc_success     TYPE c      VALUE 'S'          LENGTH 1,
+             lc_ecode       TYPE c      VALUE '@5C@'       LENGTH 4,
+             lc_wcode       TYPE c      VALUE '@5D@'       LENGTH 4,
+             lc_gcode       TYPE c      VALUE '@5B@'       LENGTH 4,
+             lc_index       TYPE c      VALUE 'Index'      LENGTH 5,
+             lc_title2      TYPE c      VALUE
+             'Stringfields'                                LENGTH 15,
+             lc_ndata       TYPE c      VALUE
+             'No data found'                               LENGTH 40.
+
+  TYPES lty_packages TYPE RANGE OF devclass.
+
+  DATA: ls_output        TYPE tab512,
+        ls_prefinal      TYPE string,
+        lv_intent1       TYPE char80,
+        lv_intent        TYPE string,
+        lv_ff            TYPE string,
+        ls_devc          TYPE lty_packages,
+        lv_ff1           TYPE char80,
+        lv_signature     TYPE abap_bool VALUE 'X',
+        lv_icon          TYPE char4,
+        lr_packages      TYPE REF TO lty_packages,
+        lv_scope         TYPE string,
+        ls_intent        TYPE /ui2/flc_output_struc,
+        lt_catalog       TYPE /ui2/if_fcc_const=>tp_t_catalog,
+        ls_package       TYPE /ui2/if_fcc_const=>tp_s_package,
+        lv_package       TYPE  devclass,
+        lt_catalogs      TYPE /ui2/if_fcc_const=>tp_t_catalog,
+        lv_read_group    TYPE char1,
+        lv_pers          TYPE char1 VALUE '',
+        lt_devc          TYPE lty_packages,
+        lv_subpk         TYPE char1,
+        lv_action        TYPE string,
+        lv_conf          TYPE c VALUE 'X',
+        lt_out           TYPE STANDARD TABLE OF /ui2/flc_output_struc
+        INITIAL SIZE 0,
+        lt_output1       TYPE STANDARD TABLE OF tab512,
+        lv_cust          TYPE char1,
+        lv_uname         TYPE usr02-bname VALUE '*',
+        lv_signat        TYPE char1,
+        lv_assign        TYPE char1,
+        lv_textid        TYPE char1,
+        lv_tilepara(129) TYPE c,
+        lv_mappsign(129) TYPE c,
+        lv_index         TYPE i,
+        lv_index1        TYPE string,
+        lv_count         TYPE char10,
+        lt_output2       TYPE STANDARD TABLE OF tab512,
+        lt_foutput       TYPE STANDARD TABLE OF /ui2/flc_output_struc
+        INITIAL SIZE 0.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  "Read the input data
+  READ TABLE lt_input INTO DATA(ls_input) INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export. "EXPORT
+
+      CREATE OBJECT go_ui_util TYPE lcl_ui_util.
+
+      lv_read_group  = abap_true.
+
+      IF go_ui_util IS BOUND.
+
+        "Get Package
+        lr_packages = go_ui_util->get_packages(
+                                 it_packages     = lt_devc[]
+                                 iv_sub_packages = lv_subpk ).
+
+        "get Scope
+        lv_scope = go_ui_util->get_scope(
+        iv_conf = lv_conf
+        iv_cust = lv_cust
+        iv_pers = lv_pers ).
+
+        TRY.
+            go_fcc_check = /ui2/cl_fiori_lpd_checks=>get_instance(
+            it_packages      = lr_packages->*
+            iv_with_groups   = lv_read_group
+            it_catalogs      = lt_catalog
+            iv_scope         = lv_scope
+            iv_uname         = lv_uname
+            iv_assigned_only = lv_assign
+            iv_text_id       = lv_textid ).
+
+          CATCH /ui2/cx_runtime.
+            "Issue in fetching launchpad checks
+            ls_output = lc_edata.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+        ENDTRY.
+
+        go_fcc_check->check( iv_read_lpd_sap_data = lv_conf  ).
+
+        lt_foutput = go_ui_util->get_output_table( go_fcc_check ).
+      ENDIF.
+
+      IF lt_foutput IS INITIAL.
+        ls_output = lc_ndata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ELSE.
+        "Coloumn heading
+        CONCATENATE lc_index lc_status lc_package lc_adaplyr lc_idcat
+        lc_cattl lc_grpid lc_grptl lc_sysalias lc_tiletl lc_tileid
+        lc_icon lc_keywords lc_tilerefid lc_tarmapref
+        lc_tlnavtar lc_launchrl lc_launchins lc_appltyp
+        lc_applid lc_launapal lc_launadin lc_launtxky lc_launchbspr
+        lc_semobj lc_semact lc_desktop lc_tablet lc_phone lc_tileinfo
+        lc_pfcgrl lc_pfcgtl lc_pfcgrlasg lc_mainwdcon
+        lc_softcomp lc_message INTO ls_prefinal SEPARATED BY lc_sep.
+        CONDENSE ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, ls_prefinal.
+
+        "Heading and coloumn heading for string fields
+        ls_output = lc_title2.
+        APPEND ls_output TO lt_output2.
+        CLEAR ls_output.
+        CONCATENATE lc_index lc_tarmapinf lc_titlepar lc_mappsig
+        lc_propwdcon INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output2.
+        CLEAR ls_output.
+
+        SORT lt_foutput BY devclass ASCENDING.
+
+        LOOP AT lt_foutput INTO DATA(ls_outstrt).
+          "Fetch the status icon
+          CASE ls_outstrt-icon.
+            WHEN lc_ecode.
+              lv_icon = lc_error.
+            WHEN lc_wcode.
+              lv_icon = lc_warning.
+            WHEN lc_gcode.
+              lv_icon = lc_success.
+            WHEN OTHERS.
+              lv_icon = lc_null.
+          ENDCASE.
+
+          "Check if last field is blank
+          IF ls_outstrt-msg EQ ''.
+            ls_outstrt-msg = lc_null.
+          ENDIF.
+          lv_count = sy-tabix.
+          "Data
+          CONCATENATE lv_count lv_icon ls_outstrt-devclass
+          ls_outstrt-scope ls_outstrt-catalog_id
+          ls_outstrt-catalog_title
+          ls_outstrt-group_id ls_outstrt-group_title
+          ls_outstrt-system_alias ls_outstrt-chip_title
+          ls_outstrt-chip_id ls_outstrt-chip_icon ls_outstrt-keywords
+          ls_outstrt-tile_reference_id
+          ls_outstrt-target_mapping_reference_id
+          ls_outstrt-sapui5_text ls_outstrt-lpd_role
+          ls_outstrt-lpd_instance ls_outstrt-app_type
+          ls_outstrt-application ls_outstrt-lpd_alias
+          ls_outstrt-lpd_add_info ls_outstrt-lpd_text_key
+          ls_outstrt-business_params ls_outstrt-sem_obj
+          ls_outstrt-sem_obj_action ls_outstrt-ff_desktop
+          ls_outstrt-ff_tablet ls_outstrt-ff_phone
+          ls_outstrt-information
+          ls_outstrt-agr_name ls_outstrt-agr_title
+          ls_outstrt-agr_assigned ls_outstrt-obj_name
+          ls_outstrt-swc ls_outstrt-msg
+          INTO ls_prefinal SEPARATED BY lc_sep.
+          CONDENSE ls_prefinal.
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_prefinal.
+          "Data for lengthy fields
+          lv_tilepara = ls_outstrt-chip_parameter.
+          lv_mappsign = ls_outstrt-mapping_signature.
+          IF ls_outstrt-obj_name_adapt IS INITIAL.
+            ls_outstrt-obj_name_adapt = lc_null.
+          ENDIF.
+          CONCATENATE lv_count ls_outstrt-target_mapping_information
+          lv_tilepara lv_mappsign ls_outstrt-obj_name_adapt
+          INTO ls_prefinal SEPARATED BY lc_sep.
+          CONDENSE ls_prefinal.
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output2.
+          CLEAR: ls_output, ls_outstrt, ls_prefinal, lv_icon,
+          lv_tilepara, lv_mappsign, lv_count.
+        ENDLOOP.
+        APPEND ls_output TO lt_output.
+        APPEND LINES OF lt_output2 TO lt_output.
+        FREE: lt_foutput, lt_output2.
+      ENDIF.
+      "Fiori launch intent checks
+
+      CLEAR: ls_output.
+      APPEND ls_output TO lt_output.
+
+      "Title
+      ls_output = lc_title1.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      lv_intent1 = lc_intent.
+      lv_ff1     = lc_desktop.
+      lv_uname  = lc_uname.
+      lv_signat = abap_true.
+      lv_conf   = abap_true.
+
+      IF ( lv_signat = abap_true ).
+        CLEAR lv_signature.
+      ENDIF.
+
+      IF go_ui_util  IS BOUND.
+
+        "Get packages
+        lr_packages = go_ui_util->get_packages(
+                                       it_packages     =  ls_devc[]
+                                       iv_sub_packages =  lv_subpk   ).
+
+        "Get Scope
+        lv_scope = go_ui_util->get_scope( iv_conf = lv_conf
+                                          iv_cust = lv_cust
+                                          iv_pers = lv_pers ).
+
+        TRY.
+
+            go_fcc_check = /ui2/cl_fiori_lpd_checks=>get_instance(
+                                 it_packages         = lr_packages->*
+                                 it_catalogs         = lt_catalogs
+                                 iv_scope            = lv_scope
+                                 iv_uname            = lv_uname
+                                 iv_ignore_signature = lv_signature
+                                 iv_assigned_only    = lv_assign ).
+
+          CATCH /ui2/cx_runtime.
+            "Issue in fetching launchpad checks
+            ls_output = lc_edata.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+        ENDTRY.
+
+        lv_intent = lv_intent1.
+        lv_ff = lv_ff1.
+
+        go_fcc_check->check_intent_resolution(
+                                        iv_intent            = lv_intent
+                                        iv_form_factor       = lv_ff
+                                        iv_read_lpd_sap_data = lv_conf
+                                               ).
+
+        lt_out = go_ui_util->get_output_table_flia( go_fcc_check ).
+
+        IF lt_out IS INITIAL.
+          ls_output = lc_ndata.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+        ENDIF.
+      ENDIF.
+
+      "First Table column headings
+      CONCATENATE lc_index
+                  lc_status    lc_semobj    lc_semact      lc_pfcgrl
+                  lc_pfcgrlasg lc_idcat     lc_cattl       lc_tileid
+                  lc_package   lc_adaplyr   lc_sysalias    lc_tiletl
+                  lc_icon      lc_titlepar  lc_keywords
+                  lc_tilerefid lc_tarmapref lc_tarmapinf   lc_tlnavtar
+                  lc_launchrl  lc_launchins lc_appltyp
+                  INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      "Title
+      ls_output = lc_title1.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      "Secnd table column headings
+      CONCATENATE lc_index     lc_applid
+                  lc_launapal  lc_launadin  lc_launtxky    lc_launchbspr
+                  lc_desktop1  lc_tablet    lc_phone       lc_mappsig
+                  lc_tileinfo  lc_pfcgtl    lc_wdcon       lc_obj
+                  lc_softcomp
+                  lc_message INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output1.
+      CLEAR: ls_output.
+
+      LOOP AT lt_out INTO ls_intent.
+        "Fetch the status icon
+        CASE ls_intent-icon.
+          WHEN lc_ecode.
+            lv_icon = lc_error.
+          WHEN lc_wcode.
+            lv_icon = lc_warning.
+          WHEN lc_gcode.
+            lv_icon = lc_success.
+          WHEN OTHERS.
+            lv_icon = lc_null.
+        ENDCASE.
+
+        "Check if last field is blank
+        IF ls_intent-msg EQ ''.
+          ls_intent-msg = lc_null.
+        ENDIF.
+
+        "Truncating Data for lengthy fields
+        lv_tilepara = ls_intent-chip_parameter.
+        lv_mappsign = ls_intent-mapping_signature.
+
+        "Index
+        lv_index = lv_index + 1.
+        lv_index1 = lv_index.
+
+        CONCATENATE lv_index1                            "Index
+                    lv_icon                              "Status
+                    ls_intent-sem_obj                    "Semantic obj
+                    ls_intent-sem_obj_action             "Semantic act
+                    ls_intent-agr_name                   "PFGC Role
+                    ls_intent-agr_assigned               "PFGC Role ass
+                    ls_intent-catalog_id
+                    ls_intent-catalog_title
+                    ls_intent-chip_id
+                    ls_intent-devclass                    "Package
+                    ls_intent-scope                      "Adaption layer
+                    ls_intent-system_alias
+                    ls_intent-chip_title
+                    ls_intent-chip_icon
+                    lv_tilepara
+                    ls_intent-keywords
+                    ls_intent-tile_reference_id
+                    ls_intent-target_mapping_reference_id
+                    ls_intent-target_mapping_information
+                    ls_intent-sapui5_text
+                    ls_intent-lpd_role
+                    ls_intent-lpd_instance
+                    ls_intent-app_type
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+
+        CONCATENATE lv_index1                         "Index
+                    ls_intent-application
+                    ls_intent-lpd_alias
+                    ls_intent-lpd_add_info
+                    ls_intent-lpd_text_key
+                    ls_intent-business_params
+                    ls_intent-ff_desktop
+                    ls_intent-ff_tablet
+                    ls_intent-ff_phone
+                    lv_mappsign
+                    ls_intent-information
+                    ls_intent-agr_title
+                    ls_intent-obj_name
+                    ls_intent-obj_name_adapt
+                    ls_intent-swc
+                    ls_intent-msg
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR: ls_output, ls_intent, lv_icon.
+      ENDLOOP.
+
+      APPEND ls_output TO lt_output.
+      APPEND LINES OF lt_output1 TO lt_output.
+      FREE:lt_output1.
+
+    WHEN OTHERS.
+      ls_output = lc_naction."Action not supported
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+  "Null check in middle fields
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

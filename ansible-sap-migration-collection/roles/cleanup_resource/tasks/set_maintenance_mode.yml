@@ -1,0 +1,20 @@
+---
+- name: Set primary node to maintenance mode
+  command: sudo pcs property set maintenance-mode="true"
+  async: 12000
+  poll: 10
+  register: out
+  when: ansible_os_family == 'RedHat'
+
+- debug: 
+    var: out
+
+- name: Set primary node to maintenance mode
+  command: sudo crm configure property maintenance-mode="true"
+  async: 12000
+  poll: 3
+  register: output
+  when: ansible_os_family == 'Suse'
+
+- debug: 
+    var: output

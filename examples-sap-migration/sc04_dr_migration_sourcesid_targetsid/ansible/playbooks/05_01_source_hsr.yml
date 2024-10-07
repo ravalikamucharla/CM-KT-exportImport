@@ -1,0 +1,8 @@
+- name: source_db
+  hosts: "{{ groups['source_db'][0] }}"
+  vars_files:
+    - ../inventory/group_vars/source_db.yml
+  roles:
+    - create_keys
+    - { role: delete_hana_resolution_hosts, when: host_resolution.source_host.required == 'yes' }
+    - { role: set_network_params, set_params_on: source, when: source_network_params.required == "yes" }

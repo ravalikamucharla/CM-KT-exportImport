@@ -1,0 +1,7 @@
+[{
+    "Product_name": {{ output.results[index].stdout_lines[0].split(":")[1] | trim }},
+    "License_type": {{ output.results[index].stdout_lines[1].split(":")[1] | trim }},
+    "Expiry_date": {{ output.results[index].stdout_lines[2].split(":")[1] | trim }},
+    "Identifier": {{ output.results[index].stdout_lines[3].split(":")[1] | trim }},
+    "Version_information": {{ output.results[index].stdout_lines[4].split(":")[1] | trim }}
+}]

@@ -1,0 +1,97 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_EXP_SYSTEM_ID                           *
+* Title               :   Capture SAP System ID                       *
+* Purpose             :   This report is used to capture System ID    *
+*                         during Cloud Migration                      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXX                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*04-22-2021  Initial   Ruchir Kamble  Local      To Capture System ID *
+*05-20-2022  V001      Soumya Ray     Local     To pass "No data found*
+*                                             in case no data present *
+*---------------------------------------------------------------------*
+
+REPORT zcm_exp_system_id.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_msg       TYPE c VALUE 'Message'             LENGTH 7,
+    lc_export    TYPE c VALUE 'EXPORT'              LENGTH 6,
+    lc_title     TYPE c VALUE 'System ID'           LENGTH 10,
+    lc_inc_input TYPE c VALUE 'Incorrect input'     LENGTH 20,
+    lc_noinput   TYPE c VALUE 'No input given'      LENGTH 20,
+*   Begin of changes in V001
+    lc_err_msg   TYPE c VALUE 'No data found'       LENGTH 20.
+*   End of changes in V001
+
+  DATA: ls_output TYPE tab512,
+        ls_input  TYPE tab512,
+        lv_action TYPE char6,
+        lv_sysid  TYPE sy-sysid.
+
+  " Clearing variables before use
+  CLEAR: ls_output, lv_action, lv_sysid.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      lv_sysid = sy-sysid.
+
+      IF lv_sysid IS NOT INITIAL.
+
+        " Adding heading to the output
+        ls_output = lc_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Passing System Id to the output
+        ls_output = lv_sysid.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSE.
+        " System Id not found
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+ENDFORM.

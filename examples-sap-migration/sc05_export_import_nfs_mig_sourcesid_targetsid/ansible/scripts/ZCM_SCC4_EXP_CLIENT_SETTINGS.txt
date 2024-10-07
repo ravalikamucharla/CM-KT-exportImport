@@ -1,0 +1,178 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SCC4_EXP_CLIENT_SETTINGS                *
+* Title               :   Export Client Settings                      *
+* Purpose             :   This report is for exporting client setting *
+*                         during Cloud Migration                      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SCC4                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* T000                      X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-23-2020  Initial  Soumya Ray    Local        To Capture Client    *
+*                                                Settings in SCC4     *
+*---------------------------------------------------------------------*
+
+REPORT zcm_scc4_exp_client_settings.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  TYPES: BEGIN OF lty_t000,
+           mandt      TYPE mandt,
+           mtext      TYPE mtext_d,
+           ort01      TYPE ort01,
+           mwaer      TYPE mwaer,
+           cccategory TYPE cccategory,
+           cccoractiv TYPE cccoractiv,
+           ccnocliind TYPE ccnocliind,
+           cccopylock TYPE cccopylock,
+           ccnocascad TYPE ccnocascad,
+           ccimaildis TYPE ccimaildis,
+           logsys     TYPE logsys,
+         END OF lty_t000.
+
+  CONSTANTS:
+    lc_sep          TYPE c VALUE '|'                         LENGTH 1,
+    lc_null         TYPE c VALUE 'NULL'                      LENGTH 4,
+    lc_export       TYPE c VALUE 'EXPORT'                    LENGTH 6,
+    lc_client       TYPE c VALUE 'Client'                    LENGTH 6,
+    lc_name         TYPE c VALUE 'Name'                      LENGTH 4,
+    lc_city         TYPE c VALUE 'City'                      LENGTH 4,
+    lc_currency     TYPE c VALUE 'Currency'                  LENGTH 10,
+    lc_client_role  TYPE c VALUE 'Client Role'               LENGTH 12,
+    lc_cccoractiv   TYPE c VALUE
+    'Changes and transport for client specific objects'      LENGTH 50,
+    lc_ccnocliind   TYPE c VALUE
+    'Cross client object changes'                            LENGTH 35,
+    lc_cccopylock   TYPE c VALUE
+    'Client copy and comparison tool protection'             LENGTH 45,
+    lc_ccnocascad   TYPE c VALUE
+    'Protection against SAP upgrade'                         LENGTH 30,
+    lc_ccimaildis   TYPE c VALUE
+    'CATT and eCATT Restrictions'                            LENGTH 35,
+    lc_logsys       TYPE c VALUE 'Logical system'            LENGTH 15,
+    lc_title        TYPE c VALUE 'Client Settings'           LENGTH 25,
+    lc_err_msg      TYPE c VALUE 'No data found'             LENGTH 30,
+    lc_noinput      TYPE c VALUE 'No input passed'           LENGTH 30,
+    lc_inc_input    TYPE c VALUE 'Incorrect Input'           LENGTH 20.
+
+  DATA: ls_output TYPE tab512,
+        ls_input  TYPE tab512,
+        lv_action TYPE char20,
+        ls_t000   TYPE lty_t000,
+        lt_t000   TYPE STANDARD TABLE OF lty_t000.
+
+  " Clear varibles before use
+  CLEAR: ls_output, ls_input, ls_t000, lv_action.
+
+  FREE: lt_output, lt_t000.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    ls_output = lc_noinput. "No input passed
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export. " If action is Export
+
+      SELECT mandt
+             mtext
+             ort01
+             mwaer
+             cccategory
+             cccoractiv
+             ccnocliind
+             cccopylock
+             ccnocascad
+             ccimaildis
+             logsys
+        FROM t000
+        INTO TABLE lt_t000.
+
+      IF lt_t000 IS NOT INITIAL.
+
+        " Adding heading to the output
+        CONCATENATE lc_client         lc_sep
+                    lc_name           lc_sep
+                    lc_city           lc_sep
+                    lc_currency       lc_sep
+                    lc_client_role    lc_sep
+                    lc_cccoractiv     lc_sep
+                    lc_ccnocliind     lc_sep
+                    lc_cccopylock     lc_sep
+                    lc_ccnocascad     lc_sep
+                    lc_ccimaildis     lc_sep
+                    lc_logsys
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+
+        LOOP AT lt_t000 INTO ls_t000.
+
+          IF ls_t000-logsys IS INITIAL.
+            ls_t000-logsys = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_t000-mandt      lc_sep
+                      ls_t000-mtext      lc_sep
+                      ls_t000-ort01      lc_sep
+                      ls_t000-mwaer      lc_sep
+                      ls_t000-cccategory lc_sep
+                      ls_t000-cccoractiv lc_sep
+                      ls_t000-ccnocliind lc_sep
+                      ls_t000-cccopylock lc_sep
+                      ls_t000-ccnocascad lc_sep
+                      ls_t000-ccimaildis lc_sep
+                      ls_t000-logsys
+                      INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_t000, ls_output.
+        ENDLOOP.
+
+      ELSE.
+        " No data found
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+  IF lt_output[] IS NOT INITIAL.
+    DO.
+      REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+      IN TABLE lt_output WITH '|NULL|'.
+      FIND '||' IN TABLE lt_output.
+      IF sy-subrc <> 0.
+        EXIT .
+      ENDIF.
+    ENDDO.
+  ENDIF.
+
+ENDFORM.

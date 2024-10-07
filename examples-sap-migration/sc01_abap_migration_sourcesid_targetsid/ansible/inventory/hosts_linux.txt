@@ -1,0 +1,26 @@
+# Host details to be filled for source systems
+[source_ascs]
+serqascs01 ansible_host=10.0.2.100 ansible_password="{{ vault_passwords.source_ascs_osuser }}"
+
+[source_pas]
+serqpas01 ansible_host=10.0.2.101 ansible_password="{{ vault_passwords.source_pas_osuser }}"
+
+[source_aas]
+serqaas1 ansible_host=10.0.2.112 ansible_password="{{ vault_passwords.source_aas_osuser }}"
+
+[source_db]
+serqdb01 ansible_host=10.0.3.100 ansible_password="{{ vault_passwords.source_db_osuser }}"
+
+
+# Host details to be filled for target systems
+[target_ascs]
+terqascs01 ansible_host=10.0.2.103 ansible_password="{{ vault_passwords.target_ascs_osuser }}"
+
+[target_pas]
+terqpas01 ansible_host=10.0.2.104 ansible_password="{{ vault_passwords.target_pas_osuser }}"
+
+[target_aas]
+terqaas1 ansible_host=10.0.2.113 ansible_password="{{ vault_passwords.source_aas_osuser }}"
+
+[target_db]
+terqdb01 ansible_host=10.0.3.102 ansible_password="{{ vault_passwords.target_db_osuser }}"

@@ -1,0 +1,316 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SM21_EXP_SYSTEM_LOGS_LVER               *
+* Title               :   SM21 Logs                                   *
+* Purpose             :   This report is used to display system logs  *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM21                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-01-2023  Initial   Yasaswini    Local         To display system   *
+*                                                 logs                *
+*---------------------------------------------------------------------*
+
+REPORT zcm_sm21_exp_system_logs_lver.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  TYPES: msgtext_t(700).
+
+  CONSTANTS: lc_tabname      TYPE c VALUE 'SM21Logs'       LENGTH 15,
+             lc_320          TYPE c VALUE '320'            LENGTH 3,
+             lc_null         TYPE c VALUE 'NULL'           LENGTH 4,
+             lc_syslog       TYPE c VALUE
+             'only_one_SysLog_file'                        LENGTH 20,
+             lc_msg_nodata   TYPE c VALUE
+             'No data found'                               LENGTH 20,
+             lc_inc_input    TYPE c VALUE
+             'Incorrect input'                             LENGTH 20,
+             lc_export       TYPE c VALUE 'EXPORT'         LENGTH 6,
+             lc_sep          TYPE c VALUE '|',
+             lc_l            TYPE c VALUE 'L'              LENGTH 1,
+             lc_2300000      TYPE c VALUE '230000'         LENGTH 6,
+             lc_b            TYPE c VALUE 'B'              LENGTH 1,
+             lc_d            TYPE c VALUE 'D'              LENGTH 1,
+             lc_r            TYPE c VALUE 'R'              LENGTH 1,
+             lc_y            TYPE c VALUE 'Y'              LENGTH 1,
+             lc_g            TYPE c VALUE 'G'              LENGTH 1,
+             lc_dp           TYPE c VALUE 'DP'             LENGTH 3,
+             lc_dia          TYPE c VALUE 'DIA'            LENGTH 3,
+             lc_e            TYPE c VALUE 'E'              LENGTH 1,
+             lc_enq          TYPE c VALUE 'ENQ'            LENGTH 3,
+             lc_m            TYPE c VALUE 'M'              LENGTH 1,
+             lc_ms           TYPE c VALUE 'MS'             LENGTH 2,
+             lc_rd           TYPE c VALUE 'RD'             LENGTH 2,
+             lc_s            TYPE c VALUE 'S'              LENGTH 1,
+             lc_spo          TYPE c VALUE 'SPO'            LENGTH 3,
+             lc_u            TYPE c VALUE 'U'              LENGTH 1,
+             lc_up1          TYPE c VALUE 'UP1'            LENGTH 3,
+             lc_v            TYPE c VALUE 'U'              LENGTH 1,
+             lc_ic           TYPE c VALUE 'IC'             LENGTH 2,
+             lc_wd           TYPE c VALUE 'WD'             LENGTH 2,
+             lc_up2          TYPE c VALUE 'UP2'            LENGTH 3,
+             lc_w            TYPE c VALUE 'W'              LENGTH 1,
+             lc_btc          TYPE c VALUE 'BTC'            LENGTH 3,
+             lc_sa           TYPE c VALUE 'sa'             LENGTH 2,
+             lc_sw           TYPE c VALUE 'S-A'            LENGTH 3,
+             lc_vhigh        TYPE c VALUE 'Very High Priority'
+                                                           LENGTH 20,
+             lc_high         TYPE c VALUE 'High Priority'
+                                                           LENGTH 20,
+             lc_war          TYPE c VALUE 'Warning'        LENGTH 10,
+             lc_info         TYPE c VALUE 'Information'
+                                                           LENGTH 20,
+             lc_wrk          TYPE c VALUE 'WRK'            LENGTH 3,
+             lc_stoptime     TYPE c VALUE '20991231235959'
+                                                           LENGTH 15,
+             lc_sel          TYPE c VALUE 'S'              LENGTH 1,
+             lc_noinput      TYPE c VALUE
+             'No input passed'                             LENGTH 20.
+
+  DATA: ls_output           TYPE tab512,
+        ls_input            TYPE tab512,
+        lv_priority         TYPE string,
+        ls_slo2_syslog_file TYPE rslgfinfo,
+        ls_ta               TYPE rslgsel,
+        lv_tskna            TYPE string,
+        lv_tsknu            TYPE string,
+        lt_entriestab       TYPE STANDARD TABLE OF rslgetab_new,
+        lt_temp             TYPE STANDARD TABLE OF kernelstat,
+        ls_entriestab       TYPE rslgetab_new,
+        ls_hide_text        TYPE msgtext_t,
+        ls_hide_text_lg     TYPE i,
+        ls_entry            TYPE rslgentr_new,
+        l11_catched_errno(6),
+        l11_catched_t100_old(5),
+        lv_date             TYPE sy-datum,
+        lv_time             TYPE sy-uzeit,
+        lv_sel              TYPE char1,
+        lv_mandt            TYPE string,
+        lv_user             TYPE string,
+        lv_transcode        TYPE string,
+        ls_slgproc          TYPE rslgpid,
+        lv_action           TYPE char8,
+        ls_cur_syslogtab    TYPE rslgtcache,
+        ls_cur_filled       TYPE char1,
+        ls_recordcnt        TYPE rslgreccnt,
+        BEGIN OF ls_entriestab1 OCCURS 2000.
+        INCLUDE STRUCTURE rslgetab_new.
+        DATA: END OF ls_entriestab1.
+
+  "Table name
+  ls_output = lc_tabname.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+      ls_slo2_syslog_file-recordsize = lc_320.
+
+      CALL 'C_GET_SYSLOG_POS'
+                    ID 'POSI' FIELD ls_slo2_syslog_file-pos
+                    ID 'MAXS' FIELD ls_slo2_syslog_file-maxsize
+                    ID 'WRAP' FIELD ls_slo2_syslog_file-wrapcount
+                    ID 'NOFI' FIELD ls_slo2_syslog_file-nooffiles
+                    .
+      CALL 'C_SAPGPARAM' ID 'NAME' FIELD 'rslg/local/file'
+                         ID 'VALUE' FIELD
+                         ls_slo2_syslog_file-actfilenam.
+
+      MOVE lc_syslog TO ls_slo2_syslog_file-oldfilenam.
+
+      IF sy-uzeit >= 3600.
+        ls_ta-date    = sy-datum.
+        ls_ta-time    = sy-uzeit - 3600.
+      ELSE.
+        ls_ta-date    = sy-datum - 1.
+        ls_ta-time    = lc_2300000.
+      ENDIF.
+
+      CONCATENATE ls_ta-date ls_ta-time INTO ls_ta-startdate.
+
+      ls_ta-stop_date = lc_stoptime.
+
+      ls_ta-whichlog = lc_l.
+
+      CALL FUNCTION 'RSLG_READ_FILE_ALV'
+        EXPORTING
+          file_info       = ls_slo2_syslog_file
+          selection       = ls_ta
+        TABLES
+          syslog_in_table = lt_entriestab
+          gt_top          = lt_temp
+        EXCEPTIONS
+          OTHERS          = 1.
+
+      IF lt_entriestab IS NOT INITIAL.
+
+        LOOP AT lt_entriestab INTO ls_entriestab.
+
+          CASE ls_entriestab-slgttyp(1).
+            WHEN lc_b.
+              lv_tskna = lc_btc.
+            WHEN lc_d.
+              IF ls_entriestab-slgttyp = lc_dp.
+                lv_tskna = lc_dp.
+                lv_tsknu = space.
+              ELSE.
+                lv_tskna = lc_dia.
+              ENDIF.
+            WHEN lc_e.
+              lv_tskna = lc_enq.
+            WHEN lc_m.
+              lv_tskna = lc_ms.
+              lv_tsknu = space.
+            WHEN lc_r.
+              lv_tskna = lc_rd.
+              lv_tsknu = space.
+            WHEN lc_s.
+              lv_tskna = lc_spo.
+            WHEN lc_u.
+              lv_tskna = lc_up1.
+            WHEN lc_v.
+              lv_tskna = lc_up2.
+            WHEN lc_w.
+              lv_tskna = lc_wrk.
+            WHEN OTHERS.
+              IF ls_entriestab-slgttyp = lc_sa.
+                lv_tskna = lc_sw.
+              ENDIF.
+              lv_tsknu = space.
+          ENDCASE.
+
+          IF ls_entriestab-slgttyp(2) = lc_ic.
+            lv_tskna = lc_ic.
+          ENDIF.
+          IF ls_entriestab-slgttyp(2) = lc_wd.
+            lv_tskna = lc_wd.
+          ENDIF.
+
+          IF ls_entriestab-slgttyp(2) = lc_ic.
+            lv_tskna = lc_ic.
+          ENDIF.
+          IF ls_entriestab-slgttyp(2) = lc_wd.
+            lv_tskna = lc_wd.
+          ENDIF.
+
+          ls_entry = ls_entriestab-centdata.
+
+          ls_slgproc = ls_entry-slgproc.
+
+          lv_tsknu = ls_slgproc-tasktno+2(3).
+
+          lv_mandt     = ls_entry-slgmand.        "Client
+          lv_user      = ls_entry-slguser.        "User
+          lv_transcode = ls_entry-slgtc.          "Tcode
+
+          ls_entriestab1 = ls_entriestab.
+
+          PERFORM sel_check_new IN PROGRAM saplslo2_alv
+                      TABLES ls_entriestab1
+                      USING lv_sel
+                            lc_sel
+                            ls_ta
+                            ls_cur_syslogtab
+                            ls_cur_filled
+                            ls_recordcnt.
+
+          IF lv_sel NE 'N'.
+
+            PERFORM use_tabe_and_data IN PROGRAM sapmsm21 USING
+                                  ls_entriestab-area
+                                  ls_entriestab-subid
+                                  ls_entry-slgdata
+                                  ls_hide_text ls_hide_text_lg
+                                  ls_entry-slgltrm ls_entry-slgmode
+                                  ls_entry-slgdattim
+                                  l11_catched_errno
+                                  l11_catched_t100_old.
+
+            CALL FUNCTION 'RSLG_TAB_CACHE_ACCESS_ALV'
+              EXPORTING
+                area              = ls_entriestab-area
+                subid             = ls_entriestab-subid
+             IMPORTING
+               cache_entry        = ls_cur_syslogtab.
+
+            CASE ls_cur_syslogtab-monbew(1).
+              WHEN lc_r.
+                lv_priority = lc_vhigh.
+              WHEN lc_y.
+                lv_priority = lc_high.
+              WHEN lc_g.
+                lv_priority = lc_war.
+              WHEN OTHERS.
+                lv_priority = lc_info.
+            ENDCASE.
+
+            IF lv_date IS INITIAL.
+               lv_date = lc_null.
+            ENDIF.
+
+            IF ls_hide_text IS INITIAL.
+               ls_hide_text = lc_null.
+            ENDIF.
+
+            CONCATENATE lv_date  lv_time
+                      lv_tskna lv_tsknu
+                      lv_user  lv_transcode
+                      lv_priority
+                      ls_entriestab-area
+                      ls_entriestab-subid
+                      ls_hide_text INTO ls_output
+                      SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+
+          CLEAR: ls_entry, lv_mandt, lv_user,
+                 lv_transcode,
+                 ls_slgproc, lv_tsknu,
+                 lv_tskna, ls_entriestab, ls_output,
+                 ls_hide_text.
+          ENDIF.
+        ENDLOOP.
+
+        IF lt_output[] IS NOT INITIAL.
+        "Adding NULL values in between
+        DO.
+          REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+          IN TABLE lt_output WITH '|NULL|'.
+          FIND '||' IN TABLE lt_output.
+          IF sy-subrc <> 0.
+            EXIT .
+          ENDIF.
+        ENDDO.
+
+      ENDIF.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+ENDFORM.

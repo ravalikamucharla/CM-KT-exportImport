@@ -1,0 +1,28 @@
+- name: status check
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_state"
+  async: 12000
+  poll: 3
+  register: output_state
+  
+- debug:
+    var: output_state
+
+- name: take over
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_takeover"
+  async: 12000
+  poll: 10
+  register: output
+  when: replication.take_over_params.suspend_primary == 'no'
+
+- debug: 
+    var: output
+
+- name: take over
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_takeover -suspendPrimary"
+  async: 12000
+  poll: 10
+  register: output
+  when: replication.take_over_params.suspend_primary == 'yes'
+
+- debug: 
+    var: output

@@ -1,0 +1,51 @@
+---
+
+abap_pre_migration_list:
+  abap:
+    - { name: "ZCM_SM51_EXP_KERNEL_PATCH.txt"  }
+    - { name: "ZCM_SM13_EXP_UPDATEREQUEST.txt" }
+    - { name: "ZCM_SE14_DEL_QCM_TABLES.txt" }
+    - { name: "ZCM_R_CHK_D020S_DYNPSRC.txt", input_params: CHECK }
+    - { name: "ZCM_EXP_MISSING_TABLES_INDEX.txt" }
+    - { name: "ZCM_WE02_EXP_FAILED_IDOCS.txt" }
+    - { name: "ZCM_SMQ1_EXP_OUTBOUND_QUEUE.txt" }
+    - { name: "ZCM_SMQ2_EXP_INBOUND_QUEUE.txt" }
+    - { name: "ZCM_SMQR_EXP_QUEUE.txt" }
+    - { name: "ZCM_SMQS_EXP_DESTINATION.txt" }
+    - { name: "ZCM_SM58_EXPORT_FAILED_TRFC.txt" }
+    - { name: "ZCM_SM37_EXP_CANCL_SUSPND_REL.txt" }
+    - { name: "ZCM_SM51_EXP_INSTANCES.txt" }
+    - { name: "ZCM_SM37_EXP_ACTIVE_JOBS.txt" }
+    - { name: "ZCM_STMS_EXP_IMPORT_RUNNIG_TRS.txt" }
+    - { name: "ZCM_STMS_CHK_CONNECTION.txt" }
+    - { name: "ZCM_DB13_CHK_DB_CONSITENCY.txt" }
+   
+  oracle:
+    - { name: "ZCM_ORACLE_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_ORACLE_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_ORACLE_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_T_TATGPC_TATGPCA_EXPORT.txt" }
+    - { name: "ZCM_T_TAORA_IAORA_CHK_CONSTNCY.txt" }
+    - { name: "ZCM_ORA_DB02_CHK_LOGBCKUP_ENBL.txt" }
+    - { name: "ZCM_DB13_CHK_DB_STATS.txt" }
+  
+  hana:
+    - { name: "ZCM_HANA_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_HANA_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_HANA_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+
+  sql:
+    - { name: "ZCM_SQLSERVER_TOP_TABLES_EXP.txt" , input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SQLSERVER_TOP_TABLES_EXP_RCNT.txt" , input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SQLSERVER_TOP_TABLES_EXP_TSIZ.txt" , input_params: 'FETCH,100,{{ schema_name }}' }
+
+  sybase:
+    - { name: "ZCM_SYBASE_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SYBASE_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SYBASE_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+
+
+  db2:
+    - { name: "ZCM_DB2_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_DB2_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_DB2_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }

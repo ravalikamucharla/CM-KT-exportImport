@@ -1,0 +1,120 @@
+---
+
+- name: install ftp package
+  package:
+    name:
+     - vsftpd
+    state: present
+  tags: ftp
+  delegate_to: "{{ groups['source_db'][0] }}"
+  ignore_errors: yes
+
+- name: install ftp package
+  command: sudo zypper install -y vsftpd
+  tags: ftp
+  delegate_to: "{{ groups['source_db'][0] }}"
+  when: ansible_os_family == 'Suse'
+
+- name: install ftp package
+  package:
+    name:
+     - vsftpd
+    state: present
+  tags: ftp
+
+- name: take backup of existing config file
+  copy:
+    src: /etc/vsftpd/vsftpd.conf
+    dest: /etc/vsftpd/vsftpd.conf_bkp
+    remote_src: yes
+  tags: ftp
+
+- name: change the values
+  lineinfile:
+    dest: /etc/vsftpd/vsftpd.conf
+    regexp: '^{{ item.reg }}'
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { reg: '#local_umask=022' ,line: 'local_umask=000' }
+    - { reg: anonymous_enable=YES ,line: 'anonymous_enable=NO' }
+  tags: ftp
+
+- name: change the values
+  lineinfile:
+    dest: /etc/vsftpd/vsftpd.conf
+    regexp: '^{{ item.reg }}'
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { reg: '#local_umask=022' ,line: 'local_umask=000' }
+    - { reg: anonymous_enable=YES ,line: 'anonymous_enable=NO' }
+  delegate_to: "{{ groups['source_db'][0] }}"
+  tags: ftp
+
+- name: folder and file creation
+  file:
+    path: "{{ item.path }}"
+    state: "{{ item.state }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    recurse: "{{ item.recurse }}"
+    mode: "{{ item.mode | default ('755') }}"
+  loop: "{{ ftp.folders }}"
+  tags: ftp
+  
+- name: add user to the created file(suse)
+  lineinfile: 
+      dest: /etc/vsftpd/user_list
+      line: "{{ ftp.ftp_usr_name }}"
+  tags: ftp
+
+- name: add
+  lineinfile: 
+    dest: /etc/vsftpd/vsftpd.conf
+    line: |
+      userlist_file={{ ftp.user_file }}
+      userlist_deny=NO
+      user_sub_token=$USER
+      userlist_enable=YES
+      allow_writeable_chroot=YES
+      local_root={{ ftp.ftp_dir }}
+  tags: ftp
+
+- name: main | ftp user creation
+  user:
+    name: "{{ item.name }}"
+    comment: "{{ item.comment }}"
+    uid: "{{ item.uid | default() }}"
+    home: "{{ item.home }}"
+    shell: "{{ item.shell | default ('/bin/bash') }}"
+    password: "{{ item.password | password_hash('sha512') }}"
+    group: "{{ item.group }}"
+  loop: "{{ ftp.usercreation }}"
+  tags: ftp
+
+- name: ftp user creation 
+  user:
+    name: "{{ item.name }}"
+    comment: "{{ item.comment }}"
+    uid: "{{ item.uid | default() }}"
+    home: "{{ item.home }}"
+    shell: "{{ item.shell | default ('/bin/bash') }}"
+    password: "{{ item.password | password_hash('sha512') }}"
+    group: "{{ item.group }}"
+  loop: "{{ ftp.usercreation }}"
+  when: hostvars[groups['source_db'][0]]
+  tags: ftp
+
+- name: Start vsftpd Service
+  service:
+    name: vsftpd
+    state: restarted
+  tags: ftp
+  
+- name: Start vsftpd Service
+  service:
+    name: vsftpd
+    state: restarted
+  tags: ftp
+  delegate_to: "{{ groups['source_db'][0] }}" 

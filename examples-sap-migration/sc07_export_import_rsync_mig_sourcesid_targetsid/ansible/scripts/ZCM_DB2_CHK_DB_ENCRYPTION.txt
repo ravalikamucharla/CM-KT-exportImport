@@ -1,0 +1,119 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_DB2_CHK_DB_ENCRYPTION                   *
+* Title               :   Database Encryption Check for DB2 Database  *
+* Purpose             :   This report is used to check if Database    *
+*                     :   is encrypted or not from tcode DBACOCKPIT   *
+*                     :   during Cloud Migration                      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DBACOCKPIT                                                          *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXXX                    X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-18-2020  Initial   Ruchir Kamble  Local      To check database is *
+*                                                encrypted or not     *
+*06-07-2021   V001     Ruchir Kamble  Local     To change columns     *
+*09-08-2022   V002     Soumya Ray     Local      To remove inline dec *
+*                                                laration             *
+*---------------------------------------------------------------------*
+
+REPORT zcm_db2_chk_db_encryption.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_partitn     TYPE db6pmcd-partitn VALUE '0',
+             lc_func_id     TYPE i VALUE '41',
+             lc_export      TYPE c VALUE 'EXPORT'           LENGTH 6,
+             lc_title       TYPE c VALUE 'Database Check'   LENGTH 15,
+             lc_err_msg     TYPE c VALUE 'No data found'    LENGTH 20,
+*   Begin of changes in V001
+             lc_inc_input   TYPE c VALUE 'Incorrect input'  LENGTH 20,
+             lc_noinput     TYPE c VALUE 'No input passed'  LENGTH 20.
+*   End of changes in V001
+
+  DATA: ls_input  TYPE tab512,
+        ls_output TYPE tab512,
+        lv_action TYPE char10,
+        lt_data   TYPE TABLE OF btcxpm,
+        ls_data   TYPE btcxpm. "+V002
+
+*   Begin of changes in V001
+  CLEAR: ls_input, ls_output, lv_action,
+         ls_data. "+V002
+
+  FREE: lt_output, lt_data.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+
+  ENDIF.
+*   End of changes in V001
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      CALL FUNCTION 'DB6_PM_CLPCOMMANDS'
+        EXPORTING
+          partitn               = lc_partitn
+          functionid            = lc_func_id
+        TABLES
+          exec_protocol         = lt_data
+        EXCEPTIONS
+          invalid_parameter_set = 1
+          c_call_failed         = 2
+          adbc_error            = 3
+          permission_denied     = 4
+          system_error          = 5
+          OTHERS                = 6.
+
+      IF sy-subrc EQ 0.
+
+        LOOP AT lt_data INTO ls_data. "+V002
+
+          IF ls_data-message CP '*Encrypted database*'.
+            CONDENSE ls_data-message.
+            ls_output = ls_data-message.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+          ENDIF.
+
+        ENDLOOP.
+      ELSE.
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+
+*   Begin of changes in V001
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*   End of changes in V001
+
+  ENDCASE.
+ENDFORM.

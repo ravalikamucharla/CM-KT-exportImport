@@ -1,0 +1,110 @@
+---
+- set_fact:
+    login: "{{ login_mechanism | default('sudo') }}"
+
+- name: Execute db2 queries
+  shell: sudo su - db2{{ sid | lower }} -c "{{ item.query }}"
+  register: output
+  with_items:
+    - "{{ db2_queries }}"
+
+- name: Execute db2 queries
+  shell: sudo su - db2{{ sid | lower }} -c "{{ item.query }}"
+  register: output_txt
+  with_items:
+    - "{{ db2_queries_txt }}"
+
+- name: Write ouptut json format
+  template: 
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.json'
+  become: yes
+  delegate_to: localhost
+  with_items:
+     - "{{ db2_queries }}" 
+  loop_control:
+     index_var: index
+
+- name: Write ouptut txt format
+  template:
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.txt'
+  become: yes
+  delegate_to: localhost
+  with_items:
+      - "{{ db2_queries_txt }}"
+  loop_control:
+     index_var: index
+
+- name: Write tablespace status output 
+  shell: |
+    uniq -u get_db2_tablespace_status_outputs.json | tee get_db2_tablespace_status_outputs.json
+    if [[ "$(cat get_db2_tablespace_status_outputs.json | wc -l)" -ne 3 ]]; then sed -i '/Normal/d' get_db2_tablespace_status_outputs.json; else exit 0; fi
+  args:
+    chdir: '{{ db_export_path }}{{ db_type }}'
+  become: yes
+  delegate_to: localhost
+
+- name: Execute db2 log mode queries
+  shell: "{{ login }} su - db2{{ sid | lower }} -c 'db2 get database configuration for $DB2DBDFT | grep LOGARCHMETH1'"
+  register: logmode_output 
+ 
+- name: Write log mode ouptut
+  template: 
+    src: "get_db2_log_mode.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/get_db2_log_mode_outputs.json'
+  become: yes
+  delegate_to: localhost
+
+- name: Copy log backup script to target nodes for last log backup
+  copy:
+    src: "../files/get_db2_last_log_backup.sql"
+    dest: "/tmp/"
+    mode: 0777
+
+-  name: Execute db2 for last log backup queries
+   shell: '{{ login }} su - db2{{ sid | lower }} -c "/tmp/get_db2_last_log_backup.sql"'
+   register: lastlogbackup_output 
+
+- name: Write last log backup ouptut
+  template: 
+    src: "get_db2_last_log_backup.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/get_db2_log_mode_outputs.json'
+  become: yes
+  delegate_to: localhost
+
+- name: Execute db2 parameter validation
+  shell: "{{ login }} su - db2{{ sid | lower }} -c 'db2 connect to {{ sid }}; db2 get db cfg'"
+  register: parametervalidation_output
+
+- name: Write db2 parameter validation ouptut
+  template:
+    src: "get_db2_parameter_validation.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/get_db2_parameter_validation_outputs.txt'
+  become: yes
+  delegate_to: localhost
+
+- name: Create empty file for db2 consistency check
+  file:
+     path: "/tmp/db2_consistency_check.sql"
+     state: touch
+     mode: 0777   
+
+- name: Insert db2 connect to SID
+  lineinfile:
+     path: /tmp/db2_consistency_check.sql
+     line: "{{ item }}"
+  with_items:
+    - db2 connect to {{ sid }}
+    - db2 'inspect check database for error state all results keep inspect_{{ ansible_date_time.iso8601 }}.out'
+
+-  name: Execute db2 query for consistency check
+   shell: '{{ login }} su - db2{{ sid | lower }} -c "/tmp/db2_consistency_check.sql"'
+   register: db2_consistency_output 
+
+- name: Write db2 consistency check ouptut
+  template: 
+    src: "db2_consistency_check.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/db2_consistency_check.json'
+  become: yes
+  delegate_to: localhost

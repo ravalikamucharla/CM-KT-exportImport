@@ -1,0 +1,53 @@
+---
+- name: Backups 
+  include_tasks: file_backup.yml
+  when: backup_type == 'backup' or backup_type == 'BACULA'
+
+- name: Third party backup
+  include_tasks: third_party_backup.yml
+  when: backup_type == 'aws' or backup_type == 'veritas' or backup_type == 'sep' or backup_type == 'veeam' or backup_type == 'dell_emc_networker' or backup_type == 'commvault' or backup_type == 'arcserve'
+
+- name: on demand backup (Azure recovery vault) 
+  block:
+    - name: To List Recovery service vaults within a subscription
+      shell: az backup vault show --name {{ vault_name }} --resource-group {{ resource_group }}
+      async: 20000
+      poll: 10
+      register: vault_list
+      delegate_to: localhost
+
+    - debug:
+        var: vault_list
+
+    - name: To get the name of the container
+      shell: az backup item list --resource-group {{ resource_group }} --vault-name {{ vault_name }} --backup-management-type AzureWorkload
+      async: 20000
+      poll: 10
+      register: containername
+
+    - name: Fetch the container name
+      vars:
+        container: systemdb
+      set_fact:
+        container_name: "{{ item.properties.containerName }}"
+      loop: "{{ containername.stdout | from_json }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: container in "{{ item.properties.friendlyName }}"
+
+    - debug:
+        var: container_name
+
+    - name: Execute backup 
+      shell: az backup protection backup-now --resource-group {{ resource_group }} --item-name "saphanadatabase;{{ item | lower }};systemdb" --vault-name {{ vault_name }}  --container-name "{{ container_name }}" --backup-type Full --retain-until {{ retain_backup }}
+      loop: "{{ tenant_db }}"
+      register: backup_output
+      delegate_to: localhost
+    
+    - name: Monitoring backup until backup is completed
+      include_tasks: on_demand_backup.yml
+      with_items:
+        - 1
+        - 2
+
+  when: backup_type == 'on_demand_backup'

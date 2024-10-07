@@ -1,0 +1,18 @@
+- name: Rsync | template the .sh file
+  template: 
+    src: "export_rsync.j2"
+    dest: "{{ exp_dir }}/Azure_Export_Script_Rsync.sh"
+    mode: '0777'
+  tags: exp_prep 
+  
+- name: Rsync | execute rsync command
+  command: "{{ item }}"
+  args:
+    chdir: "{{ exp_dir }}"
+  async: 3600
+  poll: 0
+  register: export_Script
+  loop:
+    - ./Azure_Export_Script_Rsync.sh {{ exp_dir }} {{ container_url }} "{{ sas_token }}"
+    - sleep 120
+  tags: exp_prep

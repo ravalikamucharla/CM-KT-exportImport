@@ -1,0 +1,9 @@
+exp_imp_rsync:
+  exp_rsync:
+    export_dir: /Data/export_rync
+    container_url: https://cloudruntools.blob.core.windows.net/export-rs-test
+    sas_token_source: "{{ rsync.sas_token_source }}"
+  imp_rsync:
+    import_dir: /Data/export_rync
+    container_url: https://cloudruntools.blob.core.windows.net/export-rs-test
+    sas_token_target: "{{ rsync.sas_token_target }}"

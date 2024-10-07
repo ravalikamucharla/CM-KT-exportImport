@@ -1,0 +1,43 @@
+# if port status check fails with nc command then the port status will be checked with curl command 
+- name: To check if ports are open
+  command: nc -vz {{ hostip }} {{ db_port }}
+  async: 1000
+  poll: 5
+  ignore_errors: true
+  register: port_status_db
+  delegate_to: localhost
+
+- debug:
+    msg: "{{ db_port }} Port is not open"
+  when: port_status_db.stderr is search('No route to host') or port_status_db.stderr is search('Connection refused')
+
+- debug:
+    msg: "{{ db_port }} Port is open"
+  when: port_status_db.stderr is search('Connected') or port_status_db.stderr is search('succeeded')
+
+- meta: end_play
+  when: port_status_db.stderr is search('No route to host') or port_status_db.stderr is search('Connection refused')
+
+# Display msg saying port is not open if the command fails
+- name: port status check
+  block:
+    - name: To check if ports are open
+      command: curl -vv telnet://{{ hostip }}:{{ db_port }}
+      async: 1000
+      poll: 5
+      ignore_errors: true
+      register: port_status
+      failed_when: port_status.rc not in [51,52,53,54,55,56]
+      delegate_to: localhost
+
+    - debug:
+        msg: "{{ db_port }} Port is not open"
+      when: port_status.stderr is search('No route to host') or port_status_db.stderr is search('Connection refused')
+
+    - debug:
+        msg: "{{ db_port }} Port is open"
+      when: port_status.stderr is search('Connected') or port_status_db.stderr is search('succeeded')
+
+    - meta: end_play
+      when: port_status.stderr is search('No route to host') or port_status_db.stderr is search('Connection refused')
+  when: port_status_db.msg is search("No such file or directory")

@@ -1,0 +1,166 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_RZ70_CHK_SLD_CONNECTION                 *
+* Title               :   Connection test for RZ70                    *
+* Purpose             :   This report is used to check the connection *
+*                         test for RZ70                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RZ70                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*11-18-2020  Initial   Soumya Ray   Local      To check the connection*
+*                                              test for RZ70          *
+*03-29-2022  V001      Soumya Ray   Local      To correct the message *
+*                                            in case of no data, wrong*
+*                                              input and remove inline*
+*                                              declarations           *
+*---------------------------------------------------------------------*
+
+REPORT zcm_rz70_chk_sld_connection.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512 " Input from PYTHON
+                      lt_output STRUCTURE tab512. "Output to PYTHON
+
+  CONSTANTS: lc_sep       TYPE c        VALUE '|'         LENGTH 1,
+             lc_export    TYPE char20   VALUE 'EXPORT',
+             lc_loghead   TYPE string   VALUE 'Slddsstartprogram',
+             lc_logid     TYPE char10   VALUE 'Logid',
+             lc_logappl   TYPE char10   VALUE 'Logappl',
+             lc_logtext   TYPE char10   VALUE 'Logtext',
+*   Begin of changes in V001
+             lc_null      TYPE c        VALUE 'NULL'      LENGTH 4,
+             lc_noinput   TYPE c        VALUE
+             'No input passed'                            LENGTH 15,
+             lc_inc_input TYPE c        VALUE
+             'Incorrect Input'                            LENGTH 20,
+             lc_nodata    TYPE c        VALUE
+             'No data found'                              LENGTH 20.
+* End of changes in V001
+  DATA: BEGIN OF lt_log OCCURS 0,
+          data(2048) TYPE c,
+        END OF lt_log.
+
+  DATA: ls_output  TYPE tab512,
+        list_tab   TYPE TABLE OF abaplist,
+* Begin of changes in V001
+        ls_input   TYPE tab512,
+        wa_log     TYPE c      LENGTH 2048,
+        lv_logid   TYPE c      LENGTH 5,
+        lv_logappl TYPE c      LENGTH 40,
+        lv_logtext TYPE c      LENGTH 512,
+        lv_action  TYPE string.
+
+  CLEAR: ls_output, ls_input, lv_action, lv_logid, lv_logappl,
+         lv_logtext.
+  FREE: list_tab, lt_log.
+
+  ls_output = lc_loghead.       " Heading
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of changes in V001
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+
+  CASE lv_action.
+    WHEN lc_export.  " Action is EXPORT
+      " connection test of RFC submitted
+      SUBMIT rsldagds EXPORTING LIST TO MEMORY
+        AND RETURN.
+* FM to get the log from memory and output is in LIST format
+      CALL FUNCTION 'LIST_FROM_MEMORY'
+        TABLES
+          listobject = list_tab " Log got from memory
+        EXCEPTIONS
+          not_found  = 1
+          OTHERS     = 2.
+* FM to get the LIST format to ASCII format
+      CALL FUNCTION 'LIST_TO_ASCI'
+        TABLES
+          listasci           = lt_log  " Log output of connection check
+          listobject         = list_tab
+        EXCEPTIONS
+          empty_list         = 1
+          list_index_invalid = 2
+          OTHERS             = 3.
+
+*  Begin of changes in V001
+      DELETE lt_log INDEX 1.
+      IF lt_log[] IS INITIAL.
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+*  End of changes in V001
+
+      CONCATENATE lc_logid lc_sep
+      lc_logappl lc_sep
+      lc_logtext INTO ls_output. " Header of the RFC log
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      LOOP AT lt_log INTO wa_log.
+        lv_logid = wa_log+0(5).      " Log ID
+        lv_logappl = wa_log+7(40).   " Log application
+        lv_logtext = wa_log+51(512). " Log text
+        IF lv_logid EQ '-----'.  " To skip the lines
+          CONTINUE.
+        ENDIF.
+
+*   Begin of changes in V001
+        IF lv_logtext IS INITIAL.
+          lv_logtext = lc_null.
+        ENDIF.
+*   End of changes in V001
+
+        CONCATENATE lv_logid lc_sep
+        lv_logappl lc_sep
+        lv_logtext INTO ls_output. " Log details
+        CONDENSE ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_logid, lv_logappl, lv_logtext, wa_log.
+      ENDLOOP.
+*   Perform to replace blank value with NULL.
+      PERFORM null_check TABLES  lt_output.
+    WHEN OTHERS.
+*  Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+
+  CLEAR: lv_logid, lv_logappl, lv_logtext, wa_log.
+  FREE: list_tab, lt_log.
+ENDFORM.
+FORM null_check  TABLES   lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

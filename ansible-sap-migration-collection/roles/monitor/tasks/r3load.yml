@@ -1,0 +1,39 @@
+- name: Run the process check command
+  shell: ps -ef | grep -i R3load
+  register: process_output_r3load
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: Check if output contains "Active"
+  debug:
+    msg: "{{process_output_r3load.stdout}}"
+
+- name: Run the process check command
+  shell: ps -ef | grep -i sapinst
+  register: process_output_sapinst
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: Check if output contains "Active"
+  debug:
+    msg: "{{process_output_sapinst.stdout}}"
+
+- name: Run the process check command
+  shell: ps -ef | grep -i R3load
+  register: process_output_r3load
+  delegate_to: "{{ groups[target_pas'][0] }}"
+  when: system_type == "target"
+
+- name: Check if output contains "Active"
+  debug:
+    msg: "{{process_output_r3load.stdout}}"
+
+- name: Run the process check command
+  shell: ps -ef | grep -i sapinst
+  register: process_output_sapinst
+  delegate_to: "{{ groups[target_pas'][0] }}"
+  when: system_type == "target"
+
+- name: Check if output contains "Active"
+  debug:
+    msg: "{{process_output_sapinst.stdout}}"

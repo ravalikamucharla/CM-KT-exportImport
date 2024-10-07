@@ -1,0 +1,61 @@
+---
+
+- set_fact:
+    instance_number: "{{ source.sap.instance_numbers.db }}"
+    sid: "{{ source.sap.db.sid | upper }}"
+
+- name: Run the process list command on DB 
+  shell: sudo su - {{ sid | lower }}adm -c "/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/sapcontrol -nr {{ instance_number }} -function GetProcessList"
+  register: process_output
+  delegate_to: "{{ groups['source_db'][0] }}"
+  ignore_errors: true
+
+- name: Check if output contains "green" on DB
+  debug:
+    msg: "DB is running"
+  when: "'GREEN' in process_output.stdout"
+
+- name: Check if output does not contains "green" on DB
+  debug:
+    msg: "DB is not running"
+  when: "'GREEN' not in process_output.stdout"
+
+- set_fact:
+    instance_number: "{{ target.sap.instance_numbers.ascs }}"
+    sid: "{{ target.sap.sid | upper }}"
+
+- name: Run the process list command on ASCS
+  shell: sudo su - {{ sid | lower }}adm -c "sapcontrol -nr {{ instance_number }} -function GetProcessList"
+  register: process_output
+  delegate_to: "{{ groups['target_ascs'][0] }}"
+  ignore_errors: true
+
+- name: Check if output contains "green" on ASCS
+  debug:
+    msg: "ASCS is running"
+  when: "'green' in process_output.stdout"
+
+- name: Check if output does not contains "green" on ASCS
+  debug:
+    msg: "ASCS is not running"
+  when: "'green' not in process_output.stdout"
+
+- set_fact:
+    instance_number: "{{ target.sap.instance_numbers.pas }}"
+    sid: "{{ target.sap.sid | upper }}"
+
+- name: Run the process list command on PAS
+  shell: sudo su - {{ sid | lower }}adm -c "sapcontrol -nr {{ instance_number }} -function GetProcessList"
+  register: process_output
+  delegate_to: "{{ groups['target_pas'][0] }}"
+  ignore_errors: true
+
+- name: Check if output contains "green" on PAS
+  debug:
+    msg: "PAS is running"
+  when: "'green' in process_output.stdout"
+
+- name: Check if output does not contains "green" on PAS
+  debug:
+    msg: "PAS is not running"
+  when: "'green' not in process_output.stdout"

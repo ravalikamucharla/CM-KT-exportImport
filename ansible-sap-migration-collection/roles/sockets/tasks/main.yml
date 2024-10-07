@@ -1,0 +1,40 @@
+--- 
+- name: Enable firewall for Domain, Public and Private profiles
+  win_firewall:
+    state: disabled
+    profiles:
+    - Domain
+    - Private
+    - Public
+  tags: exp_prep
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: socket port nbound
+  win_firewall_rule: 
+    name: sockets
+    remoteport : 1024-65535
+    action: allow
+    direction: in
+    protocol: tcp
+    state: present
+    enabled: yes
+  tags: exp_prep    
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: socket port outbound
+  win_firewall_rule: 
+    name: sockets
+    remoteport : 1024-65535
+    action: allow
+    direction: out
+    protocol: tcp
+    state: present
+    enabled: yes
+  tags: exp_prep    
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas

@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    hostname: "{{ groups['target_pas'][0] }}"
+    hostip: "{{ hostvars[groups['target_pas'][0]].ansible_host }}"    
+  vars_files:
+    - ../inventory/group_vars/target_pas.yml
+    - ../inventory/host_vars/{{ groups['target_pas'][0] }}.yml
+  roles:
+    - sap_abap_postmigration
+
+

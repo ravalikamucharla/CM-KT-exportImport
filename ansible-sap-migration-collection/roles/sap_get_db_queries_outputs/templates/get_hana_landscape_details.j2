@@ -1,0 +1,69 @@
+[{% for data in output.results[index].stdout_lines %}
+    {% if loop.length == 1 %}
+        {   
+            "HOST": "",
+            "HOST_ACTIVE": "",
+            "HOST_STATUS": "",
+            "FAILOVER_STATUS": "",
+            "FAILOVER_GROUP": "",
+            "FAILOVER_CONFIG_GROUP": "",
+            "FAILOVER_ACTUAL_GROUP": "",
+            "NAMESERVER_CONFIG_ROLE": "",
+            "NAMESERVER_ACTUAL_ROLE": "",
+            "INDEXSERVER_CONFIG_ROLE": "",
+            "INDEXSERVER_ACTUAL_ROLE": "",
+            "HOST_CONFIG_ROLES": "",
+            "HOST_ACTUAL_ROLES": "",
+            "STORAGE_PARTITION": "",
+            "STORAGE_CONFIG_PARTITION": "",
+            "STORAGE_ACTUAL_PARTITION": "",
+            "WORKER_CONFIG_GROUPS": "",
+            "WORKER_ACTUAL_GROUPS": "",
+            "REMOVE_STATUS": ""
+        }
+    {% elif loop.index > 1 and loop.index <= loop.length-1 %}
+        {
+            "HOST": {{ data.split(',')[0] }},
+            "HOST_ACTIVE": {{ data.split(',')[1] }},
+            "HOST_STATUS": {{ data.split(',')[2] }},
+            "FAILOVER_STATUS": {{ data.split(',')[3] }},
+            "FAILOVER_GROUP": {{ data.split(',')[4] }},
+            "FAILOVER_CONFIG_GROUP": {{ data.split(',')[5] }},
+            "FAILOVER_ACTUAL_GROUP": {{ data.split(',')[6] }},
+            "NAMESERVER_CONFIG_ROLE": {{ data.split(',')[7] }},
+            "NAMESERVER_ACTUAL_ROLE": {{ data.split(',')[8] }},
+            "INDEXSERVER_CONFIG_ROLE": {{ data.split(',')[9] }},
+            "INDEXSERVER_ACTUAL_ROLE": {{ data.split(',')[10] }},
+            "HOST_CONFIG_ROLES": {{ data.split(',')[11] }},
+            "HOST_ACTUAL_ROLES": {{ data.split(',')[12] }},
+            "STORAGE_PARTITION": "{{ data.split(',')[13] }}",
+            "STORAGE_CONFIG_PARTITION": "{{ data.split(',')[14] }}",
+            "STORAGE_ACTUAL_PARTITION": "{{ data.split(',')[15] }}",
+            "WORKER_CONFIG_GROUPS": {{ data.split(',')[16] }},
+            "WORKER_ACTUAL_GROUPS": {{ data.split(',')[17] }},
+            "REMOVE_STATUS": {{ data.split(',')[18] }}
+        }
+    {% elif loop.index == loop.length %}
+        {
+            "HOST": {{ data.split(',')[0] }},
+            "HOST_ACTIVE": {{ data.split(',')[1] }},
+            "HOST_STATUS": {{ data.split(',')[2] }},
+            "FAILOVER_STATUS": {{ data.split(',')[3] }},
+            "FAILOVER_GROUP": {{ data.split(',')[4] }},
+            "FAILOVER_CONFIG_GROUP": {{ data.split(',')[5] }},
+            "FAILOVER_ACTUAL_GROUP": {{ data.split(',')[6] }},
+            "NAMESERVER_CONFIG_ROLE": {{ data.split(',')[7] }},
+            "NAMESERVER_ACTUAL_ROLE": {{ data.split(',')[8] }},
+            "INDEXSERVER_CONFIG_ROLE": {{ data.split(',')[9] }},
+            "INDEXSERVER_ACTUAL_ROLE": {{ data.split(',')[10] }},
+            "HOST_CONFIG_ROLES": {{ data.split(',')[11] }},
+            "HOST_ACTUAL_ROLES": {{ data.split(',')[12] }},
+            "STORAGE_PARTITION": "{{ data.split(',')[13] }}",
+            "STORAGE_CONFIG_PARTITION": "{{ data.split(',')[14] }}",
+            "STORAGE_ACTUAL_PARTITION": "{{ data.split(',')[15] }}",
+            "WORKER_CONFIG_GROUPS": {{ data.split(',')[16] }},
+            "WORKER_ACTUAL_GROUPS": {{ data.split(',')[17] }},
+            "REMOVE_STATUS": {{ data.split(',')[18] }}
+        }
+    {% endif %}
+{% endfor %}]

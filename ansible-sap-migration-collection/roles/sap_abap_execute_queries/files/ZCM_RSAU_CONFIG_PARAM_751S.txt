@@ -1,0 +1,855 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_RSAU_CONFIG_PARAM_751S                   *
+* Title               :  To fetch parameter check messages            *
+* Purpose             : To check security audit log configuration for *
+*                       paramters                                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RSAU_CONFIG                                                         *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*                           X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-07-2021  Initial   Soumya Ray   Local       To check audit log for*
+*                                               parameter             *
+*---------------------------------------------------------------------*
+"Standard functionality is taken from class 'CL_SAL_CONFIG_CHECK'
+"method 'CHECK_PARAMETERS'.
+
+REPORT zcm_rsau_config_param_751s.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep             TYPE c VALUE '|'        LENGTH 1,
+             lc_hash            TYPE c VALUE '#'        LENGTH 1,
+             lc_status_0        TYPE c VALUE '0'        LENGTH 1,
+             lc_status_1        TYPE c VALUE '1'        LENGTH 1,
+             lc_status_2        TYPE c VALUE '2'        LENGTH 1,
+             lc_status_3        TYPE c VALUE '3'        LENGTH 1,
+             lc_status_5        TYPE c VALUE '5'        LENGTH 1,
+             lc_status_7        TYPE c VALUE '7'        LENGTH 1,
+             lc_status_8        TYPE c VALUE '8'        LENGTH 1,
+             lc_status_9        TYPE c VALUE '9'        LENGTH 1,
+             lc_status_10       TYPE c VALUE '10'       LENGTH 2,
+             lc_status_99       TYPE c VALUE '99'       LENGTH 2,
+             lc_status_90       TYPE c VALUE '90'       LENGTH 2,
+             lc_status_100      TYPE c VALUE '100'      LENGTH 3,
+             lc_status_128      TYPE c VALUE '128'      LENGTH 3,
+             lc_status_2048     TYPE c VALUE '2048'     LENGTH 4,
+             lc_status_o        TYPE c VALUE 'O'        LENGTH 1,
+             lc_status_s        TYPE c VALUE 'S'        LENGTH 1,
+             lc_status_m        TYPE c VALUE 'M'        LENGTH 1,
+             lc_note            TYPE c VALUE 'Note:'    LENGTH 5,
+             lc_error_col       TYPE c VALUE 'Error:'   LENGTH 6,
+             lc_success         TYPE c VALUE 'Success'  LENGTH 7,
+             lc_error           TYPE c VALUE 'Error'    LENGTH 5,
+             lc_warning         TYPE c VALUE 'Warning'  LENGTH 7,
+             lc_information     TYPE c VALUE
+             'Information'                              LENGTH 11,
+             lc_active          TYPE c VALUE 'active'   LENGTH 6,
+             lc_not_active      TYPE c VALUE
+             'not active'                               LENGTH 10,
+             lc_status          TYPE c VALUE 'Status:'  LENGTH 7,
+             lc_slots           TYPE c VALUE 'slots'    LENGTH 5,
+             lc_audit_active    TYPE c VALUE
+             'Audit Log recording is active'            LENGTH 120,
+             lc_audit_notactive TYPE c VALUE
+             'Audit Log recording is not active'        LENGTH 120,
+             lc_audit_act_nact  TYPE c VALUE
+             'Audit Log Active/Inactive'                LENGTH 100,
+             lc_kernel_param    TYPE rsaupname
+             VALUE cl_sal_config=>gc_kernel_param,
+             lc_save_attr       TYPE c VALUE
+             'Save the attribute'                       LENGTH 18,
+             lc_kernel_para     TYPE c VALUE
+             'as a kernel parameter'                    LENGTH 30,
+             lc_parameter       TYPE c VALUE
+             'Kernel parameter'                         LENGTH 16,
+             lc_nmatch_curr_sta TYPE c VALUE
+             'does not match the current status'        LENGTH 50,
+             lc_name            TYPE spfl_parameter_name
+             VALUE 'rsau/enable',
+             lc_prof_para       TYPE c VALUE
+             'Profile parameter'                        LENGTH 17,
+             lc_curr_value      TYPE c VALUE
+             '(current value'                           LENGTH 15,
+             lc_brac_close      TYPE c VALUE ')'        LENGTH 1,
+             lc_obselete        TYPE c VALUE
+             'is obsolete'                              LENGTH 11,
+             lc_set_dynamicaly  TYPE c VALUE
+             'was set dynamically'                      LENGTH 20,
+             lc_rec_file_sys    TYPE c VALUE
+             'Record in file system '                   LENGTH 22,
+             lc_rec_file_sys_db TYPE c VALUE
+             'Record in file system and database'       LENGTH 34,
+             lc_rec_db          TYPE c VALUE
+             'Record in database only'                  LENGTH 24,
+             lc_rec_tar         TYPE c VALUE
+             'Recording target'                         LENGTH 16,
+             lc_invalid_value   TYPE c VALUE
+             'Invalid value'                            LENGTH 13,
+             lc_no_slfilter     TYPE c VALUE
+             'No. of Selection Filters'                 LENGTH 24,
+             lc_for             TYPE c VALUE 'for'      LENGTH 3,
+             lc_profname        TYPE rsaupname VALUE '$CONFIG$',
+             lc_profname_all    TYPE rsaupname VALUE '$*',
+             lc_rec_file_mod    TYPE c VALUE
+     'Database recording mode not relevant for files'   LENGTH 50,
+             lc_log_db_mode     TYPE c VALUE
+             'Database recording in mode'               LENGTH 26,
+             lc_audit_archiv    TYPE c VALUE
+             'Audit log with archive interface'         LENGTH 35,
+             lc_log_db_inmode   TYPE c VALUE
+             'Recording in database requires mode'      LENGTH 35,
+             lc_temp_buffer     TYPE c VALUE
+             'Temporary buffer'                         LENGTH 16,
+             lc_alert_rd_del    TYPE c VALUE
+             'Alert mode (read and delete)'             LENGTH 30,
+             lc_initial         TYPE c VALUE
+             '<initial>'                                LENGTH 9,
+             lc_para            TYPE spfl_parameter_name
+             VALUE 'rsau/selection_slots',
+             lc_kernel_default  TYPE c VALUE
+   'Kernel default used as current value for parameter' LENGTH 50,
+             lc_slot_counter    TYPE c VALUE
+             'No. of Selection Filters'                 LENGTH 25,
+             lc_filter_max      TYPE c VALUE
+             'Too many filters chosen; maximum value'   LENGTH 39,
+             lc_profile_more    TYPE c VALUE
+             'Profiles exist with more than'            LENGTH 29,
+             lc_filters         TYPE c VALUE
+             'filter(s)'                                LENGTH 9,
+             lc_para_integ      TYPE spfl_parameter_name
+             VALUE 'rsau/integrity',
+             lc_integ_protect   TYPE c VALUE
+             'Integrity protection format is'           LENGTH 30,
+             lc_parameter_comb  TYPE c VALUE
+             'Parameter combination'                    LENGTH 21,
+             lc_and             TYPE c VALUE 'and'      LENGTH 3,
+             lc_not_valid       TYPE c VALUE
+             'is not valid'                             LENGTH 12,
+             lc_integrity_pro   TYPE c VALUE
+             'Integrity protection format active'       LENGTH 35,
+             lc_audit_perday    TYPE c VALUE
+             'One audit file per day'                   LENGTH 22,
+             lc_file_perday     TYPE c VALUE
+       'The multiple audit files option is recommended' LENGTH 50,
+             lc_para_1          TYPE spfl_parameter_name
+             VALUE 'rsau/user_selection',
+             lc_generic_select  TYPE c VALUE
+             'Generic user selection'                   LENGTH 25,
+             lc_para_2          TYPE spfl_parameter_name
+             VALUE 'rsau/max_diskspace/local',
+             lc_100_mbyte       TYPE c VALUE
+             '100 MB'                                   LENGTH 9,
+             lc_2048_mbyte      TYPE c VALUE
+             '2048 MB'                                  LENGTH 10,
+             lc_max_size_file   TYPE c VALUE
+             'Maximum Memory per File (MByte):'         LENGTH 32,
+             lc_max_size_day    TYPE c VALUE
+             'Maximum Memory per Day (MByte):'          LENGTH 32,
+             lc_max_sz_small    TYPE c VALUE
+ 'Value for the maximum size of a file is too small; minimum size'
+             LENGTH 63,
+             lc_max_sz_big      TYPE c VALUE
+'Value of the maximum size of a file is too big; maximum size'
+             LENGTH 60,
+             lc_para_perfile    TYPE spfl_parameter_name VALUE
+             'rsau/max_diskspace/per_file',
+             lc_para_perday     TYPE spfl_parameter_name VALUE
+             'rsau/max_diskspace/per_day',
+             lc_max_size_audit  TYPE c VALUE
+   'The maximum size of all audit files is too small (>='   LENGTH 54,
+             lc_para_name       TYPE spfl_parameter_name VALUE
+             'FN_AUDIT',
+             lc_status_plus     TYPE c VALUE '++++++++'     LENGTH 8,
+             lc_status_hash     TYPE c VALUE '######'       LENGTH 6,
+             lc_status_plushash TYPE c VALUE '+#'           LENGTH 2,
+             lc_file_temp_plus  TYPE c VALUE
+         'File name template does not contain the pattern ' LENGTH 48,
+             lc_para_fn_audit   TYPE c VALUE 'Parameter FN_AUDIT :'
+             LENGTH 20,
+             lc_para_dir_audit  TYPE c VALUE 'Parameter DIR_AUDIT : '
+             LENGTH 22,
+             lc_before          TYPE c VALUE 'before'        LENGTH 6,
+             lc_file_temp_con   TYPE c VALUE
+             'File name template contains the pattern'       LENGTH 39,
+             lc_path_len_128    TYPE c VALUE
+             'Path in DIR_AUDIT is longer than 128 chars'    LENGTH 50,
+             lc_inc_input       TYPE c VALUE
+             'Incorrect input'                               LENGTH 20,
+             lc_export          TYPE c VALUE 'EXPORT'        LENGTH 6,
+             lc_noinput         TYPE c VALUE
+             'No input passed'                               LENGTH 20,
+             lc_title           TYPE c VALUE
+             'General parameter check'                       LENGTH 30,
+             lc_type            TYPE c VALUE 'Type'          LENGTH 4,
+             lc_msgtext         TYPE c VALUE 'Message Text'  LENGTH 12,
+             lc_notbound        TYPE c VALUE
+           'Issue in creating object for security audit log' LENGTH 50.
+
+  TYPES: BEGIN OF lts_instance_par,
+           dir_audit               TYPE spfl_parameter_value,
+           fn_audit                TYPE spfl_parameter_value,
+           rsau_enable             TYPE spfl_parameter_value,
+           rsau_user_selection     TYPE spfl_parameter_value,
+           rsau_selection_slots    TYPE spfl_parameter_value,
+           rsau_integrity          TYPE spfl_parameter_value,
+           rsau_log_nat_add        TYPE spfl_parameter_value,
+           rsau_diskspace_local    TYPE spfl_parameter_value,
+           rsau_diskspace_per_file TYPE spfl_parameter_value,
+           rsau_diskspace_per_day  TYPE spfl_parameter_value,
+         END OF lts_instance_par ,
+         BEGIN OF lts_rsauprof_par,
+           profname TYPE rsauprof-profname,
+           slotno   TYPE rsauprof-slotno,
+           currprof TYPE rsauprof-currprof,
+           classes  TYPE rsauprof-classes,
+           status   TYPE rsauprof-status,
+           cuname   TYPE rsauprof-cuname,
+           cdate    TYPE rsauprof-cdate,
+         END OF lts_rsauprof_par ,
+         ltt_rsauprof_par TYPE STANDARD TABLE OF lts_rsauprof_par
+                       WITH KEY profname slotno .
+  DATA: lv_db_mode   TYPE c LENGTH 1,
+        lv_db_access TYPE c LENGTH 1,
+        ls_output    TYPE tab512,
+        ls_input     TYPE tab512,
+        lv_message   TYPE string,
+        lv_slotno    TYPE rsauprof-slotno,
+        lv_cnt       TYPE i,
+        lv_integ_fmt TYPE boole_d,
+        lv_max_file  TYPE int4,
+        lv_max_files TYPE int4,
+        lv_buf       TYPE int4,
+        lv_text      TYPE string,
+        lv_size      TYPE c LENGTH 10,
+        lv_file_mode TYPE c LENGTH 1,
+        lv_err       TYPE boole_d,
+        lo_para      TYPE REF TO cl_sal_config_para,
+        ls_kpara     TYPE lts_rsauprof_par,
+        lv_action    TYPE string.
+
+  FIELD-SYMBOLS: <fs_p_shm>      TYPE rsaushm_v6,
+                 <fs_p_instance> TYPE lts_instance_par,
+                 <fs_p_kpara>    TYPE ltt_rsauprof_par.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      CREATE OBJECT lo_para.
+      IF lo_para IS NOT BOUND.
+        ls_output = lc_notbound.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+      ASSIGN lo_para->gs_sal_shm TO <fs_p_shm>.
+      ASSIGN lo_para->gs_instance TO <fs_p_instance>.
+      ASSIGN lo_para->gt_rsauprof TO <fs_p_kpara>.
+
+      "Subheading
+      CONCATENATE lc_type lc_sep lc_msgtext INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+*---------------CHECK_PARA_01_SAL_ACTIVE-----------------------*
+      IF <fs_p_shm>-enable = lc_status_1.
+        CONCATENATE lc_status lc_audit_active INTO lv_message
+        SEPARATED BY space."s078(secaudit)
+        CONCATENATE lc_success lc_sep lv_message INTO ls_output.
+      ELSE.
+        CONCATENATE lc_status lc_audit_notactive INTO lv_message
+        SEPARATED BY space."w078(secaudit)
+        CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+      ENDIF.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output, lv_message.
+
+      READ TABLE <fs_p_kpara> INTO ls_kpara
+      WITH KEY profname = lc_kernel_param
+      slotno   =  lc_status_1.
+      IF sy-subrc <> 0.
+        CONCATENATE lc_save_attr lc_audit_act_nact lc_kernel_para
+        INTO lv_message SEPARATED BY space."w099(secaudit)
+        CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+      ELSEIF ls_kpara-status = abap_true
+         AND <fs_p_shm>-enable <> lc_status_1
+         OR ls_kpara-status <> abap_true
+         AND <fs_p_shm>-enable = lc_status_1.
+        CONCATENATE lc_parameter lc_audit_act_nact lc_nmatch_curr_sta
+        INTO lv_message SEPARATED BY space. "w087(secaudit)
+        CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+      ENDIF.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output, lv_message.
+
+      CASE cl_spfl_profile_parameter=>get_origin( lc_name ).
+        WHEN lc_status_0.
+          "do nothing (Kernel default )
+        WHEN lc_status_1 OR lc_status_2.
+          CONCATENATE lc_prof_para lc_name lc_curr_value
+          <fs_p_instance>-rsau_enable lc_brac_close lc_obselete
+          INTO lv_message SEPARATED BY space."w086(secaudit)
+          CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        WHEN lc_status_3.
+          CONCATENATE lc_prof_para lc_name lc_curr_value
+          <fs_p_instance>-rsau_enable lc_brac_close lc_set_dynamicaly
+          INTO lv_message SEPARATED BY space. "w085(secaudit)
+          CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+      ENDCASE.
+      CLEAR: ls_output, lv_message, ls_kpara.
+*---------------------------------------------------------------*
+*----------------check_para_02_sal_target-----------------------*
+      READ TABLE <fs_p_kpara> INTO ls_kpara
+      WITH KEY profname = lc_kernel_param
+      slotno   =  lc_status_10.
+      IF sy-subrc = lc_status_0.
+        lv_db_mode =  ls_kpara-status.
+        CASE lv_db_mode.
+          WHEN space.
+            "file only it's standard ... no message
+            CONCATENATE lc_status lc_rec_file_sys INTO lv_message
+            SEPARATED BY space."i078(secaudit)
+            CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN abap_true.
+            "write to file and db
+            "12345678901234567890123456789012345678901234567890
+            CONCATENATE lc_status lc_rec_file_sys_db INTO lv_message
+            SEPARATED BY space."i078(secaudit)
+            CONCATENATE lc_information lc_sep lv_message
+            INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN lc_status_o.
+            "exclusive to database.
+            CONCATENATE lc_status lc_rec_db INTO lv_message
+            SEPARATED BY space."i078(secaudit)
+            CONCATENATE lc_information lc_sep lv_message
+            INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN OTHERS.
+            "undefined parameter value
+            "e080(secaudit)
+            CONCATENATE lc_invalid_value ls_kpara-status lc_for
+            lc_rec_tar INTO lv_message SEPARATED BY space.
+            CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+        ENDCASE.
+      ELSE.
+        CONCATENATE lc_status lc_rec_file_sys INTO lv_message
+        SEPARATED BY space."i078(secaudit)
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR: ls_output, lv_message, ls_kpara.
+
+      READ TABLE <fs_p_kpara> INTO ls_kpara
+      WITH KEY profname = lc_profname
+      slotno   =  lc_status_99.
+      IF sy-subrc = lc_status_0.
+        lv_db_access = ls_kpara-status.
+      ENDIF.
+
+      CASE lv_db_mode.
+        WHEN cl_sal_helper=>gc_mode_file.
+          lv_message = lc_rec_file_mod.
+          CONCATENATE lc_status lc_rec_file_sys INTO lv_message
+          SEPARATED BY space."i078(secaudit)
+          CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+
+        WHEN cl_sal_helper=>gc_mode_db.
+          IF lv_db_access = cl_sal_helper=>gc_dbmode_audit.
+            CONCATENATE lc_status lc_log_db_mode lc_audit_archiv INTO
+            lv_message SEPARATED BY space. "i078(secaudit)
+            CONCATENATE lc_information lc_sep lv_message INTO
+            ls_output.
+            APPEND ls_output TO lt_output.
+          ELSE.
+            CONCATENATE lc_error_col lc_log_db_inmode lc_audit_archiv
+            INTO lv_message SEPARATED BY space."e159(secaudit)
+            CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          ENDIF.
+
+        WHEN cl_sal_helper=>gc_mode_both.
+          IF  lv_db_access = cl_sal_helper=>gc_dbmode_audit.
+            "it's not relevant
+          ELSEIF lv_db_access = cl_sal_helper=>gc_dbmode_tbuf.
+            CONCATENATE lc_status lc_log_db_mode lc_temp_buffer INTO
+            lv_message SEPARATED BY space. "i078(secaudit)
+            CONCATENATE lc_information lc_sep lv_message INTO
+            ls_output.
+            APPEND ls_output TO lt_output.
+          ELSEIF lv_db_access = cl_sal_helper=>gc_dbmode_alert.
+            CONCATENATE lc_status lc_log_db_mode lc_alert_rd_del INTO
+            lv_message SEPARATED BY space. "i078(secaudit)
+            CONCATENATE lc_information lc_sep lv_message INTO
+            ls_output.
+            APPEND ls_output TO lt_output.
+
+          ELSE.
+            CONCATENATE lc_status lc_log_db_mode lc_initial INTO
+            lv_message SEPARATED BY space. "w078(secaudit)
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          ENDIF.
+      ENDCASE.
+      CLEAR: ls_output, lv_message, ls_kpara.
+*---------------------------------------------------------------*
+*--------------CHECK_PARA_04_SAL_SLOTNO-------------------------*
+      READ TABLE <fs_p_kpara> INTO ls_kpara
+      WITH KEY profname = lc_kernel_param
+      slotno   =  lc_status_3.
+
+      IF sy-subrc <> lc_status_0.
+        CASE cl_spfl_profile_parameter=>get_origin( lc_para ).
+          WHEN lc_status_0.
+            "do nothing (Kernel default )
+            CONCATENATE lc_kernel_default lc_para INTO lv_message
+            SEPARATED BY space."w084(secaudit)
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN lc_status_1 OR lc_status_2.
+            CONCATENATE lc_prof_para lc_para space lc_curr_value
+            <fs_p_instance>-rsau_enable lc_brac_close lc_obselete
+            INTO lv_message SEPARATED BY space. "w086(SECAUDIT)
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN lc_status_3.
+            CONCATENATE lc_prof_para lc_para lc_curr_value
+            <fs_p_instance>-rsau_enable lc_brac_close lc_set_dynamicaly
+            INTO lv_message SEPARATED BY space. "w085(secaudit)
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+        ENDCASE.
+        lv_slotno = <fs_p_instance>-rsau_selection_slots.
+      ELSE.
+        lv_slotno =  ls_kpara-classes.
+      ENDIF.
+      CLEAR: lv_message, ls_output.
+
+      IF lv_slotno < lc_status_1 .
+        CONCATENATE lc_invalid_value lv_slotno lc_for lc_no_slfilter
+        INTO lv_message SEPARATED BY space.
+        CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ELSEIF  lv_slotno > lc_status_90.
+        CONCATENATE lc_filter_max lc_status_90 INTO lv_message
+        SEPARATED BY space.
+        CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ELSE.
+        CONCATENATE lc_status lc_slot_counter lv_slotno
+        INTO lv_message SEPARATED BY space.
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+      SELECT COUNT(*) FROM rsauprof INTO lv_cnt
+      WHERE profname NE lc_profname_all "not like '$*'
+      AND slotno > lv_slotno.
+      IF lv_cnt > lc_status_0.
+        CONCATENATE lc_note lc_profile_more lv_slotno+2(2) lc_filters
+        lc_slots INTO lv_message SEPARATED BY space."w098(secaudit)
+        CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR: ls_output, lv_message, ls_kpara.
+*---------------------------------------------------------------*
+*----------------CHECK_PARA_05_SAL_FILE-------------------------*
+      READ TABLE <fs_p_kpara> INTO ls_kpara
+      WITH KEY profname = lc_kernel_param
+      slotno   = lc_status_9.
+      IF sy-subrc <> lc_status_0.
+        CASE cl_spfl_profile_parameter=>get_origin( lc_para_integ ).
+          WHEN lc_status_0.
+            CONCATENATE lc_kernel_default lc_para_integ INTO lv_message
+            SEPARATED BY space."w084(secaudit)
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN lc_status_1 OR lc_status_2.
+            CONCATENATE lc_prof_para lc_para_integ lc_curr_value
+            <fs_p_instance>-rsau_enable lc_brac_close lc_obselete
+            INTO lv_message SEPARATED BY space."w086(secaudit)
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN lc_status_3.
+            "w085(secaudit)
+            CONCATENATE lc_prof_para lc_para_integ lc_curr_value
+            <fs_p_instance>-rsau_integrity lc_brac_close
+            lc_set_dynamicaly INTO lv_message SEPARATED BY space.
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+        ENDCASE.
+        lv_integ_fmt = <fs_p_instance>-rsau_integrity.
+      ELSE.
+        lv_integ_fmt = ls_kpara-status.
+      ENDIF.
+      CLEAR: lv_message, ls_output.
+
+      IF lv_integ_fmt = abap_true.
+        CONCATENATE lc_status lc_integ_protect lc_active
+        INTO lv_message SEPARATED BY space."i078(secaudit)
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ELSE.
+        CONCATENATE lc_status lc_integ_protect lc_not_active
+        INTO lv_message SEPARATED BY space."i078(secaudit)
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR: ls_output, lv_message.
+
+      IF <fs_p_shm>-maxsize_of_file = lc_status_0.
+
+        lv_file_mode = lc_status_s.
+        IF lv_integ_fmt = abap_true.
+          "e081(secaudit)
+          CONCATENATE lc_parameter_comb lc_integrity_pro lc_and
+          lc_audit_perday lc_not_valid INTO lv_message
+          SEPARATED BY space.
+          CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSE.
+          CONCATENATE lc_note lc_file_perday INTO lv_message
+          SEPARATED BY space.
+          CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+        CLEAR: ls_output, lv_message, ls_kpara.
+*//------------CHECK_PARA_05_SAL_FILE_1FILE-------//*
+        READ TABLE <fs_p_kpara> INTO ls_kpara
+        WITH KEY profname = lc_kernel_param
+        slotno   = lc_status_5.
+        IF sy-subrc = lc_status_0.
+          lv_max_file = ls_kpara-classes.
+        ELSE.
+          CASE cl_spfl_profile_parameter=>get_origin( lc_para_2 ).
+            WHEN lc_status_0.
+              "do nothing (Kernel default )
+              CONCATENATE lc_kernel_default lc_para_2 INTO lv_message
+              SEPARATED BY space."w084(secaudit)
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+            WHEN lc_status_1 OR lc_status_2.
+              "w086(secaudit)
+              CONCATENATE lc_prof_para lc_para_2 lc_curr_value
+              <fs_p_instance>-rsau_diskspace_local lc_brac_close
+              lc_obselete INTO lv_message SEPARATED BY space.
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+            WHEN lc_status_3.
+              "w085(secaudit)
+              CONCATENATE lc_prof_para lc_para_2 lc_curr_value
+              <fs_p_instance>-rsau_diskspace_local lc_brac_close
+              lc_set_dynamicaly INTO lv_message SEPARATED BY space.
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+          ENDCASE.
+          CLEAR: ls_output, lv_message.
+          lv_max_file = <fs_p_instance>-rsau_diskspace_local .
+        ENDIF.
+
+        CLEAR: lv_message, ls_output.
+        IF lv_max_file < lc_status_100.
+          CONCATENATE lc_max_sz_small lc_100_mbyte INTO lv_message
+          SEPARATED BY space. "e040
+          CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSEIF lv_max_file > lc_status_2048.
+          CONCATENATE lc_max_sz_big lc_2048_mbyte INTO lv_message
+          SEPARATED BY space. "e041
+          CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSE.
+          lv_size = lv_max_file.
+          CONCATENATE lc_status lc_max_size_file INTO lv_message
+          SEPARATED BY space.
+          CONCATENATE lv_message lv_size INTO lv_message.
+          CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+        CLEAR: ls_output, lv_message, lv_size, lv_max_file.
+*//----------------------------------------------//*
+      ELSE.
+        lv_file_mode = lc_status_m.
+*//-----check_para_05_sal_file_nfile------------//*
+        CLEAR ls_kpara.
+        READ TABLE <fs_p_kpara> INTO ls_kpara
+        WITH KEY profname = lc_kernel_param
+        slotno   =  lc_status_7.
+        IF sy-subrc = 0.
+          lv_max_file = ls_kpara-classes.
+        ELSE.
+          CASE cl_spfl_profile_parameter=>get_origin( lc_para_perfile ).
+            WHEN lc_status_0.
+              "do nothing (Kernel default )
+              CONCATENATE lc_kernel_default lc_para_perfile
+              INTO lv_message SEPARATED BY space."w084(secaudit)
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+            WHEN lc_status_1 OR lc_status_2.
+              "w086(secaudit)
+              CONCATENATE lc_prof_para lc_para_perfile lc_curr_value
+              <fs_p_instance>-rsau_diskspace_per_file lc_brac_close
+              lc_obselete INTO lv_message SEPARATED BY space.
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+            WHEN lc_status_3.
+              "w085(secaudit)
+              CONCATENATE lc_prof_para lc_para_perfile lc_curr_value
+              <fs_p_instance>-rsau_diskspace_per_file lc_brac_close
+              lc_set_dynamicaly INTO lv_message SEPARATED BY space.
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+          ENDCASE.
+          CLEAR: ls_output, lv_message.
+          lv_max_file = <fs_p_instance>-rsau_diskspace_per_file .
+        ENDIF.
+        CLEAR ls_kpara.
+        READ TABLE <fs_p_kpara> INTO ls_kpara
+        WITH KEY profname = lc_kernel_param
+        slotno   =  lc_status_8.
+        IF sy-subrc = lc_status_0.
+          lv_max_files = ls_kpara-classes.
+        ELSE.
+          CASE cl_spfl_profile_parameter=>get_origin( lc_para_perday ).
+            WHEN lc_status_0.
+              "do nothing (Kernel default )
+              CONCATENATE lc_kernel_default lc_para_perday
+              INTO lv_message SEPARATED BY space."w084(secaudit)
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+            WHEN lc_status_1 OR lc_status_2.
+              "w086(secaudit)
+              CONCATENATE lc_prof_para lc_para_perday lc_curr_value
+              <fs_p_instance>-rsau_diskspace_per_day lc_brac_close
+              lc_obselete INTO lv_message SEPARATED BY space.
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+            WHEN lc_status_3.
+              "w085(secaudit)
+              CONCATENATE lc_prof_para lc_para_perday lc_curr_value
+              <fs_p_instance>-rsau_diskspace_per_day lc_brac_close
+              lc_set_dynamicaly INTO lv_message SEPARATED BY space.
+              CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+          ENDCASE.
+          lv_max_files = <fs_p_instance>-rsau_diskspace_per_day .
+        ENDIF.
+
+        IF lv_max_file < lc_status_100.
+          CONCATENATE lc_max_sz_small lc_100_mbyte INTO lv_message
+          SEPARATED BY space. "e040
+          CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSEIF lv_max_file > lc_status_2048.
+          CONCATENATE lc_max_sz_big lc_2048_mbyte INTO lv_message
+          SEPARATED BY space. "e041
+          CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSE.
+          lv_size = lv_max_file.
+          CONCATENATE lc_status lc_max_size_file lv_size INTO lv_message
+          SEPARATED BY space.
+          CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+        CLEAR: ls_output, lv_message, lv_size, lv_max_file.
+        lv_buf = lv_max_file * 3.
+        IF lv_max_files < lv_buf.
+          lv_size = lv_buf.
+          CONCATENATE lc_max_size_audit lv_size lc_brac_close
+          INTO lv_message SEPARATED BY space. "e096(secaudit)
+          CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSE.
+          lv_size = lv_max_files.
+          CONCATENATE lc_status lc_max_size_day lv_size INTO lv_message
+          SEPARATED BY space."i078
+          CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+*//---------------------------------------------//*
+      ENDIF.
+*//---------check_para_05_sal_file_name--------//*
+      CLEAR: ls_output, lv_message.
+      CASE cl_spfl_profile_parameter=>get_origin( lc_para_name ).
+        WHEN lc_status_0.
+          CONCATENATE lc_kernel_default lc_para_name INTO lv_message
+          SEPARATED BY space."w084(secaudit)
+          CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        WHEN lc_status_1 OR lc_status_2.
+          IF lv_file_mode = lc_status_s.
+            IF <fs_p_instance>-fn_audit NS lc_status_plus.
+              "e046
+              CONCATENATE lc_file_temp_plus lc_status_plus
+              INTO lv_message.
+              CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output, lv_message.
+            ELSE.
+              lv_text =
+        cl_sal_transfer=>cut_fname_for_msg( <fs_p_instance>-fn_audit ).
+              CONCATENATE lc_status lc_para_fn_audit lv_text INTO
+              lv_message SEPARATED BY space. "i078(secaudit)
+              CONCATENATE lc_information lc_sep lv_message
+              INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output, lv_message, lv_text.
+            ENDIF.
+          ELSE. "id_mode = 'M'.
+            IF <fs_p_instance>-fn_audit NS lc_status_plus.
+              CONCATENATE lc_file_temp_plus lc_status_plus
+              INTO lv_message.
+              CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+              lv_err = abap_true.
+              CLEAR: lv_message, ls_output.
+            ENDIF.
+            IF <fs_p_instance>-fn_audit NS lc_status_hash.
+              CONCATENATE lc_file_temp_plus lc_status_hash
+              INTO lv_message SEPARATED BY space."e047
+              CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+              APPEND ls_output TO lt_output.
+              lv_err = abap_true.
+              CLEAR: ls_output, lv_message.
+            ENDIF.
+            IF <fs_p_instance>-fn_audit CA lc_status_plushash.
+              IF <fs_p_instance>-fn_audit+sy-fdpos(1) = lc_hash.
+                "e048
+                CONCATENATE lc_file_temp_con lc_status_hash lc_before
+                lc_status_plus INTO lv_message SEPARATED BY space.
+                CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+                APPEND ls_output TO lt_output.
+                lv_err = abap_true.
+                CLEAR: lv_message, ls_output.
+              ENDIF.
+            ENDIF.
+            IF lv_err IS INITIAL.
+              lv_text =
+        cl_sal_transfer=>cut_fname_for_msg( <fs_p_instance>-fn_audit ).
+              CONCATENATE lc_status lc_para_fn_audit lv_text INTO
+              lv_message SEPARATED BY space. "i078(secaudit)
+              CONCATENATE lc_information lc_sep lv_message
+              INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR: lv_text, lv_message, ls_output.
+            ENDIF.
+          ENDIF.
+
+        WHEN lc_status_3.
+          CONCATENATE lc_prof_para lc_para_name lc_curr_value space
+          <fs_p_instance>-fn_audit lc_brac_close lc_set_dynamicaly
+          INTO lv_message. "w085(secaudit)
+          CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+      ENDCASE.
+      CLEAR: lv_message, ls_output.
+
+      lv_cnt = strlen( <fs_p_instance>-fn_audit ).
+      IF lv_cnt > lc_status_128.
+        "01234567890123456789012345678901234567890123456789
+        CONCATENATE lc_error_col lc_path_len_128 INTO lv_message
+        SEPARATED BY space."e159
+        CONCATENATE lc_error lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ELSE.
+        lv_text =
+     cl_sal_transfer=>cut_fname_for_msg( <fs_p_instance>-dir_audit ).
+        CONCATENATE lc_status lc_para_dir_audit lv_text
+        INTO lv_message SEPARATED BY space. "i078(secaudit)
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+*//--------------------------------------------//*
+      CLEAR: ls_output, lv_message, lv_text.
+*---------------------------------------------------------------*
+*-----------------CHECK_PARA_09_SAL_MISC------------------------*
+      IF <fs_p_shm>-user_selection = lc_status_1.
+        CONCATENATE lc_status lc_generic_select lc_active
+        INTO lv_message SEPARATED BY space. "i078(secaudit)
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ELSE.
+        CONCATENATE lc_status lc_generic_select lc_not_active
+        INTO lv_message SEPARATED BY space. "i078(secaudit)
+        CONCATENATE lc_information lc_sep lv_message INTO ls_output.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR: ls_output, lv_message, ls_kpara.
+
+      READ TABLE <fs_p_kpara> INTO ls_kpara
+      WITH KEY profname = lc_kernel_param
+      slotno   =  lc_status_2.
+      IF sy-subrc <> lc_status_0.
+        CASE cl_spfl_profile_parameter=>get_origin( lc_para_1 ).
+          WHEN lc_status_0.
+            "do nothing (Kernel default )
+          WHEN lc_status_1 OR lc_status_2.
+            "w086(SECAUDIT)
+            CONCATENATE lc_prof_para lc_para_1 lc_curr_value
+            <fs_p_instance>-rsau_user_selection lc_brac_close
+            lc_obselete INTO lv_message SEPARATED BY space.
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+          WHEN lc_status_3.
+            "w085(secaudit)
+            CONCATENATE lc_prof_para lc_para_1 lc_curr_value
+            <fs_p_instance>-rsau_user_selection lc_brac_close
+            lc_set_dynamicaly INTO lv_message SEPARATED BY space.
+            CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+            APPEND ls_output TO lt_output.
+        ENDCASE.
+        CLEAR: ls_output, lv_message.
+      ELSE.
+        IF ( ls_kpara-status = abap_true
+        AND <fs_p_shm>-user_selection = lc_status_0 ) OR
+        ( ls_kpara-status = abap_false AND
+        <fs_p_shm>-user_selection = lc_status_1 ) .
+          CONCATENATE lc_parameter lc_generic_select lc_nmatch_curr_sta
+          INTO lv_message SEPARATED BY space. "w087(secaudit)
+          CONCATENATE lc_warning lc_sep lv_message INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+      ENDIF.
+      CLEAR: ls_output, lv_message.
+*---------------------------------------------------------------*
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+ENDFORM.

@@ -1,0 +1,15 @@
+[{
+    "COMP_NAME": "{{ output.results[index].stdout_lines[5] }}",
+    "VERSION": "{{ output.results[index].stdout_lines[6].split(" ")[0] | trim }}",
+    "STATUS": "{{ output.results[index].stdout_lines[6].split(" ")[-1] | trim }}"
+},
+{
+    "COMP_NAME": "{{ output.results[index].stdout_lines[8] }}",
+    "VERSION": "{{ output.results[index].stdout_lines[9].split(" ")[0] | trim }}",
+    "STATUS": "{{ output.results[index].stdout_lines[9].split(" ")[-1] | trim }}"
+},
+{
+    "COMP_NAME": "{{ output.results[index].stdout_lines[11] }}",
+    "VERSION": "{{ output.results[index].stdout_lines[12].split(" ")[0] | trim }}",
+    "STATUS": "{{ output.results[index].stdout_lines[12].split(" ")[-1] | trim }}"
+}]

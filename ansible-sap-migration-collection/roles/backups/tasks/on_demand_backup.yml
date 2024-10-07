@@ -1,0 +1,27 @@
+- name: monitor backup
+  shell: az backup job list --resource-group {{ resource_group }} --vault-name {{ vault_name }} --start-date '{{ backup_start_date }}' --output json
+  async: 20000
+  poll: 10
+  register: out
+
+- name: debug
+  vars: 
+    nament: "{{ node1 }}"
+  debug: 
+    var: "{{ item }}"
+  when: nament in "{{ item.properties.entityFriendlyName }}" 
+  loop: "{{ out.stdout | from_json }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: wait untill status is completed
+  vars: 
+    nament: "{{ node1 }}"
+  debug:
+    var: "{{ item }}"
+  until: item.properties.status == 'Completed' 
+  delay: 160
+  when: nament in "{{ item.properties.entityFriendlyName }}" 
+  loop: "{{ out.stdout | from_json }}"
+  loop_control:
+    label: "{{ item.name }}"

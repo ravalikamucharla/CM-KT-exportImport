@@ -1,0 +1,845 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_ST03N_EXP_WORKLOAD_HISTORY              *
+* Title               :   Fetch ST03N workload analysis data          *
+* Purpose             :   This report is used for fetching load       *
+*                     :   history data for all instances  present     *
+*                     :   in the system                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*01-03-2021  Initial   ASHWINI B G  Local        To fetch load history*
+*                                               data for all instances*
+*02-09-2022  V001  Soumya/Yasaswini Local       To add title for error*
+*                                             message and no data chng*
+*---------------------------------------------------------------------*
+
+REPORT zcm_st03n_exp_workload_history.
+
+LOAD-OF-PROGRAM.
+
+*&---------------------------------------------------------------------*
+*&      Form  get_config
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->LT_INPUT   text
+*      -->LT_OUTPUT  text
+*----------------------------------------------------------------------*
+FORM get_config TABLES lt_input  STRUCTURE tab512
+                       lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_act_list   TYPE char6  VALUE 'EXPORT',
+             lc_title4     TYPE char80 VALUE
+               'Workload Monitor',
+*  Begin of changes in V001
+             lc_msg_nodata TYPE string VALUE 'No data found',
+             lc_inc_input  TYPE c      VALUE
+             'Incorrect input'                 LENGTH 20,
+             lc_ninput     TYPE c      VALUE
+             'No input passed'                 LENGTH 15.
+*  End of changes in V001
+
+  DATA: ls_input       TYPE tab512,
+        ls_output      TYPE tab512,
+        lv_action      TYPE char6,
+        lv_period_type TYPE swncperitype,
+        lt_imsxxlist   TYPE TABLE OF msxxlist_v6,
+        ls_imsxxlist   TYPE msxxlist_v6.
+
+  CLEAR: ls_input,
+  lv_action.
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    "Table name
+    ls_output = lc_title4.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+
+    "No input passed
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_act_list.  "EXPORT
+
+      " FM to get server list
+      REFRESH: lt_imsxxlist[].
+      CALL FUNCTION 'TH_SERVER_LIST'
+        EXPORTING
+          active_server  = 0
+        TABLES
+          list           = lt_imsxxlist
+        EXCEPTIONS
+          no_server_list = 1
+          OTHERS         = 2.
+
+      IF sy-subrc EQ 0.
+        SORT:lt_imsxxlist[] BY name.
+        CLEAR: ls_imsxxlist.
+        LOOP AT lt_imsxxlist INTO ls_imsxxlist.
+
+* Read day, week and month load history data of each instance
+* for times tab
+          CLEAR: lv_period_type.
+          " Get days overview data
+          lv_period_type = 'D'.  "DAYS
+          PERFORM get_load_hist_times TABLES lt_output
+          USING  ls_imsxxlist-name
+                lv_period_type.
+
+*         Adding a line to separate the tables
+          CLEAR ls_output.
+          APPEND ls_output TO lt_output.
+
+          " Get weeks overview data
+          lv_period_type = 'W'.  "WEEKS
+          PERFORM get_load_hist_times TABLES lt_output
+          USING  ls_imsxxlist-name
+                lv_period_type.
+
+*         Adding a line to separate the tables
+          CLEAR ls_output.
+          APPEND ls_output TO lt_output.
+
+          " Get months overview data
+          lv_period_type = 'M'.  "MONTHS
+          PERFORM get_load_hist_times TABLES lt_output
+          USING  ls_imsxxlist-name
+                lv_period_type.
+
+*         Adding a line to separate the tables
+          CLEAR ls_output.
+          APPEND ls_output TO lt_output.
+
+* Read day, week and month load history data of each instance
+* for database tab
+          CLEAR: lv_period_type.
+          " Get days overview data
+          lv_period_type = 'D'.  "DAYS
+          PERFORM get_load_hist_database TABLES lt_output
+          USING  ls_imsxxlist-name
+                lv_period_type.
+
+*         Adding a line to separate the tables
+          CLEAR ls_output.
+          APPEND ls_output TO lt_output.
+
+          " Get weeks overview data
+          lv_period_type = 'W'.  "WEEKS
+          PERFORM get_load_hist_database TABLES lt_output
+          USING  ls_imsxxlist-name
+                lv_period_type.
+
+*         Adding a line to separate the tables
+          CLEAR ls_output.
+          APPEND ls_output TO lt_output.
+
+          " Get months overview data
+          lv_period_type = 'M'.  "MONTHS
+          PERFORM get_load_hist_database TABLES lt_output
+          USING  ls_imsxxlist-name
+                lv_period_type.
+*         Adding a line to separate the tables
+          CLEAR ls_output.
+          APPEND ls_output TO lt_output.
+
+          CLEAR: ls_imsxxlist.
+        ENDLOOP.
+      ELSE.
+        CLEAR: ls_output.
+
+        "Title
+        ls_output = lc_title4.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        "Data
+        ls_output = lc_msg_nodata. "+V001
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+*  Begin of changes in V001
+      "Table name
+      ls_output = lc_title4.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+
+ENDFORM.                    "get_config
+*&---------------------------------------------------------------------*
+*& Form GET_LOAD_HIST_TIMES
+*&---------------------------------------------------------------------*
+*& Read the day, week and month workload overview data for times tab
+*&---------------------------------------------------------------------*
+FORM get_load_hist_times TABLES lt_output STRUCTURE tab512
+                         USING  lv_instance    TYPE swnchostname
+                                lv_period_type TYPE swncperitype.
+
+  CONSTANTS: lc_sep           TYPE c                 VALUE '|',
+             lc_tabname       TYPE tabname           VALUE
+             'SAPWLSYSLOAD',
+             lc_active        TYPE as4local          VALUE 'A',
+             lc_version       TYPE as4vers           VALUE '0000',
+             lc_msg           TYPE char20            VALUE
+             'No data found', "+V001
+             lc_title         TYPE char80            VALUE
+             'Workload_Overview_Times_Tab:DAY',
+             lc_title1        TYPE char80            VALUE
+             'Workload_Overview_Times_Tab:WEEK',
+             lc_title2        TYPE char80            VALUE
+             'Workload_Overview_Times_Tab:MONTH'.
+
+  TYPES: BEGIN OF lty_dd03l,
+           tabname   TYPE tabname,
+           fieldname TYPE fieldname,
+           as4local  TYPE as4local,
+           as4vers   TYPE as4vers,
+           position  TYPE position,
+           rollname  TYPE rollname,
+         END OF lty_dd03l,
+
+         BEGIN OF lty_sapwlsysload,
+           instance    TYPE sapwlinstn,
+           period      TYPE sapwlfday,
+           tasktype    TYPE swltasknam,
+           diastepcnt  TYPE swldiastep,
+           mresptime   TYPE swlmresptx,
+           mprocti     TYPE swlproctix,
+           mcputi      TYPE swlcpumtix,
+           mdbti       TYPE swldbtimex,
+           mdbprocti   TYPE swldbprmti,
+           mwaitti     TYPE swlwaitmtx,
+           mrollinti   TYPE swlmrlinti,
+           mrolwaiti   TYPE swlmrwaitx,
+           mloadgenti  TYPE swlloamtx,
+           mlockti     TYPE swllckmtx,
+           mcpicti     TYPE swlrfcmtx,
+           fnetmt      TYPE swlfnetmt,
+           fguimt      TYPE swlfguimt,
+           fguicnt     TYPE swlfguict,
+           bytes       TYPE swlreqbyte,
+           vmc_cputime TYPE swlvmccpus,
+         END OF lty_sapwlsysload,
+
+         BEGIN OF lty_sapwlsysload_char,
+           instance    TYPE char40,
+           period      TYPE char8,
+           tasktype    TYPE char20,
+           diastepcnt  TYPE char20,
+           mresptime   TYPE char20,
+           mprocti     TYPE char20,
+           mcputi      TYPE char20,
+           mdbti       TYPE char20,
+           mdbprocti   TYPE char20,
+           mwaitti     TYPE char20,
+           mrollinti   TYPE char20,
+           mrolwaiti   TYPE char20,
+           mloadgenti  TYPE char20,
+           mlockti     TYPE char20,
+           mcpicti     TYPE char20,
+           fnetmt      TYPE char20,
+           fguimt      TYPE char20,
+           fguicnt     TYPE char20,
+           bytes       TYPE char20,
+           vmc_cputime TYPE char24,
+         END OF lty_sapwlsysload_char.
+
+  DATA: ls_output      TYPE tab512,
+        ls_systemload  TYPE swnc_t_sysload,
+        lt_outtab      TYPE STANDARD TABLE OF lty_sapwlsysload,
+        ls_outtab      TYPE lty_sapwlsysload,
+        lt_outtab_char TYPE STANDARD TABLE OF
+        lty_sapwlsysload_char,
+        ls_outtab_char TYPE lty_sapwlsysload_char,
+        lo_exception   TYPE REF TO cx_root,
+        lt_dd03l       TYPE STANDARD TABLE OF lty_dd03l,
+        ls_dd03l       TYPE lty_dd03l,
+        lt_dd04t       TYPE STANDARD TABLE OF dd04t,
+        ls_dd04t       TYPE dd04t,
+        lv_text        TYPE string,
+* Begin of changes in V001
+        lv_tab_lines   TYPE i,
+        lv_msg         TYPE string.
+
+  FIELD-SYMBOLS: <fs_outtab>      TYPE lty_sapwlsysload,
+                 <fs_outtab_char> TYPE lty_sapwlsysload_char,
+                 <field>          TYPE any.
+* End of changes in V001
+
+  FIELD-SYMBOLS: <fs_datatab> TYPE swncsysload.
+
+  CLEAR: ls_systemload.
+* Begin of changes in V001
+  IF lv_period_type = 'D'.
+    " Title
+    CLEAR: ls_output.
+    " Workload_Overview_Times: DAY
+    ls_output = lc_title.
+    APPEND ls_output TO lt_output.
+  ELSEIF lv_period_type = 'W'.
+    " Title
+    CLEAR: ls_output.
+    " Workload_Overview_Times: WEEK
+    ls_output = lc_title1.
+    APPEND ls_output TO lt_output.
+  ELSEIF lv_period_type = 'M'.
+    " Title
+    CLEAR: ls_output.
+    " Workload_Overview_Times: MONTH
+    ls_output = lc_title2.
+    APPEND ls_output TO lt_output.
+  ENDIF.
+* End of changes in V001
+
+  CALL FUNCTION 'SWNC_COLLECTOR_GET_SYSTEMLOAD'
+    EXPORTING
+      periodtype   = lv_period_type
+      component    = lv_instance
+    IMPORTING
+      t_systemload = ls_systemload.
+
+* Check if data has been fetched, if no data give message
+* and exit
+  DESCRIBE TABLE ls_systemload LINES lv_tab_lines.
+  IF lv_tab_lines = 0.
+    CLEAR: ls_output.
+    " No data found
+    ls_output = lc_msg.
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+
+* Convert the data into required format
+  CLEAR: ls_outtab.
+  LOOP AT ls_systemload ASSIGNING <fs_datatab>.
+
+    TRY.
+
+*       instance
+        ls_outtab-instance = <fs_datatab>-component.
+
+*       period
+        ls_outtab-period = <fs_datatab>-periodstrt.
+
+*       tasktype
+        ls_outtab-tasktype =
+        cl_swnc_constants=>translate_tasktype( <fs_datatab>-tasktype ).
+
+*       number of steps
+        ls_outtab-diastepcnt = <fs_datatab>-count.
+
+*       Mean CPU time per dialog step
+        ls_outtab-mcputi     =
+        <fs_datatab>-cputi / <fs_datatab>-count.
+
+*       Mean CPIC/RFC time per dialog step
+        ls_outtab-mcpicti    =
+        <fs_datatab>-cpicti / <fs_datatab>-count.
+
+*       Mean response time per dialog step
+        ls_outtab-mresptime  =
+        <fs_datatab>-respti / <fs_datatab>-count.
+
+*       Mean processing time per dialog step
+        ls_outtab-mprocti = <fs_datatab>-procti / <fs_datatab>-count.
+
+*       Mean wait time per dialog step
+        ls_outtab-mwaitti    =
+        <fs_datatab>-queueti / <fs_datatab>-count.
+
+*       Mean Load+Gen time per dialog step
+        ls_outtab-mloadgenti =
+        <fs_datatab>-loadgenti / <fs_datatab>-count.
+
+*       Mean roll in time per dialog step
+        ls_outtab-mrollinti  =
+        <fs_datatab>-rollinti / <fs_datatab>-count.
+
+*       Mean roll wait time per dialog step
+        ls_outtab-mrolwaiti  =
+        <fs_datatab>-rollwaitti / <fs_datatab>-count.
+
+*       Mean lock time per dialog step
+        ls_outtab-mlockti    =
+        <fs_datatab>-lockti / <fs_datatab>-count.
+
+*       DB time per dialog step
+        ls_outtab-mdbti   = <fs_datatab>-dbti / <fs_datatab>-count.
+
+*       Average GUI Time per Dialog Step (ms)
+        ls_outtab-fguimt  =
+        <fs_datatab>-guitime / <fs_datatab>-count.
+
+*       Number of Roundtrips
+        ls_outtab-fguicnt = <fs_datatab>-guicnt.
+
+*       guinettime is measured in seconds (only for the summary),
+*       but displayed in milliseconds.
+        ls_outtab-fnetmt  =
+        <fs_datatab>-guinettime / <fs_datatab>-count.
+
+*       Data Requested from Database (KB)
+        ls_outtab-bytes      = <fs_datatab>-bytes / 1024.
+
+*       Ø Time for DB Proc. Calls per Transact. (ms)
+        ls_outtab-mdbprocti =
+        <fs_datatab>-dbp_time / <fs_datatab>-count.
+
+*       Total VMC CPU Time in Seconds
+        ls_outtab-vmc_cputime = <fs_datatab>-vmc_cpu_time / 1000.
+
+      CATCH cx_dynamic_check INTO lo_exception.
+        lv_msg = lo_exception->get_text( ).
+        ls_output = lv_msg.
+        APPEND ls_output TO lt_output.
+        RETURN.
+
+    ENDTRY.
+
+    APPEND ls_outtab TO lt_outtab.
+    CLEAR ls_outtab.
+  ENDLOOP.
+
+  SORT lt_outtab BY tasktype ASCENDING period DESCENDING.
+
+  " Heading Columns
+  " Pass the structure name to table DD03L
+  " and read all the fields of the structure
+  CLEAR: lt_dd03l[],lt_dd04t[].
+  SELECT tabname fieldname as4local
+  as4vers position rollname
+  FROM dd03l
+  INTO TABLE lt_dd03l
+  WHERE tabname  EQ lc_tabname  "SAPWLSYSLOAD
+  AND   as4local EQ lc_active   "A
+  AND   as4vers  EQ lc_version. "0000
+  IF sy-subrc EQ 0.
+    SORT: lt_dd03l BY position.
+    DELETE lt_dd03l WHERE position GT '19'
+    AND   position NE '60'.
+  ENDIF.
+
+  IF lt_dd03l[] IS NOT INITIAL.
+    " Read the data element texts
+    SELECT * FROM dd04t
+    INTO TABLE lt_dd04t
+    FOR ALL ENTRIES IN lt_dd03l
+    WHERE rollname   EQ lt_dd03l-rollname "Data element name
+    AND   ddlanguage EQ 'E' " Language
+    AND   as4local   EQ lc_active. " A
+    IF sy-subrc EQ 0.
+      SORT: lt_dd04t BY rollname.
+      CLEAR: ls_dd03l,ls_output.
+      LOOP AT lt_dd03l INTO ls_dd03l.
+        CLEAR: ls_dd04t,lv_text.
+        READ TABLE lt_dd04t INTO ls_dd04t
+        WITH KEY rollname = ls_dd03l-rollname BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          " Get the long text of the data element
+          lv_text = ls_dd04t-scrtext_l.
+          CONDENSE lv_text NO-GAPS.
+        ENDIF.
+        IF sy-tabix EQ '2'.
+          ls_output = lv_text.
+        ELSE.
+          " Build the heading columns structure
+          CONCATENATE ls_output lv_text INTO ls_output
+          SEPARATED BY lc_sep.
+        ENDIF.
+        CLEAR: ls_dd03l.
+      ENDLOOP.
+      APPEND ls_output TO lt_output.
+    ENDIF.
+  ENDIF.
+
+  " Convert the data to character format for display
+  CLEAR: ls_outtab_char.
+  LOOP AT lt_outtab ASSIGNING <fs_outtab>.
+    MOVE-CORRESPONDING <fs_outtab> TO ls_outtab_char.
+    APPEND ls_outtab_char TO lt_outtab_char.
+    CLEAR: ls_outtab_char.
+  ENDLOOP.
+
+  " Output load history data of server
+  CLEAR: ls_outtab_char,ls_output.
+  LOOP AT lt_outtab_char ASSIGNING <fs_outtab_char>.
+
+    DO.
+      ASSIGN COMPONENT sy-index OF STRUCTURE <fs_outtab_char>
+      TO <field>.
+      CONDENSE <field>.
+      IF sy-subrc <> 0.
+        EXIT.
+      ENDIF.
+      IF sy-index EQ 1.
+        ls_output = <field>.
+      ELSE.
+        CONCATENATE ls_output <field> INTO ls_output
+        SEPARATED BY lc_sep.
+      ENDIF.
+    ENDDO.
+
+    CONDENSE ls_output.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+
+  ENDLOOP.
+
+ENDFORM.                    "get_load_hist_times
+*&---------------------------------------------------------------------*
+*& Form GET_LOAD_HIST_DATABASE
+*&---------------------------------------------------------------------*
+*& Read the day, week and month workload overview data for database tab
+*&---------------------------------------------------------------------*
+FORM get_load_hist_database  TABLES lt_output STRUCTURE tab512
+                             USING  lv_instance    TYPE swnchostname
+                                    lv_period_type TYPE swncperitype.
+
+  CONSTANTS: lc_sep           TYPE c                 VALUE '|',
+             lc_tabname       TYPE tabname           VALUE
+             'SAPWLSYSLOAD',
+             lc_active        TYPE as4local          VALUE 'A',
+             lc_version       TYPE as4vers           VALUE '0000',
+             lc_msg           TYPE char20            VALUE
+             'No data found', "+V001
+             lc_title         TYPE char80            VALUE
+             'Workload_Overview_Database_Tab:DAY',
+             lc_title1        TYPE char80            VALUE
+             'Workload_Overview_Database_Tab:WEEK',
+             lc_title2        TYPE char80            VALUE
+             'Workload_Overview_Database_Tab:MONTH'.
+
+  TYPES: BEGIN OF lty_dd03l,
+           tabname   TYPE tabname,
+           fieldname TYPE fieldname,
+           as4local  TYPE as4local,
+           as4vers   TYPE as4vers,
+           position  TYPE position,
+           rollname  TYPE rollname,
+         END OF lty_dd03l,
+
+         BEGIN OF lty_sapwlsysload,
+           instance   TYPE sapwlinstn,
+           period     TYPE sapwlfday,
+           tasktype   TYPE swltasknam,
+           readseqcnt TYPE swlsreadcn,
+           readseqst  TYPE swlsreadst,
+           readseqmt  TYPE swlsreadmt,
+           readdircnt TYPE swldreadcn,
+           readdirst  TYPE swldreadst,
+           readdirmt  TYPE swldreadmt,
+           chngcnt    TYPE swlchngcn,
+           chngst     TYPE swlchngst,
+           chngmt     TYPE swlchngmt,
+           dbrequcnt  TYPE swldbreqcn,
+           dbreqmti   TYPE swldbreqmt,
+           phyreadcnt TYPE swlphyrdcn,
+           phychngrec TYPE swlphychcn,
+           dbufreadcn TYPE swldbufrcn,
+           dbpcount   TYPE swldbcount,
+           dbptime    TYPE swldbprti1,
+           dbpavti    TYPE swldbprav1,
+         END OF lty_sapwlsysload,
+
+         BEGIN OF lty_sapwlsysload_char,
+           instance   TYPE char40,
+           period     TYPE char8,
+           tasktype   TYPE char20,
+           readseqcnt TYPE char20,
+           readseqst  TYPE char50,
+           readseqmt  TYPE char50,
+           readdircnt TYPE char20,
+           readdirst  TYPE char20,
+           readdirmt  TYPE char50,
+           chngcnt    TYPE char20,
+           chngst     TYPE char20,
+           chngmt     TYPE char50,
+           dbrequcnt  TYPE char20,
+           dbreqmti   TYPE char50,
+           phyreadcnt TYPE char20,
+           phychngrec TYPE char20,
+           dbufreadcn TYPE char20,
+           dbpcount   TYPE char20,
+           dbptime    TYPE char20,
+           dbpavti    TYPE char20,
+         END OF lty_sapwlsysload_char.
+
+  DATA: ls_output        TYPE tab512,
+        ls_systemload    TYPE swnc_t_sysload,
+        lt_outtab        TYPE STANDARD TABLE OF
+        lty_sapwlsysload,
+        ls_outtab        TYPE lty_sapwlsysload,
+        lt_outtab_char   TYPE STANDARD TABLE OF
+        lty_sapwlsysload_char,
+        ls_outtab_char   TYPE lty_sapwlsysload_char,
+        lo_exception     TYPE REF TO cx_root,
+        lt_dd03l         TYPE STANDARD TABLE OF lty_dd03l,
+        ls_dd03l         TYPE lty_dd03l,
+        lt_dd04t         TYPE STANDARD TABLE OF dd04t,
+        ls_dd04t         TYPE dd04t,
+        lv_text          TYPE string,
+        lv_dbrequesttime TYPE p,
+        lv_dbrequests    TYPE p,
+* Begin of changes in V001
+        lv_tab_lines     TYPE i,
+        lv_msg           TYPE string.
+
+  FIELD-SYMBOLS: <fs_outtab>      TYPE lty_sapwlsysload,
+                 <fs_outtab_char> TYPE lty_sapwlsysload_char,
+                 <field>          TYPE any.
+* End of changes in V001
+
+  FIELD-SYMBOLS: <fs_datatab> TYPE swncsysload.
+
+  CLEAR: ls_systemload.
+* Begin of changes in V001
+  IF lv_period_type = 'D'.
+    " Title
+    CLEAR: ls_output.
+    " Workload_Overview_Database_Tab: DAY
+    ls_output = lc_title.
+    APPEND ls_output TO lt_output.
+  ELSEIF lv_period_type = 'W'.
+    " Title
+    CLEAR: ls_output.
+    " Workload_Overview_Database_Tab: WEEK
+    ls_output = lc_title1.
+    APPEND ls_output TO lt_output.
+  ELSEIF lv_period_type = 'M'.
+    " Title
+    CLEAR: ls_output.
+    " Workload_Overview_Database_Tab: MONTH
+    ls_output = lc_title2.
+    APPEND ls_output TO lt_output.
+  ENDIF.
+* End of changes in V001
+
+  CALL FUNCTION 'SWNC_COLLECTOR_GET_SYSTEMLOAD'
+    EXPORTING
+      periodtype   = lv_period_type
+      component    = lv_instance
+    IMPORTING
+      t_systemload = ls_systemload.
+
+* Check if data has been fetched, if no data give message
+* and exit
+  DESCRIBE TABLE ls_systemload LINES lv_tab_lines.
+  IF lv_tab_lines = 0.
+    CLEAR: ls_output.
+    " No data found
+    ls_output = lc_msg.
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+
+* Convert the data into required format
+  CLEAR: ls_outtab.
+  LOOP AT ls_systemload ASSIGNING <fs_datatab>.
+
+    TRY.
+
+*       instance
+        ls_outtab-instance = <fs_datatab>-component.
+
+*       period
+        ls_outtab-period = <fs_datatab>-periodstrt.
+
+*       tasktype
+        ls_outtab-tasktype =
+        cl_swnc_constants=>translate_tasktype( <fs_datatab>-tasktype ).
+
+*       sqeuential reads
+        ls_outtab-readseqcnt = <fs_datatab>-readseqcnt.
+
+*       Sum of times in seconds
+        ls_outtab-readdirst  = <fs_datatab>-readdirti / 1000.
+        ls_outtab-readseqst  = <fs_datatab>-readseqti / 1000.
+        ls_outtab-chngst     = <fs_datatab>-chngti / 1000.
+
+*       time per seq. read
+        IF <fs_datatab>-readseqcnt <> 0.
+          ls_outtab-readseqmt =
+          <fs_datatab>-readseqti / <fs_datatab>-readseqcnt.
+        ENDIF.
+
+*       direct reads
+        ls_outtab-readdircnt = <fs_datatab>-readdircnt.
+
+*       time per direct read
+        IF <fs_datatab>-readdircnt <> 0.
+          ls_outtab-readdirmt =
+          <fs_datatab>-readdirti / <fs_datatab>-readdircnt.
+        ENDIF.
+
+*       changes
+        ls_outtab-chngcnt = <fs_datatab>-chngcnt.
+
+*       time per change
+        IF <fs_datatab>-chngcnt <> 0.
+          ls_outtab-chngmt =
+          <fs_datatab>-chngti / <fs_datatab>-chngcnt.
+        ELSE.
+          ls_outtab-chngmt = <fs_datatab>-chngti. "commit time
+        ENDIF.
+
+*       db requests from ABAP to DB interface
+        ls_outtab-dbrequcnt = <fs_datatab>-readdircnt
+        + <fs_datatab>-readseqcnt + <fs_datatab>-chngcnt.
+
+*       Mean time for log. DB request
+        lv_dbrequesttime = <fs_datatab>-dbti.
+        lv_dbrequests    = <fs_datatab>-readdircnt
+        + <fs_datatab>-readseqcnt + <fs_datatab>-chngcnt.
+        IF lv_dbrequests <> 0.
+          ls_outtab-dbreqmti = lv_dbrequesttime / lv_dbrequests.
+        ENDIF.
+
+*       physical db calls
+        ls_outtab-phyreadcnt = <fs_datatab>-phyreadcnt.
+        ls_outtab-phychngrec = <fs_datatab>-phychngrec.
+
+        ls_outtab-dbufreadcn = <fs_datatab>-readdirbuf.
+
+*       DB Procedure Data
+        ls_outtab-dbpcount  = <fs_datatab>-dbp_count.
+        "Display Seconds
+        ls_outtab-dbptime   = <fs_datatab>-dbp_time / 1000.
+
+        IF <fs_datatab>-dbp_count <> 0.
+          ls_outtab-dbpavti =
+          <fs_datatab>-dbp_time / <fs_datatab>-dbp_count.
+        ENDIF.
+
+      CATCH cx_dynamic_check INTO lo_exception.
+        lv_msg = lo_exception->get_text( ).
+        ls_output = lv_msg.
+        APPEND ls_output TO lt_output.
+        RETURN.
+
+    ENDTRY.
+
+    APPEND ls_outtab TO lt_outtab.
+    CLEAR ls_outtab.
+  ENDLOOP.
+
+  SORT lt_outtab BY tasktype ASCENDING period DESCENDING.
+
+  " Heading Columns
+  " Pass the structure name to table DD03L
+  " and read all the fields of the structure
+  CLEAR: lt_dd03l[],lt_dd04t[].
+  SELECT tabname fieldname as4local
+  as4vers position rollname
+  FROM dd03l
+  INTO TABLE lt_dd03l
+  WHERE tabname  EQ lc_tabname  "SAPWLSYSLOAD
+  AND   as4local EQ lc_active   "A
+  AND   as4vers  EQ lc_version. "0000
+  IF sy-subrc EQ 0.
+    SORT: lt_dd03l BY position.
+
+    " Delete unwanted entries from the output structure
+    DELETE lt_dd03l WHERE position LT '21'
+    AND position NE '01'
+    AND position NE '02'
+    AND position NE '03'.
+
+    DELETE lt_dd03l WHERE position GT '42'.
+
+    DELETE lt_dd03l WHERE  position EQ '24'
+    OR   position EQ '28'
+    OR   position EQ '29'
+    OR   position EQ '33'
+    OR   position EQ '38'.
+  ENDIF.
+
+  IF lt_dd03l IS NOT INITIAL.
+    " Read the data element texts
+    SELECT * FROM dd04t
+    INTO TABLE lt_dd04t
+    FOR ALL ENTRIES IN lt_dd03l
+    WHERE rollname   EQ lt_dd03l-rollname "Data element name
+    AND   ddlanguage EQ 'E' " Language
+    AND   as4local   EQ lc_active. " A
+    IF sy-subrc EQ 0 AND lt_dd03l[] IS NOT INITIAL.
+      SORT: lt_dd04t BY rollname.
+      CLEAR: ls_dd03l,ls_output.
+      LOOP AT lt_dd03l INTO ls_dd03l.
+        CLEAR: ls_dd04t,lv_text.
+        READ TABLE lt_dd04t INTO ls_dd04t
+        WITH KEY rollname = ls_dd03l-rollname BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          " Get the long text of the data element
+          lv_text = ls_dd04t-scrtext_l.
+          CONDENSE lv_text NO-GAPS.
+        ENDIF.
+        IF sy-tabix EQ '2'.
+          ls_output = lv_text.
+        ELSE.
+          " Build the heading columns structure
+          CONCATENATE ls_output lv_text INTO ls_output
+          SEPARATED BY lc_sep.
+        ENDIF.
+        CLEAR: ls_dd03l.
+      ENDLOOP.
+      APPEND ls_output TO lt_output.
+    ENDIF.
+  ENDIF.
+
+  " Convert the data to character format for display
+  CLEAR: ls_outtab_char.
+  LOOP AT lt_outtab ASSIGNING <fs_outtab>.
+    MOVE-CORRESPONDING <fs_outtab> TO ls_outtab_char.
+    APPEND ls_outtab_char TO lt_outtab_char.
+    CLEAR: ls_outtab_char.
+  ENDLOOP.
+
+  " Output load history data of server
+  CLEAR: ls_outtab_char,ls_output.
+  LOOP AT lt_outtab_char ASSIGNING <fs_outtab_char>.
+
+    DO.
+      ASSIGN COMPONENT sy-index OF STRUCTURE <fs_outtab_char>
+      TO <field>.
+      CONDENSE <field>.
+      IF sy-subrc <> 0.
+        EXIT.
+      ENDIF.
+      IF sy-index EQ 1.
+        ls_output = <field>.
+      ELSE.
+        CONCATENATE ls_output <field> INTO ls_output
+        SEPARATED BY lc_sep.
+      ENDIF.
+    ENDDO.
+
+    CONDENSE ls_output.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+
+  ENDLOOP.
+
+ENDFORM.                    "get_load_hist_database

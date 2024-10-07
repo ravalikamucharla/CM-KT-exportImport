@@ -1,0 +1,28 @@
+---
+
+- name: To check if ports are open
+  command: nc -vz {{ hostip }} {{ port_numb }}{{ instance_number }}
+  register: port_status
+  
+- debug:
+    msg: "{{ port_numb }}{{ instance_number }} Port is not open"
+  when: port_status.stderr is search('No route to host')
+
+- debug:
+    msg: "{{ port_numb }}{{ instance_number }} Port is open"
+  when: port_status.stderr is search('Connected')
+
+- name: check if the path is present
+  stat: 
+      path: "{{ abap_scripts_path }}"
+  register: st
+
+- name: copy abap pre-migration script files 
+  copy:
+    src: "../files/"
+    dest: "{{ abap_scripts_path }}"
+    mode: '0755'
+  when: not st.stat.exists
+ 
+- name: Execute ABAP scripts
+  include_tasks: "{{ stage }}.yml"

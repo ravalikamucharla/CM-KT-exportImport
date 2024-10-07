@@ -1,0 +1,21 @@
+- name: main | ftp for suse
+  import_tasks: suse.yml
+  when:  
+    - os_type == "linux"
+    - ansible_os_family == "Suse"
+  tags: ftp
+
+- name: main | ftp tasks for RHEL
+  import_tasks: rhel.yml
+  when: 
+    - os_type == "linux"
+    - ansible_os_family == "RedHat"
+  tags: ftp
+
+- name: main | ftp tasks for windows
+  import_tasks: windows.yml
+  when: os_type == 'windows'
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: ftp

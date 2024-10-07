@@ -1,0 +1,30 @@
+[{% for data in output.results[index].stdout_lines %}
+    {% if loop.length == 1 %}
+        {   
+            "ENTRY_TYPE_NAME": "",
+            "SYS_START_TIME": "",
+            "SYS_END_TIME": "",
+            "BACKUP_DURATION_IN_SEC": "",
+            "BACKUP_DURATION_IN_MIN": "",
+            "STATUS": ""
+        }
+    {% elif loop.index > 1 and loop.index <= loop.length-1 %}
+        {
+            "ENTRY_TYPE_NAME": {{ data.split(',')[0] }},
+            "SYS_START_TIME": {{ data.split(',')[1] }},
+            "SYS_END_TIME": {{ data.split(',')[2] }},
+            "BACKUP_DURATION_IN_SEC": "{{ data.split(',')[3] }}",
+            "BACKUP_DURATION_IN_MIN": "{{ data.split(',')[4] }}",
+            "STATUS": {{ data.split(',')[5] }}
+        }
+    {% elif loop.index == loop.length %}
+        {
+            "ENTRY_TYPE_NAME": {{ data.split(',')[0] }},
+            "SYS_START_TIME": {{ data.split(',')[1] }},
+            "SYS_END_TIME": {{ data.split(',')[2] }},
+            "BACKUP_DURATION_IN_SEC": "{{ data.split(',')[3] }}",
+            "BACKUP_DURATION_IN_MIN": "{{ data.split(',')[4] }}",
+            "STATUS": {{ data.split(',')[5] }}
+        }
+    {% endif %}
+{% endfor %}]

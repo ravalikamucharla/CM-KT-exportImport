@@ -1,0 +1,361 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_RZ10_EXP_PROFILE_PARAMETER               *
+* Title               :  Fetch parameter values for all active profile*
+* Purpose             :  To get parameter name and values for all     *
+*                        active profiles in system                    *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RZ10                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-22-2022  Initial   Soumya Ray   Local     To get parameter details*
+*                                             for all active profiles *
+*---------------------------------------------------------------------*
+
+REPORT zcm_rz10_exp_profile_parameter.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep          TYPE c VALUE '|'              LENGTH 1,
+             lc_num2         TYPE c VALUE '2'              LENGTH 1,
+             lc_null         TYPE c VALUE 'NULL'           LENGTH 4,
+             lc_index        TYPE c VALUE 'Index'          LENGTH 5,
+             lc_export       TYPE c VALUE 'EXPORT'         LENGTH 6,
+             lc_profile_type TYPE btch0000-char1           VALUE 'A',
+             lc_auth_missing TYPE c VALUE
+             'Authorization missing'                       LENGTH 25,
+             lc_no_profile   TYPE c VALUE
+             'No profile found'                            LENGTH 16,
+             lc_invalid      TYPE c VALUE
+             'Invalid profile type'                        LENGTH 20,
+             lc_title        TYPE c VALUE
+             'Profile parameter details'                   LENGTH 30,
+             lc_noinput      TYPE c VALUE
+             'No input passed'                             LENGTH 15,
+             lc_nodata       TYPE c  VALUE
+             'No data found'                               LENGTH 20,
+             lc_profile_name TYPE c VALUE 'Profile Name'   LENGTH 12,
+             lc_param_name   TYPE c VALUE 'Parameter Name' LENGTH 15,
+             lc_version      TYPE c VALUE 'Version'        LENGTH 7,
+             lc_param_value  TYPE c VALUE
+             'Parameter Value'                             LENGTH 16,
+             lc_inc_input    TYPE c VALUE
+             'Incorrect input'                             LENGTH 20,
+             lc_parnr        TYPE c VALUE
+             'Profile parameter name'                      LENGTH 22,
+             lc_comnr        TYPE c VALUE
+             'No of Comment Line'                          LENGTH 18,
+             lc_dename       TYPE c VALUE
+             'Data Element for Profile Parameter'          LENGTH 37,
+             lc_chkprg       TYPE c VALUE
+             'Check Program for Profile Parameter'         LENGTH 40,
+             lc_modprog      TYPE c VALUE
+             'Maintainance Program for Profile Parameter'  LENGTH 45,
+             lc_crefpf       TYPE c VALUE
+             'Start Profileused to start programs'         LENGTH 40,
+             lc_pstate       TYPE c VALUE
+             'Profile parameter Status'                    LENGTH 25,
+             lc_err_proflist TYPE c VALUE
+             'Issues in getting profile parameter list'    LENGTH 50,
+             lc_err_server   TYPE c VALUE
+             'Error in fetching active server list'        LENGTH 50,
+             lc_noauth       TYPE c VALUE
+'You have no authorization to change and display profiles' LENGTH 60.
+
+  DATA: ls_tpfht       TYPE tpfht,
+        ls_profile     TYPE tpfht,
+        ls_output      TYPE tab512,
+        ls_input       TYPE tab512,
+        lv_action      TYPE string,
+        lv_line        TYPE string,
+        ls_param       TYPE tpfet,
+        lv_profname    TYPE pfepfname,
+        lv_tabix       TYPE c LENGTH 4,
+        lt_param       TYPE STANDARD TABLE OF tpfet,
+        lt_tpfet       TYPE STANDARD TABLE OF tpfet,
+        lt_profile     TYPE STANDARD TABLE OF tpfht,
+        lt_tpfht       TYPE STANDARD TABLE OF tpfht,
+        lt_server      TYPE STANDARD TABLE OF msxxlist,
+        lt_chkprotocol TYPE STANDARD TABLE OF tpfckprot.
+
+  FIELD-SYMBOLS:<fs_server> TYPE msxxlist.
+
+  CLEAR: ls_tpfht, ls_profile, ls_output, ls_input, lv_action,
+  lv_line, ls_param, lv_profname, lv_tabix.
+  FREE: lt_param, lt_tpfet, lt_profile, lt_tpfht, lt_server,
+  lt_chkprotocol.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  "Read the input profile names into internal table
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export." When action is EXPORT
+
+      "Import profiles
+      CALL FUNCTION 'PFL_IMPORT_ACTIVE_SRV_PROFILES'
+        TABLES
+          protocol              = lt_chkprotocol
+        EXCEPTIONS
+          authorization_missing = 1
+          OTHERS                = 2.
+      IF sy-subrc <> 0.
+        ls_output = lc_noauth.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+
+
+      " FM to get profile list
+      CALL FUNCTION 'PFL_GET_PROFILE_LIST'
+        EXPORTING
+          profile_type          = lc_profile_type
+        TABLES
+          profile_header_tbl    = lt_tpfht
+        EXCEPTIONS
+          no_profile_found      = 1
+          invalid_profile_type  = 2
+          authorization_missing = 3
+          OTHERS                = 4.
+      IF sy-subrc EQ 0.
+
+        " FM to get active application server in the system
+        CALL FUNCTION 'TH_SERVER_LIST'
+          TABLES
+            list           = lt_server
+          EXCEPTIONS
+            no_server_list = 1
+            OTHERS         = 2.
+        IF sy-subrc EQ 0.
+
+          SORT lt_server BY name.
+
+          SORT lt_tpfht BY servername.
+
+          LOOP AT lt_tpfht INTO ls_tpfht.
+
+            READ TABLE lt_server ASSIGNING <fs_server>
+            WITH KEY name = ls_tpfht-servername BINARY SEARCH.
+
+            IF sy-subrc EQ 0.
+
+              APPEND ls_tpfht TO lt_profile.
+              CLEAR ls_tpfht.
+            ENDIF.
+
+          ENDLOOP.
+
+          "Subheading of the 1st table
+          CONCATENATE lc_index lc_profile_name INTO ls_output
+          SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_profile INTO ls_profile.
+            lv_tabix = sy-tabix.
+            CONCATENATE lv_tabix ls_profile-pfname INTO ls_output
+            SEPARATED BY lc_sep.
+            CONDENSE ls_output.
+            APPEND ls_output TO lt_output.
+
+            " FM to read profile parameters from database
+            CALL FUNCTION 'PFL_READ_PROFILE_FROM_DB'
+              EXPORTING
+                profile_name          = ls_profile-pfname
+                profile_version       = ls_profile-versnr
+              TABLES
+                dtab                  = lt_tpfet
+              EXCEPTIONS
+                pfl_doesnt_exist      = 1
+                authorization_missing = 2
+                OTHERS                = 3.
+
+            IF sy-subrc EQ 0.
+
+              APPEND LINES OF lt_tpfet TO lt_param.
+
+            ENDIF.
+            FREE: lt_tpfet.
+            CLEAR: ls_profile, ls_output, lv_tabix.
+          ENDLOOP.
+          IF lt_param IS INITIAL.
+            ls_output = lc_nodata.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+          ENDIF.
+
+          APPEND ls_output TO lt_output.
+
+          READ TABLE lt_param INTO ls_param INDEX 1.
+          lv_profname = ls_param-pfname.
+          ls_output = lv_profname.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_param.
+
+          "Column name
+          CONCATENATE lc_profile_name
+          lc_version
+          lc_param_name
+          lc_parnr
+          lc_comnr
+          lc_dename
+          lc_chkprg
+          lc_modprog
+          lc_crefpf
+          lc_pstate
+          lc_param_value
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_param INTO ls_param.
+            IF lv_profname NE ls_param-pfname.
+              "Blank line
+              CLEAR ls_output.
+              APPEND ls_output TO lt_output.
+
+              "Header of profile name
+              ls_output = ls_param-pfname.
+              APPEND ls_output TO lt_output.
+
+              "Column name
+              CONCATENATE lc_profile_name
+              lc_version
+              lc_param_name
+              lc_parnr
+              lc_comnr
+              lc_dename
+              lc_chkprg
+              lc_modprog
+              lc_crefpf
+              lc_pstate
+              lc_param_value
+              INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+            ENDIF.
+
+            IF ls_param-parname IS NOT INITIAL.
+
+              IF ls_param-pvalue IS INITIAL.
+                ls_param-pvalue = lc_null.
+              ENDIF.
+
+              CONCATENATE ls_param-pfname
+              ls_param-versnr
+              ls_param-parname
+              ls_param-parnr
+              ls_param-comnr
+              ls_param-dename
+              ls_param-chkprg
+              ls_param-modprog
+              ls_param-crefpf
+              ls_param-pstate
+              ls_param-pvalue
+              INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+            ENDIF.
+            lv_profname = ls_param-pfname.
+            CLEAR: ls_param.
+          ENDLOOP.
+
+          " If the parameter name is not present in the profiles
+          DESCRIBE TABLE lt_output LINES lv_line.
+          IF lv_line EQ lc_num2.
+            FREE : lt_output.
+            "Title
+            ls_output = lc_title.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            "No data
+            ls_output = lc_nodata.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+          ENDIF.
+        ELSE.
+
+          " Error in fetching active server list
+          ls_output = lc_err_server.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+      ELSEIF sy-subrc EQ 1.
+
+        " No profile found
+        ls_output = lc_no_profile.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+
+      ELSEIF sy-subrc EQ 2.
+
+        " Invalid profile type
+        ls_output = lc_invalid.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSEIF sy-subrc EQ 3.
+
+        " Authorization missing
+        ls_output = lc_auth_missing.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ELSEIF sy-subrc EQ 4.
+
+        " Issues in getting profile parameter list
+        ls_output = lc_err_proflist.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+      CLEAR: ls_tpfht, ls_profile, ls_output, ls_input, lv_action,
+      lv_line, ls_param, lv_profname.
+      FREE: lt_param, lt_tpfet, lt_profile, lt_tpfht, lt_server,
+      lt_chkprotocol.
+
+    WHEN OTHERS.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

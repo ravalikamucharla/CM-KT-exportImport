@@ -1,0 +1,95 @@
+---
+#defaults file for get-db-commands-outputs
+
+sybase_queries:
+  - { name: "get_sybase_version", query: "select @@version" }
+  - { name: "get_sybase_logmode_check", query: "sp_helpdb {{ sid }}" }
+  - { name: "get_sybase_db_size", query: "sp_spaceused" }
+  - { name: "selective_sybase_tables",query: "use {{ sid }} go select count(*) row_count from {{ schema_name }}.{{ default_table_name }}" }
+  - { name: "get_sybase_datafile_layout",query: "sp_helpdevice" }
+
+db2_queries:
+  - { name: "get_db2_version", query: "db2 connect to {{ sid | lower }}" }
+  - { name: "get_db2_datafile_layout", query: "db2pd -d {{ sid }} -storagepaths" }
+  - { name: "fetch_db2_db_size", query: "db2 'CALL GET_DBSIZE_INFO(?, ?, ?, 0)'" }
+  - { name: "selective_db2_tables", query: "db2 'select count(*) row_count from SAP{{ sid | upper }}.{{ default_table_name }}'" }
+  - { name: "get_db2_last_backup", query: "db2 'select DB_NAME,LAST_BACKUP from sysibmadm.SNAPDB'" }
+  - { name: "get_db2_connect_status", query: "db2 connect to  {{ sid| upper}}" }
+  - { name: "get_db2_fix_pack_level", query: "db2level" }
+  - { name: "get_db2_license_status", query: "db2licm -l" }
+  - { name: "get_db2_lock_timeout", query: "db2 SET CURRENT LOCK TIMEOUT -1" }
+  - { name: "get_db2_tablespace_status", query: "db2 list tablespaces show detail | grep -i state" }
+
+db2_queries_txt:
+  - { name: "get_db2_tablespace_validation", query: "db2 list tablespaces" }
+  - { name: "get_db2_backup_status", query: "db2 list history backup all for {{ sid| upper}}" }
+  - { name: "get_db2_parameter_configuration", query: "db2 get dbm cfg" }
+
+oracle_queries_win:
+  - { name: "get_oracle_version", query: "select banner from V$version;" }
+  - { name: "get_oracle_datafile_layout_win", query: "select name, file#, status, enabled from v$datafile;" }
+  - { name: "get_oracle_log_mode", query: "SELECT NAME, LOG_MODE, OPEN_MODE, DATABASE_ROLE, PLATFORM_NAME  from V$database;" }
+  - { name: "fetch_oracle_db_size", query: "SELECT SUM(BYTES)/1024/1024/1024 AS DBSIZE_IN_GB FROM dba_data_files;" }
+  - { name: "selective_oracle_tables", query: "select count(*) row_count from {{ schema_name }}.{{ default_table_name }};" }
+  - { name: "get_oracledb_last_log_backup", query: "SELECT NAME, COMPLETION_TIME FROM V$ARCHIVED_LOG WHERE COMPLETION_TIME = (SELECT MAX(COMPLETION_TIME) FROM V$ARCHIVED_LOG WHERE COMPLETION_TIME <= SYSDATE);"}
+  - { name: "get_oracledb_last_backup", query: "SELECT * FROM (select FILE_TYPE,STATUS, BS_STATUS, COMPLETION_TIME from V$BACKUP_FILES where FILE_TYPE = 'DATAFILE' ORDER BY COMPLETION_TIME DESC) FETCH NEXT 1 ROWS ONLY;"}
+  - { name: "get_oracle_parameter_backup", query: "create pfile='C:\\initNWO.ora' from spfile;" }
+  - { name: "get_oracle_db_connection_status", query: "select name,open_mode from v$database;" }
+  - { name: "get_oracle_db_information", query: "SELECT NAME, LOG_MODE, OPEN_MODE, DATABASE_ROLE, PLATFORM_NAME from v$database;" }
+  - { name: "get_oracle_db_installed_components", query: "SELECT comp_name, version, status FROM dba_registry;" } 
+  - { name: "get_oracle_patch_version", query: "select description, action, to_char(action_time,'DD/MM/RR HH24:MI:SS') action_date, ' ' version from dba_registry_sqlpatch;" }
+
+oracle_queries_win_txt:
+  - { name: "oracle_delta_growth", query: "select b.tsname tablespace_name , MAX(b.used_size_mb) cur_used_size_mb , round(AVG(inc_used_size_mb),2)avg_increas_mb  from  ( SELECT a.days,a.tsname , used_size_mb , used_size_mb - LAG (used_size_mb,1) OVER ( PARTITION BY a.tsname ORDER BY a.tsname,a.days) inc_used_size_mb from ( SELECT TO_CHAR(sp.begin_interval_time,'MM-DD-YYYY') days  ,ts.tsname ,MAX(round((tsu.tablespace_usedsize* dt.block_size )/(1024*1024),2)) used_size_mb from dba_hist_tbspc_space_usage  tsu , dba_hist_tablespace_stat  ts ,dba_hist_snapshot  sp, dba_tablespaces  dt   where tsu.tablespace_id= ts.ts# AND tsu.snap_id = sp.snap_id AND ts.tsname = dt.tablespace_name AND sp.begin_interval_time > sysdate-7 GROUP BY TO_CHAR(sp.begin_interval_time,'MM-DD-YYYY'), ts.tsname ORDER BY ts.tsname, days ) a) b GROUP BY b.tsname ORDER BY b.tsname;" }
+  - { name: "get_list_of_top_lob", query: "select chunk, owner, table_name from ALL_LOBS WHERE owner = 'SAPSR3' and ROWNUM <= 10 order by chunk desc;" }
+  - { name: "get_list_of_top_tables", query: "select * from(select owner, table_name, nvl(num_rows,-1) from all_tables order by nvl(num_rows,-1) desc) c where rownum <= 10;" }
+  - { name: "get_oracle_tablespace_information", query: "SELECT TABLESPACE_NAME, STATUS, CONTENTS, SEGMENT_SPACE_MANAGEMENT FROM dba_tablespaces;" }
+
+oracle_queries:
+  - { name: "get_oracle_version", query: "select banner from V$version;" }
+  - { name: "get_oracle_datafile_layout", query: "select name, file#, status, enabled from v$datafile;" }
+  - { name: "get_oracle_log_mode", query: "SELECT NAME, LOG_MODE, OPEN_MODE, DATABASE_ROLE, PLATFORM_NAME  from V$database;" }
+  - { name: "fetch_oracle_db_size", query: "SELECT SUM(BYTES)/1024/1024/1024 AS DBSIZE_IN_GB FROM dba_data_files;" }
+  - { name: "selective_oracle_tables", query: "select count(*) row_count from {{ schema_name }}.{{ default_table_name }};" }
+  - { name: "get_oracledb_last_log_backup", query: "SELECT NAME, COMPLETION_TIME FROM V$ARCHIVED_LOG WHERE COMPLETION_TIME = (SELECT MAX(COMPLETION_TIME) FROM V$ARCHIVED_LOG WHERE COMPLETION_TIME <= SYSDATE);"}
+  - { name: "get_oracledb_last_backup", query: "SELECT * FROM (select FILE_TYPE,STATUS, BS_STATUS, COMPLETION_TIME from V$BACKUP_FILES where FILE_TYPE = 'DATAFILE' ORDER BY COMPLETION_TIME DESC) FETCH NEXT 1 ROWS ONLY;"}
+  - { name: "get_oracle_parameter_backup", query: "create pfile='/tmp/initNWO.ora' from spfile;" }
+  - { name: "get_oracle_db_connection_status", query: "select name,open_mode from v$database;" }
+  - { name: "get_oracle_db_information", query: "SELECT NAME, LOG_MODE, OPEN_MODE, DATABASE_ROLE, PLATFORM_NAME from v$database;" }
+  - { name: "get_oracle_db_installed_components", query: "SELECT comp_name, version, status FROM dba_registry;" } 
+  - { name: "get_oracle_patch_version", query: "select description, action, to_char(action_time,'DD/MM/RR HH24:MI:SS') action_date, ' ' version from dba_registry_sqlpatch;" }
+
+oracle_queries_txt:
+  - { name: "oracle_delta_growth", query: "select b.tsname tablespace_name , MAX(b.used_size_mb) cur_used_size_mb , round(AVG(inc_used_size_mb),2)avg_increas_mb  from  ( SELECT a.days,a.tsname , used_size_mb , used_size_mb - LAG (used_size_mb,1) OVER ( PARTITION BY a.tsname ORDER BY a.tsname,a.days) inc_used_size_mb from ( SELECT TO_CHAR(sp.begin_interval_time,'MM-DD-YYYY') days  ,ts.tsname ,MAX(round((tsu.tablespace_usedsize* dt.block_size )/(1024*1024),2)) used_size_mb from dba_hist_tbspc_space_usage  tsu , dba_hist_tablespace_stat  ts ,dba_hist_snapshot  sp, dba_tablespaces  dt   where tsu.tablespace_id= ts.ts# AND tsu.snap_id = sp.snap_id AND ts.tsname = dt.tablespace_name AND sp.begin_interval_time > sysdate-7 GROUP BY TO_CHAR(sp.begin_interval_time,'MM-DD-YYYY'), ts.tsname ORDER BY ts.tsname, days ) a) b GROUP BY b.tsname ORDER BY b.tsname;" }
+  - { name: "get_list_of_top_lob", query: "select chunk, owner, table_name from ALL_LOBS WHERE owner = 'SAPSR3' and ROWNUM <= 10 order by chunk desc;" }
+  - { name: "get_list_of_top_tables", query: "select * from(select owner, table_name, nvl(num_rows,-1) from all_tables order by nvl(num_rows,-1) desc) c where rownum <= 10;" }
+  - { name: "get_oracle_tablespace_information", query: "SELECT TABLESPACE_NAME, STATUS, CONTENTS, SEGMENT_SPACE_MANAGEMENT FROM dba_tablespaces;" }
+
+oracle_queries_files:
+  - { name: "get_oracle_tablespace"}
+
+sql_queries:
+  - { name: "get_sql_version", query: "SELECT @@version" }
+  - { name: "get_datafile_layout", query: "SELECT DB_NAME(database_id) AS database_name,type_desc,name AS FileName,physical_name 'File Location',size/128 AS CurrentSizeMB FROM sys.master_files" }
+  - { name: "get_log_mode", query: "SELECT name, recovery_model_desc FROM sys.databases;" }
+  - { name: "fetch_db_size", query: "exec sp_spaceused" }
+  - { name: "get_sqldb_last_log_backup", query: "use msdb; SELECT backupset.database_name,MAX(CASE WHEN backupset.type = 'D' THEN backupset.backup_finish_date ELSE NULL END) AS LastFullBackup,MAX(CASE WHEN backupset.type = 'I' THEN backupset.backup_finish_date ELSE NULL END) AS LastDifferential,MAX(CASE WHEN backupset.type = 'L' THEN backupset.backup_finish_date ELSE NULL END) AS LastLog FROM backupset GROUP BY backupset.database_name ORDER BY backupset.database_name DESC"}
+
+hana_queries:
+  - { name: "get_hana_logmode_check", format: json }
+  - { name: "get_hana_db_size", format: json }
+  - { name: "selective_hana_tables", format: json }
+  - { name: "get_hana_datafile_layout", format: json }
+  - { name: "get_last_log_backup", format: json }
+  - { name: "get_hanadb_last_backup", format: json }
+  - { name: "get_hanadb_system_user_status", format: json }
+  - { name: "get_hana_license", format: json }
+  - { name: "get_hana_log_backup_frequency", format: json }
+  - { name: "get_hana_complete_backup_frequency", format: json }
+  - { name: "get_hana_incremental_backup_frequency", format: json }
+  - { name: "get_hana_differential_backup_frequency", format: json }
+  - { name: "get_hana_log_backup_duration", format: json }
+  - { name: "get_hana_complete_backup_duration", format: json }
+  - { name: "get_hana_incremental_backup_duration", format: json }
+  - { name: "get_hana_differential_backup_duration", format: json }
+  - { name: "get_hana_landscape_details", format: json }

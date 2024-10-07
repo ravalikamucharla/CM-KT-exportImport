@@ -1,0 +1,114 @@
+########################################################################################################################################################################
+#                                                                                                                                                                      #
+# Installation service 'SAP NetWeaver 7.5 > Oracle > System Copy > Source System > Based on AS ABAP > Export Preparation', product id 'W_PrNepare_Export:NW750.ORA.CP' #
+#                                                                                                                                                                      #
+########################################################################################################################################################################
+# IMPORTANT DO NOT DELETE!!! SAPInstDes25Hash=$WPGYoDic7k5m$x/f1EUliwJrgDco+NqgIVfgn8g9UBJNWZ+9/Z/BDzwmVZMo2CNJLD/NjTekcBb8cMiNNTArkh1eX+MSDoQQ4ewkc43m0EhFS
+
+# Password for the Diagnostics Agent specific <dasid>adm user. Provided value may be encoded.
+# DiagnosticsAgent.dasidAdmPassword =
+
+# Windows domain in which the Diagnostics Agent users must be created. This is an optional property (Windows only).
+# DiagnosticsAgent.domain =
+
+# Windows only: Password for the Diagnostics Agent specific 'SAPService<DASID>' user.
+# DiagnosticsAgent.sapServiceDASIDPassword =
+
+# Specify whether you want to decluster during the export.
+# InitDeclusteringForExport.decluster =
+
+# Execute 'R3szck' in parallel. Default is 'false'.
+# NW_ABAP_Export_Dialog.parallelR3szchkExecution = false
+
+# Call R3szchk option -s with DDIC with database specific ('DD', 'DB').
+NW_ABAP_Export_Dialog.r3szchkDetermineSizeValue = DD
+
+# Number of parallel 'R3szck' processes. Default is '10'.
+# NW_ABAP_Export_Dialog.r3szchkJobNum = 10
+
+# Location of the 'DBSize.xml' file. This parameter is mandatory if 'NW_ABAP_Prepare_Export_Dialog.generateDBSizeXml' is set to 'false'.
+# NW_ABAP_Prepare_Export_Dialog.dbSizeFileLocation =
+
+# Execute 'R3szck' to create the 'DBSIZE.XML' file. Default is 'true'.
+# NW_ABAP_Prepare_Export_Dialog.generateDBSizeXml = true
+
+# Target database type. Supported names are: 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB'
+NW_ABAP_Prepare_Export_Dialog.targetDbType = {{ params.import.target_db_type }}
+
+# Main export directory with ABAP and JAVA subdirectories
+NW_Export.mainExportDir = {{ params.export.mainExportDir }}
+
+# The database host
+NW_getDBInfoGeneric.dbhost = {{ ansible_hostname | default() }}
+
+# The database ID (DBSID)
+NW_getDBInfoGeneric.dbsid = {{ sid|upper }}
+
+# Only use this parameter if recommended by SAP.
+# NW_getDBInfoGeneric.strictDbSidCheck = true
+
+# The FQDN of the system
+# NW_getFQDN.FQDN =
+
+# SAP INTERNAL USE ONLY
+# NW_getFQDN.resolve = true
+
+# Specify whether you want to set FQDN for the system.
+# NW_getFQDN.setFQDN = true
+
+# Manual configuration and execution of Migration Monitor or manual native database copy method.
+# NW_getLoadType.importManuallyExecuted = false
+
+# The load type chosen by the user. Valid values are: 'SAP', 'STD', 'OBR', 'HCP', 'FLASHCOPY', 'MDA', 'HBR', 'SBR'
+NW_getLoadType.loadType = STD
+
+# ABAP system is Unicode (true|false), only needed if it cannot be determined from the system.
+# NW_getUnicode.isUnicode =
+
+# Provide  'profile' directory of SAP Netweaver-based system.
+NW_readProfileDir.profileDir = /usr/sap/{{ sid|upper }}/SYS/profile
+
+# Windows only: The drive to use
+# NW_readProfileDir.sapdrive =
+
+# Windows only: The domain of the SAP Host Agent user
+# hostAgent.domain =
+
+# Password for the 'sapadm' user of the SAP Host Agent
+# hostAgent.sapAdmPassword =
+
+# Windows only: The domain of all users of this SAP system. Leave empty for default.
+# nwUsers.sapDomain =
+
+# Windows only: The password of the 'SAPServiceSID' user
+# nwUsers.sapServiceSIDPassword =
+
+# UNIX only: The user ID of the 'sapadm' user, leave empty for default. The ID is ignored if the user already exists.
+# nwUsers.sapadmUID =
+
+# UNIX only: The group id of the 'sapsys' group, leave empty for default. The ID is ignored if the group already exists.
+nwUsers.sapsysGID = {{ params.sapsys.gid }}
+
+# UNIX only: The user id of the <sapsid>adm user, leave empty for default. The ID is ignored if the user already exists.
+nwUsers.sidAdmUID = {{ params.sidadm.uid }}
+
+# The password of the '<sapsid>adm' user
+# nwUsers.sidadmPassword =
+
+# possible values are
+#         isSingle:  Database on filesystem exist.
+#         isSHOH:    Database installation with SHared Oracle Home.
+#         isASM:     Database on ASM.
+#         isRAC:     Database on RAC.
+#         isRacAsm:  Database on RAC and ASM.
+ora.whatInstallation = true
+
+# possible values are
+#         true:  Database on ASM.
+#         false: Database not on ASM.
+# ora.whatIsASM = false
+
+# possible values are
+#         true:  Database Software installed as oracle user.
+#         false: Database Software installed as orasid user.
+# ora.whatIsOracleUser = true

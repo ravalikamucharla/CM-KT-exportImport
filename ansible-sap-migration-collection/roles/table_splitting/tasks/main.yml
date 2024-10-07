@@ -1,0 +1,4 @@
+- name: splitting tables
+  include_tasks: "table_splitting.yml"
+  tags: tab_split_order_by 
+  

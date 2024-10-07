@@ -1,0 +1,28 @@
+---
+
+# debug verbosity level
+verbosity_level: 0
+
+# these are the default values as defined in the win_sap_install module
+# the inital delay time in seconds to wait after calling sapinst.exe
+win_sap_install_delay: 180
+# the amount of time in seconds to wait when polling the state of the installation
+win_sap_install_sleep: 30
+# the maximum amount of time in seconds the win_sap_install
+# module will wait before failing the installation
+win_sap_install_timeout: 14400
+
+# a defined list of checks that will be performed during the installation
+win_sap_install_checks:
+  - type: file
+    action: stop_sapinst
+    regex: "AddPrivileges was executed with status ERROR"
+    path: sapinst.log
+
+# default backup location for hana-db
+default_backup_location: "{{ downloads.download_drive }}:\\SilentInstall\\EXPORT"
+
+
+exp_name: exp_prep
+table_split_name: table_split
+exp_db_name: exp_db

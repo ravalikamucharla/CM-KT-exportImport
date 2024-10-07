@@ -1,0 +1,124 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_DBCO_EXP_CONNECTION_OVERVW               *
+* Title               :  Capture DBCO connection Overview             *
+* Purpose             :  To capture database connection Overview      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DBCO                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* DBCON                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-18-2021  Initial  Soumya Ray   Local       Capture DBCO connection*
+*                                              overview               *
+*04-04-2022  V001     Soumya Ray   Local       To correct the message *
+*                                            in case of no data, wrong*
+*                                              input and remove inline*
+*                                              declarations           *
+*---------------------------------------------------------------------*
+REPORT zcm_dbco_exp_connection_overvw.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+  CONSTANTS : lc_sep      TYPE c VALUE '|'               LENGTH 1,
+              lc_export   TYPE c VALUE 'EXPORT'          LENGTH 20,
+              lc_null     TYPE c VALUE 'NULL'            LENGTH 4,
+              lc_naction  TYPE c VALUE
+              'Incorrect input'                          LENGTH 23,
+              lc_ninput   TYPE c VALUE 'No input passed' LENGTH 15,
+              lc_msg_head TYPE c VALUE
+       'Description of database connection:Overview'     LENGTH 50,
+              lc_dbconn   TYPE c VALUE 'Db connection'   LENGTH 13,
+              lc_dbms     TYPE c VALUE 'Dbms'            LENGTH 4,
+              lc_usernm   TYPE c VALUE 'User name'       LENGTH 9,
+              lc_coninfo  TYPE c VALUE 'Conn info'       LENGTH 9,
+              lc_conlimit TYPE c VALUE
+              'Connection limit'                         LENGTH 16,
+              lc_permant  TYPE c VALUE 'Permanent'       LENGTH 9,
+              lc_optconn  TYPE c VALUE 'Optimum conns'   LENGTH 14,
+* Begin of changes in V001
+              lc_nodata   TYPE c VALUE
+              'No data found'                            LENGTH 40.
+* End of changes in V001
+
+  DATA: ls_input      TYPE tab512,
+        ls_output     TYPE tab512,
+        lv_action     TYPE string,
+        lv_maxconn    TYPE c LENGTH 4,
+        lv_optconn    TYPE c LENGTH 4,
+        ls_dbcon      TYPE dbcon,
+        ls_prefinal   TYPE string,
+        lt_dbcon      TYPE STANDARD TABLE OF dbcon.
+
+* Heading of the script
+  ls_output = lc_msg_head. "DBCO connection information and test
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output, lv_action, ls_input.
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+    ls_output = lc_ninput. "No input passed
+    APPEND ls_output TO lt_output.
+    RETURN.
+  ENDIF.
+  CLEAR: ls_output, lv_maxconn, lv_optconn, ls_dbcon, ls_prefinal.
+  FREE lt_dbcon.
+
+  CASE lv_action.
+    WHEN lc_export. "EXPORT
+     " Select all entries from DBCON table
+       SELECT * FROM dbcon INTO TABLE lt_dbcon.
+       IF sy-subrc NE 0.
+        ls_output = lc_nodata."No data in table DBCON
+        APPEND ls_output TO lt_output.
+        RETURN.
+       ENDIF.
+       "Subheading
+      CONCATENATE lc_dbconn lc_dbms lc_permant lc_usernm lc_conlimit
+       lc_optconn lc_coninfo INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR  ls_output.
+      "Data
+      LOOP AT lt_dbcon INTO ls_dbcon.
+
+        lv_maxconn = ls_dbcon-max_connections.
+        lv_optconn = ls_dbcon-opt_connections.
+        IF ls_dbcon-con_env IS INITIAL.
+          ls_dbcon-con_env  = lc_null.
+        ENDIF.
+
+        CONCATENATE ls_dbcon-con_name ls_dbcon-dbms ls_dbcon-db_reco
+        ls_dbcon-user_name lv_maxconn lv_optconn ls_dbcon-con_env
+        INTO ls_prefinal SEPARATED BY lc_sep.
+        CONDENSE ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, ls_prefinal.
+      ENDLOOP.
+
+    WHEN OTHERS.
+
+      ls_output = lc_naction."Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+  ENDCASE.
+
+  "To replace blank value in middle fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

@@ -1,0 +1,181 @@
+---
+- name: template the sql file
+  copy:
+    src: "log_mode.sql"
+    dest: /tmp/log_mode.sql
+    mode: "777"
+
+- name: set fact 
+  block:
+    - set_fact:
+        tenant_db: "{{ sid | upper }}"
+
+    - set_fact:
+        db_name: "{{ hana_db_name | default(tenant_db) }}"
+
+  when: hsr_source.mode == "user" or target_primary.mode == "user"
+
+- name: log mode check on source
+  block:
+    - name: Check the log mode in source
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_source.key_name | default('BACKUP') }} -I /tmp/log_mode.sql'
+      async: 8000
+      poll: 3
+      register: key
+      when: hsr_source.mode == "hdbuserstorekey"
+
+    - name: status of log mode in source(hdbuserstorekey)
+      debug:
+        var: key
+      when: hsr_source.mode == "hdbuserstorekey"
+
+    - name: Check the log mode in source
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/log_mode.sql'
+      async: 8000
+      poll: 3
+      register: key_user
+      when: hsr_source.mode == "user"
+
+    - meta: end_play
+      when: 
+        - hsr_source.mode == "hdbuserstorekey"
+        - not (key.stdout is search("normal"))
+
+    - meta: end_play
+      when: 
+        - hsr_source.mode == "user"
+        - not (key_user.stdout is search("normal"))
+
+  when: source_primary_db is defined
+
+- name: log mode check in target
+  block:
+    - name: Check the log mode in target
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_target.key_name | default('BACKUP') }} -I /tmp/log_mode.sql'
+      async: 8000
+      poll: 3
+      register: key
+      when: target_primary.mode == "hdbuserstorekey"
+
+    - name: status of log mode (hdbuserstorekey) in target
+      debug:
+        var: key
+      when: target_primary.mode == "hdbuserstorekey"
+
+    - name: Check the log mode in target 
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/log_mode.sql'
+      async: 8000
+      poll: 3
+      register: key_user
+      when: target_primary.mode == "user"
+
+    - name: status of log mode (username and password)
+      debug:
+        var: key_user
+      when: target_primary.mode == "user"
+
+  when: target_primary_db is defined
+
+- name: set log mode with hdbuserstore key
+  block:
+    - name: template the sql file
+      copy:
+        src: "set_log_mode.sql"
+        dest: /tmp/set_log_mode.sql
+        mode: "777"
+
+    - name: run the sql file to set log mode to normal
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_target.key_name | default('BACKUP') }} -I /tmp/set_log_mode.sql'
+      async: 8000
+      poll: 3
+      register: set_log_mode
+
+  when: 
+    - target_primary_db is defined
+    - target_primary.mode == "hdbuserstorekey"
+    - key.stdout is search("overwrite")
+
+- name: set log mode with username and password
+  block:
+    - name: template the sql file
+      copy:
+        src: "set_log_mode.sql"
+        dest: /tmp/set_log_mode.sql
+        mode: "777"
+        
+    - name: Check the log mode in target 
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/set_log_mode.sql'
+      async: 8000
+      poll: 3
+      register: set_log_mode
+    
+  when: 
+     - target_primary_db is defined
+     - target_primary.mode == "user"
+     - key_user.stdout is search("overwrite")
+
+- name: log mode check in target secondary
+  block:
+    - name: Check the log mode in target
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_target.key_name | default('BACKUP') }} -I /tmp/log_mode.sql'
+      async: 8000
+      poll: 3
+      register: key_sec
+      when: target_secondary.mode == "hdbuserstorekey"
+
+    - name: status of log mode (hdbuserstorekey) in target
+      debug:
+        var: key_sec
+      when: target_secondary.mode == "hdbuserstorekey"
+
+    - name: Check the log mode in target 
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/log_mode.sql'
+      async: 8000
+      poll: 3
+      register: key_user_sec
+      when: target_secondary.mode == "user"
+
+    - name: status of log mode (username and password)
+      debug:
+        var: key_user_sec
+      when: target_secondary.mode == "user"
+
+  when: target_secondary_db is defined
+
+- name: set log mode with hdbuserstore key
+  block:
+    - name: template the sql file
+      copy:
+        src: "set_log_mode.sql"
+        dest: /tmp/set_log_mode.sql
+        mode: "777"
+
+    - name: run the sql file to set log mode to normal
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_target.key_name | default('BACKUP') }} -I /tmp/set_log_mode.sql'
+      async: 8000
+      poll: 3
+      register: set_log_mode_sec
+
+  when: 
+    - target_secondary_db is defined
+    - target_secondary.mode == "hdbuserstorekey"
+    - key_sec.stdout is search("overwrite")
+
+- name: set log mode with username and password
+  block:
+    - name: template the sql file
+      copy:
+        src: "set_log_mode.sql"
+        dest: /tmp/set_log_mode.sql
+        mode: "777"
+        
+    - name: Check the log mode in target 
+      command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/set_log_mode.sql'
+      async: 8000
+      poll: 3
+      register: set_log_mode_sec
+    
+  when: 
+     - target_secondary_db is defined
+     - target_secondary.mode == "user"
+     - key_user_sec.stdout is search("overwrite")

@@ -1,0 +1,4 @@
+[{
+    "Name": "{{ output.results[index].stdout_lines[3].split("\t")[0] | trim }}",
+    "Open_Mode": "{{ output.results[index].stdout_lines[3].split("\t")[1] | trim }}"
+}]

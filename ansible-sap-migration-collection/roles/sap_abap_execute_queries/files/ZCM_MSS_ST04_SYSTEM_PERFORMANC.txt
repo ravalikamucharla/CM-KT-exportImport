@@ -1,0 +1,1400 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_MSS_ST04_SYSTEM_PERFORMANC               *
+* Title               :  Capture system configuration & Performance   *
+*                        overview                                     *
+* Purpose             :  To capture system configuration & Performance*
+*                        overview in ST04 for MSSQL DB                *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* ST04                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* DB6NAVSYST                X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-02-2021  Initial  Soumya Ray   Local       Capture system config. *
+*                                              & performance overview *
+*---------------------------------------------------------------------*
+REPORT zcm_mss_st04_system_performanc.
+
+FORM get_config
+TABLES lt_input  STRUCTURE tab512
+  lt_output STRUCTURE tab512.
+  TYPES: BEGIN OF lty_staticserver,
+    varname(30)   TYPE C,
+    vartype(16)   TYPE C,
+    varlen        TYPE I,
+    varvalue(128) TYPE C,
+  END OF lty_staticserver,
+  BEGIN OF lty_staticdata,
+    analysisdate(8)  TYPE C,
+    analysistime(8)  TYPE C,
+    saprl            TYPE msssaprl,
+    memset           TYPE msqmemset,
+    winver           TYPE msqsswver,
+    physmem(18)      TYPE C,
+    dbstrtdate(8)    TYPE C,
+    dbstrttime(8)    TYPE C,
+    memopt           TYPE mssmemopt,
+    machinetype(128) TYPE C,
+    sqlversion       TYPE msssqlver,
+    cpuinfo          TYPE msscpuinfo,
+    traceflags       TYPE msqsstflg,
+    totdbsz          TYPE mss_dbsize,
+    totlogsz         TYPE mss_logsize,
+    dbfree           TYPE mss_dbfreesize,
+    logfree          TYPE mss_logfreesize,
+  END OF lty_staticdata,
+  BEGIN OF lty_dynamicdata,
+    valtypestr(38) TYPE C,
+    bufhitratio    TYPE mssbufhitratio,
+    cachehitratio  TYPE msscachehitratio,
+    currmem        TYPE msscurrmem,
+    maxmem         TYPE mssmaxmem,
+    freepgsz       TYPE mssfreepgsz,
+    databuffersz   TYPE mssdatabasepgs,
+    cachesz        TYPE msscachesz,
+    lockmem        TYPE msslockmem,
+    totalconnects  TYPE msstotlcons,
+    cpubusy        TYPE msscpubusy,
+    iobusy         TYPE mssiobusy,
+    cpuidle        TYPE msscpuidle,
+    pglatchwaitms  TYPE msspglatchwait,
+    physreadssrv   TYPE mssphysreadssrv,
+    physwritessrv  TYPE mssphyswritessrv,
+    logwritewaitms TYPE msslogwritewait,
+    iostallread    TYPE mssiostallread,
+    fullscans      TYPE mssfullscans,
+    idxsearches    TYPE mssidxsearches,
+    probescans     TYPE mssprobescans,
+    rangescans     TYPE mssrangescans,
+    lazywrites     TYPE msslazywrites,
+    sqlbatches     TYPE msssqlbatches,
+    transactions   TYPE msstransactions,
+    logflushes     TYPE msslogflushes,
+    bufpglookups   TYPE mssbufpglookups,
+    read_readahead TYPE mssreadahead,
+    dbconnects     TYPE mssdbcons,
+    columnstoresz  TYPE msscolstoresz,
+  END OF lty_dynamicdata,
+  BEGIN OF lty_trcstatus,
+    traceflag TYPE I,
+    trc_val   TYPE I,
+  END OF lty_trcstatus,
+  BEGIN OF lty_colstore,
+    columnstoresz TYPE I,
+  END OF lty_colstore.
+
+  CONSTANTS:
+  lc_sep                  TYPE C VALUE '|'            LENGTH 1,
+  lc_comma                TYPE C VALUE ','            LENGTH 1,
+  lc_percentage           TYPE C VALUE '%'            LENGTH 1,
+  lc_export               TYPE C VALUE 'EXPORT'       LENGTH 6,
+  lc_null                 TYPE C VALUE 'NULL'         LENGTH 4,
+  lc_hypen                TYPE C VALUE '-'            LENGTH 1,
+  lc_0                    TYPE C VALUE '0'            LENGTH 1,
+  lc_1                    TYPE C VALUE '1'            LENGTH 1,
+  lc_2                    TYPE C VALUE '2'            LENGTH 1,
+  lc_3                    TYPE C VALUE '3'            LENGTH 1,
+  lc_a                    TYPE C VALUE 'A'            LENGTH 1,
+  lc_d                    TYPE C VALUE 'D'            LENGTH 1,
+  lc_s                    TYPE C VALUE 'S'            LENGTH 1,
+  lc_x                    TYPE C VALUE 'X'            LENGTH 1,
+  lc_title1               TYPE C VALUE
+  'System configuration details'                      LENGTH 50,
+  lc_title2               TYPE C VALUE
+  'Performance overview details'                      LENGTH 50,
+  lc_objname              TYPE smssrattr-objname
+  VALUE 'sap_mon_staticserver',
+  lc_memsetting           TYPE C VALUE 'memsetting'   LENGTH 10,
+  lc_winver               TYPE C VALUE 'winver'       LENGTH 6,
+  lc_ntver                TYPE C VALUE 'ntver'        LENGTH 5,
+  lc_prodlevel            TYPE C VALUE 'prodlevel'    LENGTH 9,
+  lc_sqlversion           TYPE C VALUE 'sqlversion'   LENGTH 10,
+  lc_sqlee                TYPE C VALUE 'sqlee'        LENGTH 5,
+  lc_iscluster            TYPE C VALUE 'iscluster'    LENGTH 9,
+  lc_phymem               TYPE C VALUE 'phymem'       LENGTH 6,
+  lc_sqlcpus              TYPE C VALUE 'sqlcpus'      LENGTH 7,
+  lc_numcpus              TYPE C VALUE 'numcpus'      LENGTH 7,
+  lc_sqlstarttm           TYPE C VALUE 'sqlstarttm'   LENGTH 10,
+  lc_is3gb                TYPE C VALUE 'is3GB'        LENGTH 5,
+  lc_isawe                TYPE C VALUE 'isawe'        LENGTH 5,
+  lc_ispae                TYPE C VALUE 'ispae'        LENGTH 5,
+  lc_virttyp              TYPE C VALUE 'virt_typ'     LENGTH 8,
+  lc_y                    TYPE C VALUE 'Y'            LENGTH 1,
+  lc_3gb                  TYPE C VALUE '3 GB'         LENGTH 4,
+  lc_msclust              TYPE C VALUE '/MS Cluster'  LENGTH 11,
+  lc_txt005               TYPE string VALUE
+  'SQL Server is not running inside a virtual machine',
+  lc_txt006               TYPE string VALUE
+  'Hardware-assisted virtual machine',
+  lc_txt007               TYPE string VALUE
+  'Virtual machine without hardware assistance',
+  lc_advsrvr              TYPE C VALUE
+  'Advanced Server'                                    LENGTH 15,
+  lc_datacnt              TYPE C VALUE 'Datacenter'    LENGTH 10,
+  lc_server               TYPE C VALUE 'Server'        LENGTH 6,
+  lc_entedi               TYPE C VALUE
+  'Enterprise Edition'                                 LENGTH 18,
+  lc_of                   TYPE C VALUE 'of'            LENGTH 2,
+  lc_awe                  TYPE C VALUE ',AWE'          LENGTH 4,
+  lc_pae                  TYPE C VALUE ',PAE'          LENGTH 4,
+  lc_trcsta               TYPE smssrattr-objname       VALUE
+  'sap_dbcc_tracestatus',
+  lc_sincestartupsampleid TYPE I VALUE '-1',
+  lc_100                  TYPE C VALUE '100'           LENGTH 3,
+  lc_dbstr                TYPE C VALUE
+  'Since DB startup'                                   LENGTH 16,
+  lc_lastrst              TYPE C VALUE
+  'Since last reset'                                   LENGTH 16,
+  lc_fltavg               TYPE C VALUE
+  '20 minute floating average'                         LENGTH 26,
+  lc_memory               TYPE C VALUE 'Memory'        LENGTH 6,
+  lc_bufcach              TYPE C VALUE
+  'Buffer cache hit ratio [%]'                         LENGTH 26,
+  lc_cachhit              TYPE C VALUE
+  'Cache hit ratio [%]'                                LENGTH 19,
+  lc_sqlserve             TYPE C VALUE
+  'SQLServer:Memory Manager'                           LENGTH 24,
+  lc_ttlservmem           TYPE C VALUE
+  'Total Server Memory (KB)'                           LENGTH 24,
+  lc_tarservmem           TYPE C VALUE
+  'Target Server Memory(KB)'                           LENGTH 24,
+  lc_servbufman           TYPE C VALUE
+  'SQLServer:Buffer Manager'                           LENGTH 24,
+  lc_freepg               TYPE C VALUE 'Free pages'    LENGTH 10,
+  lc_datapg               TYPE C VALUE
+  'Database pages'                                     LENGTH 14,
+  lc_procachpg            TYPE C VALUE
+  'Procedure cache pages'                              LENGTH 21,
+  lc_lockmem              TYPE C VALUE
+  'Lock Memory (KB)'                                   LENGTH 16,
+  lc_sqlgenstat           TYPE C VALUE
+  'SQLServer:General Statistics'                       LENGTH 28,
+  lc_userconn             TYPE C VALUE
+  'User Connections'                                   LENGTH 16,
+  lc_sqlservr             TYPE C VALUE
+  'SQLSERVR.EXE'                                       LENGTH 12,
+  lc_cpubusy              TYPE C VALUE 'CPU busy'      LENGTH 8,
+  lc_iobusy               TYPE C VALUE 'IO busy'       LENGTH 7,
+  lc_cpuidle              TYPE C VALUE
+  'CPU idle <0..#CPUs>'                                LENGTH 19,
+  lc_iocounters           TYPE C VALUE
+  'I/O counters (Overview)'                            LENGTH 23,
+  lc_pageiolatch          TYPE C VALUE
+  'PAGEIOLATCH_SH [ms] / request'                      LENGTH 29,
+  lc_virtfilestat         TYPE C VALUE
+  'Virtual Filestats (Server)'                         LENGTH 26,
+  lc_kbread               TYPE C VALUE 'kB read / sec' LENGTH 13,
+  lc_kbwritten            TYPE C VALUE
+  'kB written / sec'                                   LENGTH 16,
+  lc_writelog             TYPE C VALUE
+  'WRITELOG [ms] / request'                            LENGTH 23,
+  lc_iostallrdreq         TYPE C VALUE
+  'IOStall [ms] / read request'                        LENGTH 27,
+  lc_iostallreq           TYPE C VALUE
+  'IOStall [ms] / request'                             LENGTH 22,
+  lc_sqlacssmet           TYPE C VALUE
+  'SQLServer:Access Methods'                           LENGTH 24,
+  lc_fullscan             TYPE C VALUE
+  'Full Scans/sec'                                     LENGTH 14,
+  lc_indexsch             TYPE C VALUE
+  'Index Searches/sec'                                 LENGTH 18,
+  lc_probescans           TYPE C VALUE
+  'Probe Scans/sec'                                    LENGTH 15,
+  lc_rangescans           TYPE C VALUE
+  'Range Scans/sec'                                    LENGTH 15,
+  lc_pagereads            TYPE C VALUE
+  'Page reads / Readahead pages'                       LENGTH 28,
+  lc_pagelookups          TYPE C VALUE
+  'Page lookups / batch'                               LENGTH 20,
+  lc_sqlbufmang           TYPE C VALUE
+  'SQLServer:Buffer Manager'                           LENGTH 25,
+  lc_lazywrites           TYPE C VALUE
+  'Lazy writes/sec'                                    LENGTH 15,
+  lc_sqldatabase          TYPE C VALUE
+  'SQLServer:Databases'                                LENGTH 19,
+  lc_logflushes           TYPE C VALUE
+  'Log Flushes/sec'                                    LENGTH 15,
+  lc_sqlstat              TYPE C VALUE
+  'SQLServer:SQL Statistics'                           LENGTH 24,
+  lc_batchreq             TYPE C VALUE
+  'Batch Requests/sec'                                 LENGTH 19,
+  lc_sqldata              TYPE C VALUE
+  'SQLServer:Databases'                                LENGTH 19,
+  lc_transac              TYPE C VALUE
+  'Transactions/sec'                                   LENGTH 16,
+  lc_r3users              TYPE C VALUE 'R3Users'       LENGTH 7,
+  lc_otherusers           TYPE C VALUE 'OtherUsers'    LENGTH 10,
+  lc_ninput               TYPE C VALUE
+  'No input passed'                                    LENGTH 15,
+  lc_naction              TYPE C VALUE
+  'Incorrect Input'                                    LENGTH 20,
+  lc_nodata               TYPE C VALUE 'No data found' LENGTH 15,
+  lc_domname              TYPE dd07l-domname VALUE 'DBCON_DBMS',
+  lc_set                  TYPE ddrefstruc-bool  VALUE 'X',
+  lc_lrdate               TYPE C VALUE 'Refreshdate'   LENGTH 15,
+  lc_lrtime               TYPE C VALUE 'Refreshtime'   LENGTH 15,
+  lc_config               TYPE C VALUE
+  'Configuredsystems'                                  LENGTH 20,
+  lc_incomp               TYPE C VALUE
+  'Incompletesystems'                                  LENGTH 20,
+  lc_system               TYPE C VALUE 'System'        LENGTH 6,
+  lc_dbsys                TYPE C VALUE 'Dbsystem'      LENGTH 10,
+  lc_dbrelse              TYPE C VALUE 'Dbrelease'     LENGTH 10,
+  lc_dbhost               TYPE C VALUE 'Dbhost'        LENGTH 10,
+  lc_relse                TYPE C VALUE 'Release'       LENGTH 10,
+  lc_conname              TYPE C VALUE
+  'Connectionname'                                     LENGTH 15,
+  lc_dbuser               TYPE C VALUE 'Dbuser'        LENGTH 6,
+  lc_rfcdest              TYPE C VALUE
+  'Rfcdestination'                                     LENGTH 20,
+  lc_curractivity         TYPE C VALUE
+  'Current Activity'                                   LENGTH 16,
+  lc_overview             TYPE C VALUE 'Overview'      LENGTH 8,
+  lc_generalinfo          TYPE C VALUE 'General Info'  LENGTH 12,
+  lc_sqlservcpu           TYPE C VALUE
+  'SQL Server CPU'                                     LENGTH 14,
+  lc_accessmethod         TYPE C VALUE 'Access Method' LENGTH 13,
+  lc_misc                 TYPE C VALUE 'Misc'          LENGTH 4,
+  lc_iobufferact          TYPE C VALUE
+  'I/O, Buffer server-wide activity'                   LENGTH 32,
+  lc_datadskspc           TYPE C VALUE
+  'Database Disk Space'                                LENGTH 19,
+  lc_tabheading           TYPE C VALUE 'Tabheading'    LENGTH 10,
+  lc_blockheading         TYPE C VALUE 'Blockheading'  LENGTH 12,
+  lc_fieldheading         TYPE C VALUE 'Fieldheading'  LENGTH 12,
+  lc_value                TYPE C VALUE 'Value'         LENGTH 5,
+  lc_timeofanalysis       TYPE C VALUE
+  'Time of Analysis'                                   LENGTH 16,
+  lc_machinetype          TYPE C VALUE 'Machine Type'  LENGTH 12,
+  lc_operatingsys         TYPE C VALUE
+  'Operating System'                                   LENGTH 16,
+  lc_serverversion        TYPE C VALUE
+  'Server Version'                                     LENGTH 14,
+  lc_traceflags           TYPE C VALUE 'Traceflags'    LENGTH 10,
+  lc_saprelease           TYPE C VALUE 'SAP Release'   LENGTH 11,
+  lc_dbstartup            TYPE C VALUE 'DB Startup'    LENGTH 14,
+  lc_serverconn           TYPE C VALUE
+  'Server Connections'                                 LENGTH 18,
+  lc_conncurrdb           TYPE C VALUE
+  'Connects to curr. DB'                               LENGTH 20,
+  lc_cpumss               TYPE C VALUE
+  'CPUs used by MSS'                                   LENGTH 16,
+  lc_physmemory           TYPE C VALUE
+  'Phys. Memory (MB)'                                  LENGTH 17,
+  lc_currmemory           TYPE C VALUE
+  'Current Memory (MB)'                                LENGTH 19,
+  lc_sqlmemsetting        TYPE C VALUE
+  'SQL Memory Setting'                                 LENGTH 18,
+  lc_winmemopt            TYPE C VALUE
+  'Windows Memory Option'                              LENGTH 21,
+  lc_datacache            TYPE C VALUE
+  'Data Cache (MB)'                                    LENGTH 15,
+  lc_datacachehitratio    TYPE C VALUE
+  'Data Cache (MB)_Hit Ratio'                          LENGTH 25,
+  lc_proccache            TYPE C VALUE
+  'Proc Cache (MB)'                                    LENGTH 15,
+  lc_proccachehotratio    TYPE C VALUE
+  'Proc Cache (MB)_Hit Ratio'                          LENGTH 25,
+  lc_coloumnstore         TYPE C VALUE
+  'Column Store (MB)'                                  LENGTH 17,
+  lc_lockcache            TYPE C VALUE
+  'Lock Cache (MB)'                                    LENGTH 15,
+  lc_freepagesmb          TYPE C VALUE
+  'Free Pages (MB)'                                    LENGTH 15,
+  lc_totaldatasize        TYPE C VALUE
+  'Total Data Size (MB)'                               LENGTH 20,
+  lc_datafreespace        TYPE C VALUE
+  'Data Free Space (MB)'                               LENGTH 20,
+  lc_totallogsize         TYPE C VALUE
+  'Total Log Size (MB)'                                LENGTH 19,
+  lc_logfreespace         TYPE C VALUE
+  'Log Free Space (MB)'                                LENGTH 19,
+  lc_timefloatavg         TYPE C VALUE
+  'Time of Floating Avg. Analysis'                     LENGTH 30,
+  lc_latchewtreq          TYPE C VALUE
+  'Latch Wait Time per Request (ms)'                   LENGTH 32,
+  lc_waittmlogrq          TYPE C VALUE
+  'Wait Time per Log Write (ms)'                       LENGTH 28,
+  lc_iostallreqms         TYPE C VALUE
+  'IOStall per Request (ms)'                           LENGTH 25,
+  lc_physicalreads        TYPE C VALUE
+  'Physical Reads KB/sec'                              LENGTH 22,
+  lc_physicalwrites       TYPE C VALUE
+  'Physical Writes KB/sec'                             LENGTH 23,
+  lc_buffersqlbatch       TYPE C VALUE
+  'Buffer Lookups per SQL Batch'                       LENGTH 29,
+  lc_fullidxsec           TYPE C VALUE
+  'Full Tab/Idx Scans/sec'                             LENGTH 22,
+  lc_indexrangscan        TYPE C VALUE
+  'Index Range Scans/sec'                              LENGTH 21,
+  lc_cpuidlesec           TYPE C VALUE 'CPU Idle/sec'  LENGTH 12,
+  lc_cpubusysec           TYPE C VALUE 'CPU Busy/sec'  LENGTH 12,
+  lc_iobusysec            TYPE C VALUE 'IO Busy/sec'   LENGTH 11,
+  lc_sqlbatches           TYPE C VALUE
+  'SQL Batches/sec'                                    LENGTH 15,
+  lc_coloumnstoremem      TYPE smssrattr-objname VALUE
+  'sap_get_columnstore_memory_mb',
+  lc_current              TYPE char1 VALUE 'X',
+  lc_cclass               TYPE msscclass VALUE '4'.
+
+  DATA: ls_output           TYPE tab512,
+        ls_input            TYPE tab512,
+        lv_action           TYPE string,
+        ls_prefinal         TYPE string,
+        ls_currcon          TYPE mssconndata,
+        ls_staticdata       TYPE lty_staticdata,
+        lv_ntver            TYPE msqssntee,
+        lv_prodlevel        TYPE msqssblddt,
+        lv_sqlversion       TYPE msqversn,
+        lv_iscluster        TYPE mssiscluster,
+        lv_sqlee            TYPE msqsssqlee,
+        lv_numcpus          TYPE msqsscpus,
+        lv_sqlcpus          TYPE msqsqlcpus,
+        lv_isawe            TYPE char1,
+        lv_ispae            TYPE char1,
+        lv_dbstartup        TYPE msqdbuptme,
+        lv_ntprodlevel      TYPE string,
+        lv_hlpstring(30)    TYPE C,
+        lv_strcflg(32)      TYPE C,
+        ls_dbsizedata       TYPE mssdbsizeinfo,
+        lt_inparams         TYPE STANDARD TABLE OF mssseria,
+        lt_staticserverdata TYPE STANDARD TABLE OF lty_staticserver,
+        lt_trc_status       TYPE STANDARD TABLE OF lty_trcstatus,
+        lv_currsampleid     TYPE I VALUE 0,
+        ls_dynamicdata      TYPE lty_dynamicdata,
+        ls_valwa            TYPE msscollresi,
+        ls_navsyst          TYPE db6navsyst,
+        lv_date             TYPE string,
+        lv_time             TYPE string,
+        lv_langu            TYPE dd07t-ddlanguage,
+        lv_lconfig          TYPE string,
+        lv_lincomp          TYPE string,
+        ls_dbsys            TYPE dd07v,
+        lv_value            TYPE string,
+        lv_last_char(1)     TYPE C,
+        ls_raw_sys          TYPE db6navsyst,
+        lo_sys_ref          TYPE REF TO cl_db6_sys,
+        lv_dbuser           TYPE dbcon_name,
+        lt_colstoremem      TYPE STANDARD TABLE OF lty_colstore,
+        lt_dbsys            TYPE STANDARD TABLE OF dd07v,
+        lt_dbdata           TYPE STANDARD TABLE OF mss_dbdata,
+        lt_dynvaluestab     TYPE STANDARD TABLE OF msscollresi,
+        lt_preoutput        TYPE STANDARD TABLE OF tab512.
+
+  FIELD-SYMBOLS: <fs_stdp>   TYPE lty_staticserver,
+  <fs_trcp>   TYPE lty_trcstatus,
+  <fs_dbdata> TYPE mss_dbdata,
+  <fs_memmb>  TYPE lty_colstore.
+
+  CLEAR: ls_output, ls_prefinal, ls_input, lv_action, ls_currcon,
+  lv_dbuser, ls_raw_sys, lv_last_char, lv_value, ls_dbsys,
+  lv_lincomp, lv_lconfig, lv_langu, lv_time, lv_date, ls_navsyst,
+  ls_valwa, ls_dynamicdata, ls_staticdata, lv_ntver, lv_prodlevel,
+  lv_sqlversion, lv_iscluster, lv_sqlee, lv_numcpus,lv_sqlcpus,
+  lv_isawe, lv_ispae, lv_dbstartup, lv_ntprodlevel, ls_dbsizedata,
+  lv_hlpstring(30), lv_strcflg(32).
+  FREE: lt_colstoremem, lt_dbsys, lt_dbdata, lt_dynvaluestab,
+  lt_preoutput, lt_inparams, lt_staticserverdata, lt_trc_status.
+  "Title
+  ls_output = lc_title1.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+  CASE lv_action.
+  WHEN lc_export.
+*------------System configuration--------------------------------*
+    "To fetch details of system registered
+    SELECT SINGLE *  FROM db6navsyst
+    INTO ls_navsyst WHERE sysid = sy-sysid.
+    IF sy-subrc EQ 0.
+      " To get number of  system configured  successfully
+      IF ls_navsyst-entrystate EQ lc_2."2=COMPLETE
+        lv_lconfig = lc_1.
+        lv_lincomp = lc_0.
+    ELSEIF ls_navsyst-entrystate EQ lc_3. "3=DISABLED
+        lv_lincomp = lc_1.
+        lv_lconfig = lc_0.
+      ENDIF.
+
+      lv_date = sy-datum. "System date
+      lv_time = sy-uzeit. "System time
+      lv_langu = sy-langu. " System language
+      " FM to get DB system name
+      CALL FUNCTION 'DD_DOMVALUES_GET'
+      EXPORTING
+        domname        = lc_domname
+        TEXT           = lc_set
+        langu          = lv_langu
+      TABLES
+        dd07v_tab      = lt_dbsys
+      EXCEPTIONS
+        wrong_textflag = 1
+        OTHERS         = 2.
+      IF sy-subrc NE 0.
+        " The FM is used to get system name and if it fails the
+        "processing has to continue
+        FREE: lt_dbsys.
+      ENDIF.
+      SORT lt_dbsys BY domname ASCENDING.
+      "DB User
+      LOOP AT cl_db6_sys=>systems INTO ls_raw_sys.
+        TRY.
+          IF ls_raw_sys-sysid = cl_db6_sys=>local_sysid.
+            lo_sys_ref = cl_db6_sys=>get_local_sys_ref( ).
+            IF lo_sys_ref->con_ref IS BOUND.
+              lv_dbuser = lo_sys_ref->con_ref->get_user( ).
+            ENDIF.
+        ELSEIF ls_raw_sys-dbcname IS NOT INITIAL AND
+          ls_raw_sys-dbcon_via_rfc = abap_true.
+            lv_dbuser =
+         cl_dba_dbcon=>read_buffer( connection_name = ls_raw_sys-dbcname
+            rfcdest  = ls_raw_sys-rfcdest )-user_name.
+        ELSEIF ls_raw_sys-dbcname IS NOT INITIAL.
+            lv_dbuser = cl_dba_dbcon=>read_buffer( connection_name =
+            ls_raw_sys-dbcname )-user_name.
+          ENDIF.
+        CATCH cx_dba_root.
+          CLEAR lv_dbuser.
+        ENDTRY.
+        CLEAR ls_raw_sys.
+      ENDLOOP.
+
+      "Subheading of system configuration
+      CONCATENATE lc_lrdate lc_lrtime lc_config lc_incomp lc_system
+      lc_dbsys lc_dbrelse lc_dbhost lc_relse lc_conname
+      lc_dbuser lc_rfcdest INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      READ TABLE lt_dbsys INTO ls_dbsys
+      WITH KEY domvalue_l = ls_navsyst-dbsys.
+      IF sy-subrc NE 0.
+        " System name is passed as blank if long text is
+        "not maintained
+        CLEAR ls_dbsys-ddtext.
+      ENDIF.
+      IF ls_navsyst-rfcdest_2 IS INITIAL.
+        ls_navsyst-rfcdest_2 = lc_null.
+      ENDIF.
+      CONCATENATE lv_date lv_time lv_lconfig lv_lincomp
+      ls_navsyst-sysid ls_dbsys-ddtext ls_navsyst-dbrel
+      ls_navsyst-dbhost ls_navsyst-saprel ls_navsyst-dbcname
+      lv_dbuser ls_navsyst-rfcdest_2
+      INTO ls_prefinal SEPARATED BY lc_sep.
+      CONDENSE ls_prefinal.
+      ls_output = ls_prefinal.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output, ls_navsyst, ls_prefinal, ls_dbsys, lv_dbuser.
+    ELSE.
+      ls_output = lc_nodata.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+    ENDIF.
+*---------------------------------------------------------------*
+    APPEND ls_output TO lt_output. "Insert a blank line
+*-----------------Performance Overview------------------------*
+*//---------------Static data--------------------------------//*
+  "Logic taken from Class 'CL_MSS_ACTION ST04' Method 'get_static_data'
+    ls_staticdata-analysisdate = sy-datum.
+    ls_staticdata-analysistime = sy-uzeit.
+
+    CALL FUNCTION 'SMSS_GET_CONNECTION'
+    IMPORTING
+      currcon = ls_currcon.
+
+    ls_staticdata-saprl = ls_currcon-saprelease.
+    "get the staticserverdata
+    APPEND ls_currcon TO lt_inparams.
+    CALL FUNCTION 'SMSS_RAT_GENERIC'
+    EXPORTING
+      conn     = ls_currcon
+      objname  = lc_objname
+    TABLES
+      inparams = lt_inparams
+      t_result = lt_staticserverdata
+    EXCEPTIONS
+      OTHERS   = 1.
+    IF sy-subrc EQ 0.
+      LOOP AT lt_staticserverdata ASSIGNING <fs_stdp>.
+        CASE <fs_stdp>-varname.
+        WHEN lc_memsetting.
+          ls_staticdata-memset = <fs_stdp>-varvalue.
+        WHEN lc_winver.
+          ls_staticdata-winver = <fs_stdp>-varvalue.
+        WHEN lc_ntver.
+          lv_ntver = <fs_stdp>-varvalue.
+        WHEN lc_prodlevel.
+          lv_prodlevel = <fs_stdp>-varvalue.
+        WHEN lc_sqlversion.
+          lv_sqlversion = <fs_stdp>-varvalue.
+        WHEN lc_sqlee.
+          lv_sqlee = <fs_stdp>-varvalue.
+        WHEN lc_iscluster.
+          lv_iscluster = <fs_stdp>-varvalue.
+        WHEN lc_phymem.
+          ls_staticdata-physmem = <fs_stdp>-varvalue.
+        WHEN lc_sqlcpus.
+          lv_sqlcpus = <fs_stdp>-varvalue.
+        WHEN lc_numcpus.
+          lv_numcpus = <fs_stdp>-varvalue.
+        WHEN lc_sqlstarttm.
+          "startup time of database
+          lv_dbstartup = <fs_stdp>-varvalue.
+          "shred date and time into variables
+          CONCATENATE lv_dbstartup+6(4) lv_dbstartup(2)
+          lv_dbstartup+3(2) INTO ls_staticdata-dbstrtdate.
+
+          CONCATENATE lv_dbstartup+11(2) lv_dbstartup+14(2)
+          lv_dbstartup+17(2) INTO ls_staticdata-dbstrttime.
+        WHEN lc_is3gb.
+          IF <fs_stdp>-varvalue = lc_y.
+            ls_staticdata-memopt = lc_3gb.
+          ENDIF.
+        WHEN lc_isawe.
+          lv_isawe = <fs_stdp>-varvalue.
+        WHEN lc_ispae.
+          lv_ispae = <fs_stdp>-varvalue.
+        WHEN lc_virttyp.
+          CASE <fs_stdp>-varvalue.
+          WHEN lc_0.
+            ls_staticdata-machinetype = lc_txt005.
+          WHEN lc_1.
+            ls_staticdata-machinetype = lc_txt006.
+          WHEN lc_2.
+            ls_staticdata-machinetype = lc_txt007.
+          ENDCASE.
+        ENDCASE.
+      ENDLOOP.
+    ENDIF.
+    IF ls_staticdata-memset IS INITIAL.
+      ls_staticdata-memset = lc_hypen.
+    ENDIF.
+    "OS version + Edition
+    CASE lv_ntver.
+    WHEN lc_a. lv_ntprodlevel = lc_advsrvr.
+    WHEN lc_d. lv_ntprodlevel = lc_datacnt.
+    WHEN lc_s. lv_ntprodlevel = lc_server.
+    WHEN lc_x. lv_ntprodlevel = lc_entedi.
+    ENDCASE.
+
+    CONCATENATE ls_staticdata-winver lv_ntprodlevel
+    INTO ls_staticdata-winver SEPARATED BY space.
+    "SQL Server Release + Edition
+    CONCATENATE lv_sqlversion lv_prodlevel
+    INTO ls_staticdata-sqlversion SEPARATED BY space.
+
+    IF lv_sqlee = lc_y.
+      CONCATENATE ls_staticdata-sqlversion lc_entedi
+      INTO ls_staticdata-sqlversion SEPARATED BY space.
+    ENDIF.
+
+    IF lv_iscluster = lc_y.
+      CONCATENATE ls_staticdata-sqlversion lc_msclust
+      INTO ls_staticdata-sqlversion SEPARATED BY space.
+    ENDIF.
+    "Number of SQL Server CPUs and number of total CPUs
+    ls_staticdata-cpuinfo = lv_sqlcpus.
+    lv_hlpstring = lv_numcpus.
+    CONDENSE ls_staticdata-cpuinfo NO-GAPS.
+    CONDENSE lv_hlpstring NO-GAPS.
+
+    CONCATENATE ls_staticdata-cpuinfo lc_of lv_hlpstring
+    INTO ls_staticdata-cpuinfo SEPARATED BY space.
+
+    "AWE ?
+    IF lv_isawe = lc_y.
+      CONCATENATE ls_staticdata-memopt lc_awe
+      INTO ls_staticdata-memopt.
+    ENDIF.
+    " PAE?
+    IF lv_ispae = lc_y.
+      CONCATENATE ls_staticdata-memopt lc_pae
+      INTO ls_staticdata-memopt.
+    ENDIF.
+
+    IF ls_staticdata-memopt IS INITIAL.
+      ls_staticdata-memopt = lc_hypen.
+    ENDIF.
+
+    "Get Trace status
+    CLEAR lt_trc_status.
+    CALL FUNCTION 'SMSS_RAT_GENERIC'
+    EXPORTING
+      conn     = ls_currcon
+      objname  = lc_trcsta
+    TABLES
+      t_result = lt_trc_status
+    EXCEPTIONS
+      OTHERS   = 1.
+    IF sy-subrc EQ 0.
+      CLEAR ls_staticdata-traceflags.
+      LOOP AT lt_trc_status ASSIGNING <fs_trcp>.
+        lv_strcflg = <fs_trcp>-traceflag.
+        SHIFT lv_strcflg LEFT DELETING LEADING space.
+        IF ls_staticdata-traceflags IS INITIAL.
+          ls_staticdata-traceflags = lv_strcflg.
+        ELSE.
+          CONCATENATE ls_staticdata-traceflags lc_comma lv_strcflg
+          INTO ls_staticdata-traceflags.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+    IF ls_staticdata-traceflags IS INITIAL.
+      ls_staticdata-traceflags = lc_hypen.
+    ENDIF.
+    "allocated database size and logsize
+    "Get free space of DB & log
+    "TODO: RATify
+    CLEAR ls_dbsizedata.
+    CALL FUNCTION 'MSS_GET_DB_SIZE_INFO'
+    DESTINATION ls_currcon-rfcdest
+    EXPORTING
+      con_name              = ls_currcon-con_name
+      schema                = ls_currcon-dbschema
+      db_name               = ls_currcon-dbname
+    IMPORTING
+      db_sizeinfo           = ls_dbsizedata
+    EXCEPTIONS
+      communication_failure = 1
+      system_failure        = 2
+      OTHERS                = 3.
+    IF sy-subrc EQ 0.
+      ls_staticdata-totdbsz   = ls_dbsizedata-db_size.
+      ls_staticdata-totlogsz  = ls_dbsizedata-log_size.
+      ls_staticdata-dbfree    = ls_dbsizedata-db_size -
+      ls_dbsizedata-db_alloc.
+      ls_staticdata-logfree   = ls_dbsizedata-log_size -
+      ls_dbsizedata-log_alloc.
+    ENDIF.
+
+*//------------------------------------------------------------//*
+*//-----------Dynamic Data------------------------------------//*
+ "Logic taken from Class 'CL_MSS_ACTION ST04' Method 'get_dynamic_data'
+
+    IF lv_currsampleid = lc_sincestartupsampleid.
+      ls_dynamicdata-valtypestr = lc_dbstr.
+  ELSEIF lv_currsampleid > lc_0.
+      ls_dynamicdata-valtypestr = lc_lastrst.
+    ELSE.
+      ls_dynamicdata-valtypestr = lc_fltavg.
+    ENDIF.
+    FREE: lt_dynvaluestab.
+    CALL FUNCTION 'MSS_COLL_LIST'
+    DESTINATION ls_currcon-rfcdest
+    EXPORTING
+      con_name              = ls_currcon-con_name
+      schema                = ls_currcon-dbschema
+      current               = lc_current
+      cclass                = lc_cclass
+      sample_id             = lv_currsampleid
+    TABLES
+      result                = lt_dynvaluestab
+    EXCEPTIONS
+      communication_failure = 1
+      system_failure        = 2
+      OTHERS                = 3.
+    IF sy-subrc EQ 0.
+      LOOP AT lt_dynvaluestab INTO ls_valwa.
+        " buffer cache hit ratio
+        IF ls_valwa-obj_name = lc_memory AND "'Memory'
+        "'Buffer cache hit ratio [%]'
+        ls_valwa-cntr_name = lc_bufcach.
+
+          IF ls_valwa-slope > lc_0 AND ls_valwa-slope <= lc_100.
+            ls_dynamicdata-bufhitratio = ls_valwa-slope.
+          ENDIF.
+
+          "Cache hit ratio
+      ELSEIF ls_valwa-obj_name = lc_memory AND "'Memory'
+        ls_valwa-cntr_name = lc_cachhit."'Cache hit ratio [%]'
+
+          IF ls_valwa-slope > lc_0 AND ls_valwa-slope <= lc_100.
+            ls_dynamicdata-cachehitratio = ls_valwa-slope.
+          ENDIF.
+
+          "current memory
+          "'SQLServer:Memory Manager'
+      ELSEIF ls_valwa-obj_name = lc_sqlserve AND
+        "'Total Server Memory (KB)'
+        ls_valwa-cntr_name = lc_ttlservmem.
+
+          ls_dynamicdata-currmem = ls_valwa-cntr_value / 1024.
+
+          " max memory
+          "'SQLServer:Memory Manager'
+      ELSEIF ls_valwa-obj_name = lc_sqlserve AND
+        "'Target Server Memory(KB)'
+        ls_valwa-cntr_name = lc_tarservmem.
+
+          ls_dynamicdata-maxmem = ls_valwa-cntr_value / 1024.
+
+          " free pages
+          "'SQLServer:Buffer Manager'
+      ELSEIF ls_valwa-obj_name = lc_servbufman
+        AND  ls_valwa-cntr_name = lc_freepg."'Free pages'
+
+          ls_dynamicdata-freepgsz = ls_valwa-cntr_value.
+          ls_dynamicdata-freepgsz = ls_dynamicdata-freepgsz *
+          8192 / ( 1024 * 1024 ).
+
+
+          "data cache size
+          "'SQLServer:Buffer Manager'
+      ELSEIF ls_valwa-obj_name = lc_servbufman AND
+        ls_valwa-cntr_name = lc_datapg."'Database pages'
+
+          ls_dynamicdata-databuffersz = ls_valwa-cntr_value.
+
+          "recalculate pages to KB first to avoid rounding problems
+          ls_dynamicdata-databuffersz = ls_dynamicdata-databuffersz
+          * ( 8192 / 1024 ).
+
+          "now translate it to MB
+          ls_dynamicdata-databuffersz =
+          ls_dynamicdata-databuffersz / 1024.
+
+          "proc cache size
+          "'SQLServer:Buffer Manager'
+      ELSEIF ls_valwa-obj_name = lc_servbufman AND
+        "'Procedure cache pages'
+        ls_valwa-cntr_name = lc_procachpg.
+
+          ls_dynamicdata-cachesz = ls_valwa-cntr_value.
+          ls_dynamicdata-cachesz = ls_dynamicdata-cachesz
+          * ( 8192 / 1024 ).
+          ls_dynamicdata-cachesz = ls_dynamicdata-cachesz / 1024.
+
+          "lock memory
+          "'SQLServer:Memory Manager'
+      ELSEIF ls_valwa-obj_name = lc_sqlserve AND
+        ls_valwa-cntr_name = lc_lockmem. "Lock Memory (KB)
+
+          ls_dynamicdata-lockmem = ls_valwa-cntr_value.
+          ls_dynamicdata-lockmem = ls_dynamicdata-lockmem / 1024.
+
+          " connections
+          "SQLServer:General Statistics
+      ELSEIF ls_valwa-obj_name = lc_sqlgenstat AND
+        ls_valwa-cntr_name = lc_userconn ." 'User Connections'
+
+          ls_dynamicdata-totalconnects = ls_valwa-cntr_value.
+
+          "cpubusy
+      ELSEIF ls_valwa-obj_name = lc_sqlservr AND "'SQLSERVR.EXE'
+        ls_valwa-cntr_name = lc_cpubusy."'CPU busy'
+
+          ls_dynamicdata-cpubusy = ls_valwa-slope.
+
+
+          "iobusy
+      ELSEIF ls_valwa-obj_name = lc_sqlservr AND "'SQLSERVR.EXE'
+        ls_valwa-cntr_name = lc_iobusy . "'IO busy'
+
+          ls_dynamicdata-iobusy = ls_valwa-slope.
+
+
+          " cpuidle
+      ELSEIF ls_valwa-obj_name =  lc_sqlservr AND "'SQLSERVR.EXE'
+        ls_valwa-cntr_name = lc_cpuidle."'CPU idle <0..#CPUs>'
+
+          ls_dynamicdata-cpuidle = ls_valwa-slope.
+
+
+          " PAGEIOLATCH_SH per request
+          "'I/O counters (Overview)'
+      ELSEIF ls_valwa-obj_name = lc_iocounters AND
+        "'PAGEIOLATCH_SH [ms] / request'
+        ls_valwa-cntr_name = lc_pageiolatch.
+
+          ls_dynamicdata-pglatchwaitms = ls_valwa-slope.
+
+          "Physical reads on server
+          "'Virtual Filestats (Server)'
+      ELSEIF ls_valwa-obj_name = lc_virtfilestat AND
+        ls_valwa-cntr_name = lc_kbread."'kB read / sec'
+
+          ls_dynamicdata-physreadssrv = ls_valwa-slope.
+
+          "Physical writes on server
+          "'Virtual Filestats (Server)'
+      ELSEIF ls_valwa-obj_name = lc_virtfilestat AND
+        ls_valwa-cntr_name = lc_kbwritten."'kB written / sec'
+
+          ls_dynamicdata-physwritessrv = ls_valwa-slope.
+
+          "WRITELOG per request
+          "'I/O counters (Overview)'
+      ELSEIF ls_valwa-obj_name = lc_iocounters AND
+        "'WRITELOG [ms] / request'
+        ls_valwa-cntr_name = lc_writelog.
+
+          ls_dynamicdata-logwritewaitms = ls_valwa-slope.
+
+          " IOStall per request
+          "'Virtual Filestats (Server)'
+      ELSEIF ls_valwa-obj_name = lc_virtfilestat AND
+        "'IOStall [ms] / read request'
+        ( ls_valwa-cntr_name = lc_iostallrdreq  OR
+        "'IOStall [ms] / request'
+        ls_valwa-cntr_name = lc_iostallreq ).
+
+          ls_dynamicdata-iostallread = ls_valwa-slope.
+
+          " fullscans
+          "'SQLServer:Access Methods'
+      ELSEIF ls_valwa-obj_name = lc_sqlacssmet AND
+        ls_valwa-cntr_name = lc_fullscan."'Full Scans/sec'.
+
+          ls_dynamicdata-fullscans = ls_valwa-slope.
+
+          " index searches
+          "'SQLServer:Access Methods'
+      ELSEIF ls_valwa-obj_name = lc_sqlacssmet AND
+        ls_valwa-cntr_name = lc_indexsch."'Index Searches/sec'
+
+          ls_dynamicdata-idxsearches = ls_valwa-slope.
+
+          " probe scans
+          "'SQLServer:Access Methods'
+      ELSEIF ls_valwa-obj_name = lc_sqlacssmet  AND
+        ls_valwa-cntr_name = lc_probescans."'Probe Scans/sec'
+
+          ls_dynamicdata-probescans = ls_valwa-slope.
+
+          " range scans
+          "'SQLServer:Access Methods'
+      ELSEIF ls_valwa-obj_name = lc_sqlacssmet AND
+        ls_valwa-cntr_name = lc_rangescans. "'Range Scans/sec'
+
+          ls_dynamicdata-rangescans = ls_valwa-slope.
+
+          "lazy writes
+          "'SQLServer:Buffer Manager'
+      ELSEIF ls_valwa-obj_name = lc_sqlbufmang AND
+        ls_valwa-cntr_name = lc_lazywrites. "'Lazy writes/sec'
+
+          ls_dynamicdata-lazywrites = ls_valwa-slope.
+
+          " batch requests
+          "'SQLServer:SQL Statistics'
+      ELSEIF ls_valwa-obj_name = lc_sqlstat AND
+        ls_valwa-cntr_name = lc_batchreq."'Batch Requests/sec'
+
+          ls_dynamicdata-sqlbatches = ls_valwa-slope.
+
+          "transactions/sec
+          "'SQLServer:Databases'
+      ELSEIF ls_valwa-obj_name = lc_sqldata AND
+        ls_valwa-cntr_name = lc_transac AND"'Transactions/sec'
+        ls_valwa-inst_name = ls_currcon-dbname.
+
+          ls_dynamicdata-transactions = ls_valwa-slope.
+
+          " log flushs/sec
+          "'SQLServer:Databases'
+      ELSEIF ls_valwa-obj_name = lc_sqldatabase AND
+        "'Log Flushes/sec'
+        ls_valwa-cntr_name =  lc_logflushes AND
+        ls_valwa-inst_name = ls_currcon-dbname.
+
+          ls_dynamicdata-logflushes = ls_valwa-slope.
+
+          "buffer page lookups per batch
+      ELSEIF ls_valwa-obj_name = lc_memory AND "'Memory'
+        "'Page lookups / batch'
+        ls_valwa-cntr_name = lc_pagelookups.
+
+          ls_dynamicdata-bufpglookups = ls_valwa-slope.
+
+          "Page reads per readahead pages
+      ELSEIF ls_valwa-obj_name = lc_memory AND "'Memory'
+        "'Page reads / Readahead pages'
+        ls_valwa-cntr_name = lc_pagereads.
+
+          ls_dynamicdata-read_readahead = ls_valwa-slope.
+
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+    FREE: lt_dbdata.
+    "TODO: RATify - use sap_mon_dbproperties
+    CALL FUNCTION 'GET_DBDATA_MSS'
+    DESTINATION ls_currcon-rfcdest
+    EXPORTING
+      con_name              = ls_currcon-con_name
+      schema                = ls_currcon-dbschema
+    TABLES
+      dbdata                = lt_dbdata
+    EXCEPTIONS
+      communication_failure = 1
+      system_failure        = 2
+      OTHERS                = 3.
+    IF sy-subrc EQ 0.
+      "number of db connections
+      "(number of server connections come from sysperfinfo)
+      LOOP AT lt_dbdata ASSIGNING <fs_dbdata>
+      WHERE varname = lc_r3users.
+        ls_dynamicdata-dbconnects = <fs_dbdata>-varvalue.
+        EXIT.
+      ENDLOOP.
+
+      LOOP AT lt_dbdata  ASSIGNING <fs_dbdata>
+      WHERE varname = lc_otherusers.
+        ls_dynamicdata-dbconnects = ls_dynamicdata-dbconnects +
+        <fs_dbdata>-varvalue.
+        EXIT.
+      ENDLOOP.
+    ENDIF.
+    ls_dynamicdata-columnstoresz = lc_0.
+    FREE: lt_inparams,lt_colstoremem.
+    CALL FUNCTION 'SMSS_RAT_GENERIC'
+    EXPORTING
+      conn     = ls_currcon
+      objname  = lc_coloumnstoremem
+    TABLES
+      inparams = lt_inparams
+      t_result = lt_colstoremem
+    EXCEPTIONS
+      OTHERS   = 0.
+"If this is not supported there will be an error and no row is returned
+    " We ignore it here and just fill the value if available.
+    READ TABLE lt_colstoremem ASSIGNING <fs_memmb> INDEX 1.
+    IF sy-subrc = 0.
+      ls_dynamicdata-columnstoresz = <fs_memmb>-columnstoresz.
+    ENDIF.
+*//-----------------------------------------------------------//*
+    "Title
+    ls_output = lc_title2.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    CONCATENATE lc_tabheading lc_blockheading lc_fieldheading
+    lc_value INTO ls_output SEPARATED BY lc_sep.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    "Output data
+*///-----------------Overview-------------------------------///*
+    "-------------General Info----------------------------"
+    "Machine Type
+    CONCATENATE lc_overview lc_generalinfo lc_machinetype
+    ls_staticdata-machinetype INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Operating System
+    CONCATENATE lc_overview lc_generalinfo lc_operatingsys
+    ls_staticdata-winver INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Server Version
+    CONCATENATE lc_overview lc_generalinfo lc_serverversion
+    ls_staticdata-sqlversion INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Traceflags
+    CONCATENATE lc_overview lc_generalinfo lc_traceflags
+    ls_staticdata-traceflags INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "SAP Release
+    CONCATENATE lc_overview lc_generalinfo lc_saprelease
+    ls_staticdata-saprl INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "CPUs used by MSS
+    CONCATENATE lc_overview lc_generalinfo lc_cpumss
+    ls_staticdata-cpuinfo INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Server Connections
+    lv_value = ls_dynamicdata-totalconnects.
+    CONCATENATE lc_overview lc_generalinfo lc_serverconn
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Connects to curr. DB
+    lv_value = ls_dynamicdata-dbconnects.
+    CONCATENATE lc_overview lc_generalinfo lc_conncurrdb
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "DB Startup
+    CONCATENATE ls_staticdata-dbstrtdate lc_comma
+    ls_staticdata-dbstrttime INTO lv_value.
+    CONCATENATE lc_overview lc_generalinfo lc_dbstartup
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Time of analysis
+    CONCATENATE ls_staticdata-analysisdate lc_comma
+    ls_staticdata-analysistime INTO lv_value.
+    CONCATENATE lc_overview lc_generalinfo lc_timeofanalysis
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "---------------------------------------------------"
+    "---------------------Memory------------------------"
+    "Phys. Memory (MB)
+    CONCATENATE lc_overview lc_memory lc_physmemory
+    ls_staticdata-physmem INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Current Memory (MB)
+    lv_value = ls_dynamicdata-currmem.
+    CONCATENATE lc_overview lc_memory lc_currmemory
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "SQL Memory Setting
+    CONCATENATE lc_overview lc_memory lc_sqlmemsetting
+    ls_staticdata-memset INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Windows Memory Option
+    CONCATENATE lc_overview lc_memory lc_winmemopt
+    ls_staticdata-memopt INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "Data Cache (MB)
+    lv_value = ls_dynamicdata-databuffersz.
+    CONCATENATE lc_overview lc_memory lc_datacache
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Data Cache (MB) hit ratio
+    lv_value = ls_dynamicdata-bufhitratio.
+    CONCATENATE lv_value lc_percentage INTO lv_value
+    SEPARATED BY space.
+    CONCATENATE lc_overview lc_memory lc_datacachehitratio
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Proc Cache (MB)
+    lv_value = ls_dynamicdata-cachesz.
+    CONCATENATE lc_overview lc_memory lc_proccache
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Proc Cache (MB) hit ratio
+    lv_value = ls_dynamicdata-cachehitratio.
+    CONCATENATE lv_value lc_percentage INTO lv_value
+    SEPARATED BY space.
+    CONCATENATE lc_overview lc_memory lc_proccachehotratio
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Column Store (MB)
+    lv_value = ls_dynamicdata-columnstoresz.
+    CONCATENATE lc_overview lc_memory lc_coloumnstore
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Lock Cache (MB)
+    lv_value = ls_dynamicdata-lockmem.
+    CONCATENATE lc_overview lc_memory lc_lockcache
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Free Pages (MB)
+    lv_value = ls_dynamicdata-freepgsz.
+    CONCATENATE lc_overview lc_memory lc_freepagesmb
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "-------------------------------------------------"
+    "------------Database Disk Space------------------"
+    "Total Data Size
+    lv_value = ls_staticdata-totdbsz.
+    CONCATENATE lc_overview lc_datadskspc lc_totaldatasize
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Data Free Space
+    lv_value = ls_staticdata-dbfree.
+    CONCATENATE lc_overview lc_datadskspc lc_datafreespace
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Total Log Size
+    lv_value = ls_staticdata-totlogsz.
+    CONCATENATE lc_overview lc_datadskspc lc_totallogsize
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Log Free Space
+    lv_value = ls_staticdata-logfree.
+    CONCATENATE lc_overview lc_datadskspc lc_logfreespace
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "----------------------------------------------"
+*///----------------------------------------------------------///*
+*///------------Current Activity-----------------------------///*
+    "Time of Floating Avg. Analysis
+    CONCATENATE ls_staticdata-analysisdate lc_comma
+    ls_staticdata-analysistime INTO lv_value.
+    CONCATENATE lc_curractivity lc_null lc_timefloatavg lv_value
+    INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Values
+    CONCATENATE lc_curractivity lc_null lc_value
+    ls_dynamicdata-valtypestr INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, ls_prefinal.
+    "----------I/O, Buffer server-wide activity-------"
+    "Latch Wait Time per Request
+    lv_value = ls_dynamicdata-pglatchwaitms.
+    CONCATENATE lc_curractivity lc_iobufferact lc_latchewtreq
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Wait Time per Log Write
+    lv_value = ls_dynamicdata-logwritewaitms.
+    CONCATENATE lc_curractivity lc_iobufferact lc_waittmlogrq
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "IOStall per Request
+    lv_value = ls_dynamicdata-iostallread.
+    CONCATENATE lc_curractivity lc_iobufferact lc_iostallreqms
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Physical Reads KB/sec
+    lv_value = ls_dynamicdata-physreadssrv.
+    CONCATENATE lc_curractivity lc_iobufferact lc_physicalreads
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Physical Writes KB/sec
+    lv_value = ls_dynamicdata-physwritessrv.
+    CONCATENATE lc_curractivity lc_iobufferact lc_physicalwrites
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Buffer Lookups per SQL Batch
+    lv_value = ls_dynamicdata-bufpglookups.
+    CONCATENATE lc_curractivity lc_iobufferact lc_buffersqlbatch
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Page Reads / Readahead Pages
+    lv_value = ls_dynamicdata-read_readahead.
+    CONCATENATE lc_curractivity lc_iobufferact lc_pagereads
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Lazy Writes/sec
+    lv_value = ls_dynamicdata-lazywrites.
+    CONCATENATE lc_curractivity lc_iobufferact lc_lazywrites
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Log Flushes/sec
+    lv_value = ls_dynamicdata-logflushes.
+    CONCATENATE lc_curractivity lc_iobufferact lc_logflushes
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "---------------------------------------------------"
+    "-----------------Access Methods--------------------"
+    "Full Tab/Idx Scans/sec
+    lv_value = ls_dynamicdata-fullscans.
+    CONCATENATE lc_curractivity lc_accessmethod lc_fullidxsec
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Index Range Scans/sec
+    lv_value = ls_dynamicdata-rangescans.
+    CONCATENATE lc_curractivity lc_accessmethod lc_indexrangscan
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Index Searches/sec
+    lv_value = ls_dynamicdata-idxsearches.
+    CONCATENATE lc_curractivity lc_accessmethod lc_indexsch
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Probe Scans/sec
+    lv_value = ls_dynamicdata-probescans.
+    CONCATENATE lc_curractivity lc_accessmethod lc_probescans
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "-------------------------------------------------"
+    "----------------SQL Server CPU-------------------"
+    "CPU Busy/sec
+    lv_value = ls_dynamicdata-cpubusy.
+    CONCATENATE lc_curractivity lc_sqlservcpu lc_cpubusysec
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "CPU Idle/sec
+    lv_value = ls_dynamicdata-cpuidle.
+    CONCATENATE lc_curractivity lc_sqlservcpu lc_cpuidlesec
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "IO Busy/sec
+    lv_value = ls_dynamicdata-iobusy.
+    CONCATENATE lc_curractivity lc_sqlservcpu lc_iobusysec
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "-------------------------------------------------"
+    "---------------Misc------------------------------"
+    "SQL Batches/sec
+    lv_value = ls_dynamicdata-sqlbatches.
+    CONCATENATE lc_curractivity lc_misc lc_sqlbatches
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "Transactions/sec
+    lv_value = ls_dynamicdata-transactions.
+    CONCATENATE lc_curractivity lc_misc lc_transac
+    lv_value INTO ls_prefinal SEPARATED BY lc_sep.
+    CONDENSE ls_prefinal.
+    ls_output = ls_prefinal.
+    APPEND ls_output TO lt_preoutput.
+    CLEAR: ls_output, lv_value, ls_prefinal.
+    "-------------------------------------------------"
+*///------------------------------------------------------///*
+*----------------------------------------------------------------*
+    "To replace blank value in end field with NULL
+    LOOP AT lt_preoutput INTO ls_prefinal.
+      lv_last_char = substring( val = ls_prefinal
+      off = STRLEN( ls_prefinal ) - 1 len = 1 ).
+      IF lv_last_char = lc_sep.
+        CONCATENATE ls_prefinal lc_null INTO ls_prefinal.
+      ENDIF.
+      ls_output = ls_prefinal.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_prefinal, ls_output, lv_last_char.
+    ENDLOOP.
+    CLEAR: ls_input, lv_action, ls_currcon, lv_dbuser, ls_raw_sys,
+    lv_lincomp, lv_lconfig, lv_langu, lv_time, lv_date,
+    ls_navsyst, ls_valwa, ls_dynamicdata, ls_staticdata,
+    lv_ntver, lv_prodlevel, lv_sqlversion, lv_iscluster,
+    lv_sqlee, lv_numcpus,lv_sqlcpus, lv_isawe, lv_ispae,
+    lv_dbstartup, lv_ntprodlevel, ls_dbsizedata, lv_value,
+    lv_hlpstring(30), lv_strcflg(32), ls_dbsys.
+    FREE: lt_colstoremem, lt_dbsys, lt_dbdata, lt_dynvaluestab,
+    lt_preoutput, lt_inparams, lt_staticserverdata,
+    lt_trc_status.
+  WHEN OTHERS.
+    ls_output = lc_naction.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+  ENDCASE.
+  "To replace blank value in middle fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

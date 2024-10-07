@@ -1,0 +1,162 @@
+params:  # input for import and export
+  product_ids:
+    export_prep: NW_Prepare_Export:NW750.ORA.CP #NW_Prepare_Export:NW750.DB6.CP #NW_Prepare_Export:NW750.ORA.CP
+    table_split: TableSplitter:NW750.ORA.CP
+    export_db: NW_Export:NW750.ORA.CP
+    import_db: NW_ABAP_DB_DBRefresh:NW750.HDB.CP
+  # export_import_dir: (need to chcek)
+  #   - /Data
+  #   - /Data/export
+  #   - /Data/export/ABAP
+  #   - /Data/export/ABAP/DB
+  #   - /Data/export/ABAP/DATA
+  sapsys:
+    gid: 79  #79
+  sidadm:
+    uid: 1001  #1001
+  dump_directory: "/Data/export_05jul/"     #/Data/ORA_DUMP_HANA(creating folder)
+  export:
+    sapinst_pkg_exp: "/Data/export_05jul/ABAP"
+    downloadbasket: "/Media/backup/Kernel753"
+    sapinst_path: "/Media/backup/SWPM"
+    exp_migmonNetExchangeDir: "/Data/export_05jul/ABAP"  #{{ dump_directory }}(HANA), {{ dump_directory }}//TABLE_SPLITTING (sql)
+    mainExportDir: "/Data/export_05jul"
+    splitTableFile: "/Data/export_05jul/ABAP/DATA/whr.txt"
+    sqlFileDir: "/Data/smgir"
+    tableFile: "/Data/export_05jul/table_splitting.txt"
+    parallelR3szchkExecution: true
+    data_transfer_type: NET # NET(nfs), FTP, none
+    migmonFtpExportDir: "/Data/export_05jul/ABAP"
+    migmonFtpExchangeDir: "/Data/export_05jul/ABAP"
+    source_db_type: ORA 
+    product: NW750
+  import:
+    sapinst_pkg_exp: "/Data/export_05jul/ABAP"
+    downloadbasket: "/usr/sap/sapinst/KERNEL"
+    sapinst_path: "/usr/sap/sapinst/SWPM"
+    os_type: "linux"
+    mainExportDir: "/Data/export_05jul"
+    target_db_type: HDB  # 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB
+    migmonExchangeDir: "/Data/export_05jul/ABAP"
+    tenant_user: SYSTEM
+    product: NW750
+
+
+ftp:
+  folders:
+    - path: /etc/user_list
+      owner: ftpuser #ftpuser_name
+      group: sapsys
+      recurse: no
+      mode: '777'
+      state: touch
+  ftp_dir: H #export path with $USER
+  user_file: /etc/user_list #same file which is created above
+  ftp_usr_name: "ftpuser"
+  usercreation: #create ftp user
+    - name: ftpuser
+      uid: 1008
+      group: 100
+      comment: "FTP User"
+      shell: /bin/bash
+      home: /usr/sap/export
+      password: "{{ passwords.ftpuser }}"
+
+folders_target:
+  - path: /Data/export/ABAP/DATA/EXT/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory    
+  - path: /Data/export/ABAP/DATA/STR/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/ADA/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/DB2/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/DB4/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/DB6/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/HDB/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/MSS/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory  
+  - path: /Data/export/ABAP/DB/ORA/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory 
+  - path: /Data/export/ABAP/DB/SYB/
+    owner: "{{ target_app_sid|lower }}adm"
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory    
+  # - path: /Data/SGN/empty_file
+  #   owner: root #ftpuser_name
+  #   group: root
+  #   recurse: no
+  #   mode: '777'
+  #   state: touch 
+folders_ownership:
+  - path: /Data/export
+    owner: ftpuser #give ftpuser
+    group: sapsys
+    recurse: yes
+    mode: '777'
+    state: directory
+
+folder_windows_target:
+  - path: H:\export\ABAP\DATA\EXT\
+    state: directory  
+  - path: H:\export\ABAP\DATA\STR\
+    state: directory 
+  - path: H:\export\ABAP\DB\ADA\
+    state: directory 
+  - path: H:\export\ABAP\DB\DB2\
+    state: directory 
+  - path: H:\export\ABAP\DB\DB4\
+    state: directory 
+  - path: H:\export\ABAP\DB\DB6\
+    state: directory 
+  - path: H:\export\ABAP\DB\HDB\
+    state: directory 
+  - path: H:\export\ABAP\DB\MSS\
+    state: directory 
+  - path: H:\export\ABAP\DB\ORA\
+    state: directory 
+  - path: H:\export\ABAP\DB\SYB\
+    state: directory
+  - path: H:\empty.txt
+    state: file        

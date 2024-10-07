@@ -1,0 +1,6 @@
+---
+- name: delete hana host resolution parameters in global.ini file
+  include_tasks: delete_hosts.yml
+  loop:
+    - system_replication_communication
+    - system_replication_hostname_resolution

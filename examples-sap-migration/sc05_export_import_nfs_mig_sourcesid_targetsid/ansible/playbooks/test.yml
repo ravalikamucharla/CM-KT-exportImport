@@ -1,0 +1,17 @@
+---
+
+- hosts: localhost
+  tags: abap
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    mode: source
+    output: md
+    hostname: "{{ groups['source_pas'][0] }}"
+    hostip: "{{ hostvars[groups['source_pas'][0]].ansible_host }}"
+    output: "/code1/susmita/CM-KT-exportImport/examples-sap-migration/sc05_export_import_nfs_mig_NWO_HDB/ansible/outputs_exp_imp"
+  vars_files:
+    - ../inventory/group_vars/source_pas.yml
+    - ../inventory/host_vars/{{ groups['source_pas'][0] }}.yml
+  roles:
+    - exp_imp_checks

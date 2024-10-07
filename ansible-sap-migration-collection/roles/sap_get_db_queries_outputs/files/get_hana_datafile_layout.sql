@@ -1,0 +1,1 @@
+select HOST, FILE_NAME from M_VOLUME_FILES

@@ -1,0 +1,265 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SM02_UPD_SYSTEM_MESSAGE                  *
+* Title               :  System Messages                              *
+* Purpose             :  This report is used to update system         *
+*                     :  messages                                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* T002T                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-03-2020  Initial  Yasaswini K    Local      To update system      *
+*                                               messages in SM02 tcode*
+*13-09-2022  V001     Yasaswini K    Local      To add no data found  *
+*                                               in case no data in sys*
+*                                               tem                   *
+*---------------------------------------------------------------------*
+REPORT zcm_sm02_upd_system_message.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c       VALUE '|',
+             lc_servermsg  TYPE char80  VALUE 'Server not available',
+             lc_clientmsg  TYPE char80  VALUE 'Client not available',
+             lc_nodata     TYPE char80  VALUE
+             'No data found',                                    "+V001
+             lc_authorized TYPE char80  VALUE 'Not authorized',
+             lc_langmsg    TYPE char80  VALUE 'Language not available',
+             lc_msg        TYPE char20  VALUE 'System Messages',
+             lc_sysmsg     TYPE char80  VALUE
+             'System message update successfully',
+             lc_id         TYPE char20  VALUE 'Message ID',
+             lc_author     TYPE char80  VALUE  'Author',
+             lc_server     TYPE char80  VALUE 'Server Name',
+             lc_client     TYPE char80  VALUE 'Client',
+             lc_clname     TYPE char20  VALUE 'Client name',
+             lc_created    TYPE char80  VALUE 'Created On',
+             lc_crtime     TYPE char80  VALUE 'Created time',
+             lc_expire     TYPE char80  VALUE 'Expires On',
+             lc_exptime    TYPE char80  VALUE 'Expires time',
+             lc_delete     TYPE char80  VALUE 'Delete date',
+             lc_deltime    TYPE char80  VALUE 'Delete time',
+             lc_text       TYPE char80  VALUE 'Message text line1',
+             lc_text2      TYPE char80  VALUE 'Message text line2',
+             lc_text3      TYPE char80  VALUE 'Message text line3',
+             lc_export     TYPE char20  VALUE 'EXPORT',
+*  Begin of changes in V001
+             lc_ninput     TYPE c       VALUE
+             'No input passed'                        LENGTH 15,
+             lc_inc_input  TYPE c       VALUE
+             'Incorrect input'                        LENGTH 20.
+*  End of changes in V001
+
+  DATA: ls_input           TYPE tab512,
+        ls_output          TYPE tab512,
+        ls_prefinal        TYPE string,
+        lv_action          TYPE char8,
+        lv_message         TYPE temsg-emtext,
+        lv_message2        TYPE temsg-emtext,
+        lv_message3        TYPE temsg-emtext,
+        lv_servername      TYPE temsg-applserver,
+        lv_expiration_date TYPE temsg-datdel,
+        lv_expiration_time TYPE temsg-timdel,
+        lv_delete_date     TYPE temsg-datrem,
+        lv_delete_time     TYPE temsg-timrem,
+        lv_client          TYPE temsg-client,
+        lv_clientname      TYPE string,
+        lv_createddate     TYPE sy-datum,
+        lv_createdtime     TYPE sy-uzeit,
+        lv_langu           TYPE temsg-langu,
+        lv_author          TYPE sy-uname,
+        ls_t002t           TYPE t002t,
+        lv_messageid       TYPE string.
+
+  CLEAR: ls_input,
+         lv_message,
+         lv_message2,
+         lv_message3,
+         lv_action,
+         lv_servername,
+         lv_expiration_date,
+         lv_expiration_time,
+         lv_delete_date,
+         lv_delete_time,
+         lv_client,
+         lv_clientname,
+         lv_createddate,
+         lv_createdtime,
+         ls_t002t,
+         lv_langu.
+
+  "Title
+  ls_output = lc_msg.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+    lv_action
+    lv_message
+    lv_message2
+    lv_message3
+    lv_servername
+    lv_expiration_date
+    lv_expiration_time
+    lv_delete_date
+    lv_delete_time
+    lv_client
+    lv_langu.
+* Begin of changes in V001
+  ELSE.
+    "No input passed
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  CASE lv_action.
+
+    WHEN lc_export.
+      CLEAR: ls_output.
+
+      lv_author = sy-uname.
+      "created date and time
+      lv_createddate = sy-datum.
+      lv_createdtime = sy-uzeit.
+      "Language
+      SELECT SINGLE * FROM t002t INTO ls_t002t
+                                 WHERE spras = sy-langu
+                                 AND   sprsl = lv_langu.
+      IF sy-subrc = 0.
+        lv_clientname = ls_t002t-sptxt.
+      ENDIF.
+      "Add SM02 message
+      CALL FUNCTION 'SM02_ADD_MESSAGE'
+        EXPORTING
+          message              = lv_message
+          message2             = lv_message2
+          message3             = lv_message3
+          servername           = lv_servername
+          expiration_date      = lv_expiration_date
+          expiration_time      = lv_expiration_time
+          delete_date          = lv_delete_date
+          delete_time          = lv_delete_time
+          client               = lv_client
+          langu                = lv_langu
+        EXCEPTIONS
+          empty_message        = 1
+          server_not_available = 2
+          client_not_available = 3
+          not_authorized       = 4
+          langu_not_available  = 5
+          OTHERS               = 6.
+      IF sy-subrc = 2.
+        CLEAR:ls_output.
+        ls_output = lc_servermsg.
+        APPEND ls_output TO lt_output.
+      ELSEIF sy-subrc = 3.
+        CLEAR:ls_output.
+        ls_output = lc_clientmsg.
+        APPEND ls_output TO lt_output.
+      ELSEIF sy-subrc = 4.
+        CLEAR:ls_output.
+        ls_output = lc_authorized.
+        APPEND ls_output TO lt_output.
+      ELSEIF sy-subrc = 5.
+        CLEAR:ls_output.
+        ls_output = lc_langmsg.
+        APPEND ls_output TO lt_output.
+
+      ELSEIF sy-subrc = 0.
+        CLEAR:ls_output.
+        ls_output = lc_sysmsg.
+        APPEND ls_output TO lt_output.
+
+        CLEAR:ls_output.
+        CONCATENATE lc_id       lc_sep
+                    lc_author   lc_sep
+                    lc_server   lc_sep
+                    lc_client   lc_sep
+                    lc_clname   lc_sep
+                    lc_created  lc_sep
+                    lc_crtime   lc_sep
+                    lc_expire   lc_sep
+                    lc_exptime  lc_sep
+                    lc_delete   lc_sep
+                    lc_deltime  lc_sep
+                    lc_text     lc_sep
+                    lc_text2    lc_sep
+                    lc_text3   INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR:ls_output.
+        "new record will be displayed first
+        lv_messageid = '1'.
+        "Output
+        CONCATENATE lv_messageid       lc_sep
+                    lv_author          lc_sep
+                    lv_servername      lc_sep
+                    lv_client          lc_sep
+                    lv_clientname      lc_sep
+                    lv_createddate     lc_sep
+                    lv_createdtime     lc_sep
+                    lv_expiration_date lc_sep
+                    lv_expiration_time lc_sep
+                    lv_delete_date     lc_sep
+                    lv_delete_time     lc_sep
+                    lv_message         lc_sep
+                    lv_message2        lc_sep
+                    lv_message3
+                     INTO ls_prefinal.
+        PERFORM end_null_check CHANGING ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+
+        "adding null to blanks - in betweeen
+        PERFORM null_check TABLES  lt_output.
+      ELSE.
+        CLEAR:ls_output.
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+    WHEN OTHERS.
+*  Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+
+ENDFORM.
+FORM null_check TABLES lt_table TYPE table.
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.

@@ -1,0 +1,188 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SM12_EXP_LOCK_ENTRIES                    *
+* Title               :  Lock entries export                          *
+* Purpose             :  This report is used to export lock entries   *
+*                     :  list from tcode SM12 pre migration           *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-03-2020  Initial   ASHWINI B     Local      To export lock entries*
+*                                               from SM12             *
+*02-09-2022  V001  Soumya/Yasaswini  Local      To add no data found  *
+*                                               in case no data in sys*
+*                                               tem                   *
+*---------------------------------------------------------------------*
+
+REPORT zcm_sm12_exp_lock_entries.
+
+FORM get_config
+               TABLES ft_input  STRUCTURE tab512
+                      ft_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c      VALUE '|'       LENGTH 1,
+             lc_act_exp   TYPE char6  VALUE 'EXPORT',
+             lc_client    TYPE char20 VALUE 'Client',
+             lc_user      TYPE char20 VALUE 'User name',
+             lc_date      TYPE char20 VALUE 'Lock date',
+             lc_time      TYPE char20 VALUE 'Lock time',
+             lc_mode      TYPE char20 VALUE 'Lock mode',
+             lc_table     TYPE char20 VALUE 'Table name',
+             lc_obj_name  TYPE char20 VALUE 'Lock argument',
+             lc_count     TYPE char50 VALUE 'Cumulative counter 1',
+             lc_count1    TYPE char50 VALUE 'Cumulative counter 2',
+*  Begin of changes in V001
+             lc_null      TYPE c      VALUE 'NULL'    LENGTH 4,
+             lc_title     TYPE c      VALUE
+             'Lock entries list'                      LENGTH 30,
+             lc_ninput    TYPE c VALUE
+             'No input passed'                        LENGTH 15,
+             lc_nodata    TYPE c VALUE
+             'No data found'                          LENGTH 20,
+             lc_inc_input TYPE c VALUE
+             'Incorrect input'                        LENGTH 20.
+*  End of changes in V001
+
+
+  DATA: ls_input    TYPE tab512,
+        ls_output   TYPE tab512,
+        lv_action   TYPE char8,
+        lt_enqueue  TYPE STANDARD TABLE OF seqg3,
+        ls_enqueue  TYPE seqg3,
+        lv_counter  TYPE char10,
+        lv_counter1 TYPE char10.
+
+  CLEAR: ls_input,
+  lv_action.
+
+* Begin of changes in V001
+   " Title
+   ls_output = lc_title.
+   APPEND ls_output TO ft_output.
+   CLEAR ls_output.
+* End of changes in V001
+
+  " Read input values from Python
+  READ TABLE ft_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    "No input passed
+    ls_output = lc_ninput.
+    APPEND ls_output TO ft_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_act_exp. "EXPORT
+
+* Under the pre-migration activities, the data
+* related to lock entries created in the system is exported to
+* Python.
+
+      " FM to read lock entries from SM12
+      REFRESH: lt_enqueue[].
+      CALL FUNCTION 'ENQUEUE_READ'
+        EXPORTING
+          gclient               = '*'
+          guname                = '*'
+        TABLES
+          enq                   = lt_enqueue
+        EXCEPTIONS
+          communication_failure = 1
+          system_failure        = 2
+          OTHERS                = 3.
+      IF sy-subrc NE 0.
+
+        " Error
+        CLEAR: ls_output.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        INTO ls_output.
+        APPEND ls_output TO ft_output.
+        RETURN.
+      ELSE.
+        SORT: lt_enqueue BY gclient guname.
+      ENDIF.
+*  Begin of changes in V001
+      IF lt_enqueue IS INITIAL.
+        "No data found
+        ls_output = lc_nodata.
+        APPEND ls_output TO ft_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+*  End of changes in V001
+      " Heading Columns
+      CLEAR: ls_output.
+      CONCATENATE lc_client   lc_sep
+      lc_user     lc_sep
+      lc_date     lc_sep
+      lc_time     lc_sep
+      lc_mode     lc_sep
+      lc_table    lc_sep
+      lc_obj_name lc_sep
+      lc_count    lc_sep
+      lc_count1   INTO ls_output.
+      APPEND ls_output TO ft_output.
+
+      " Data
+      CLEAR: ls_output.
+      LOOP AT lt_enqueue INTO ls_enqueue.             "+V001
+
+        lv_counter = ls_enqueue-guse.
+        lv_counter1 = ls_enqueue-gusevb.
+
+        IF ls_enqueue-gclient IS INITIAL.
+           ls_enqueue-gclient = lc_null.
+        ENDIF.
+
+        IF lv_counter1 IS INITIAL.
+           lv_counter1 = lc_null.
+        ENDIF.
+
+        CONCATENATE ls_enqueue-gclient lc_sep
+        ls_enqueue-guname  lc_sep
+        ls_enqueue-gtdate  lc_sep
+        ls_enqueue-gttime  lc_sep
+        ls_enqueue-gmode   lc_sep
+        ls_enqueue-gname   lc_sep
+        ls_enqueue-garg    lc_sep
+        lv_counter           lc_sep
+        lv_counter1 INTO ls_output.
+        CONDENSE ls_output.
+        APPEND ls_output TO ft_output.
+        CLEAR: ls_output, ls_enqueue.
+      ENDLOOP.
+
+*  Begin of changes in V001
+ "Null check in middle fields
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE ft_output WITH '|NULL|'.
+    FIND '||' IN TABLE ft_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+*  End of changes in V001
+
+    WHEN OTHERS.
+*  Begin of changes in V001
+    ls_output = lc_inc_input. "Incorrect input
+    APPEND ls_output TO ft_output.
+    CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+
+ENDFORM.

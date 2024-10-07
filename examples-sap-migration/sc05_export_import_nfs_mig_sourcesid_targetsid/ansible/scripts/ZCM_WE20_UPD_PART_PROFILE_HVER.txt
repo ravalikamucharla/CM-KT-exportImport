@@ -1,0 +1,640 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_WE20_UPD_PARTNER_PROFILE                 *
+* Title               :  Restore Partner Profile details              *
+* Purpose             :  This report is used to restore Partner       *
+*                        Profile Data in standard tables              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* WE20                                                                *
+*---------------------------------------------------------------------*
+*	Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* EDPP1                     X          X           X           X      *
+* EDP13                     X          X           X           X      *
+* EDP12                     X          X           X           X      *
+* EDP21                     X          X           X           X      *
+* EDIPHONE                  X          X           X           X      *
+* EDP21options              X          X           X           X      *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*10-16-2020  Initial   Soumya Ray   Local      Restore Partner Profile*
+*                                              details                *
+*09-30-2022  V001      Yasaswini K   Local     To remove dead code    *
+*---------------------------------------------------------------------*
+
+REPORT zcm_we20_upd_part_profile_hver.
+
+CONSTANTS: gc_edpp1        TYPE char5  VALUE 'EDPP1',
+           gc_edp13        TYPE char5  VALUE 'EDP13',
+           gc_edp12        TYPE char5  VALUE 'EDP12',
+           gc_edp21        TYPE char5  VALUE 'EDP21',
+           gc_ediphone     TYPE char8  VALUE 'EDIPHONE',
+           gc_edp21options TYPE char12 VALUE 'EDP21OPTIONS'.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS lc_head  TYPE char30 VALUE 'Idocspartnerprofilerestore'.
+
+  DATA:
+        lt_sub_input TYPE TABLE OF tab512,
+        lv_tabix     TYPE sy-tabix,
+        ls_output    TYPE tab512.
+
+  ls_output = lc_head.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output, lv_tabix.
+  FREE: lt_sub_input.
+
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input
+                         CHANGING lv_tabix. "Data for EDPP1 table
+  ls_output = gc_edpp1.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* Data operation ( delete, update, insert ) for Partner Profile general
+*  data
+  PERFORM data_operation TABLES lt_sub_input
+                                lt_output
+                         USING 'EDPP1'.
+
+  APPEND ls_output TO lt_output.
+  FREE lt_sub_input.
+  CLEAR ls_output.
+
+  lv_tabix = lv_tabix + 1.
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input
+                       CHANGING lv_tabix.
+  ls_output = gc_edp13.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+*Data operation ( delete, update, insert ) for Partner Profile outbound
+* technical parameters
+  PERFORM data_operation TABLES lt_sub_input
+                                lt_output
+                         USING 'EDP13'.
+
+  APPEND ls_output TO lt_output.
+  FREE lt_sub_input.
+  CLEAR ls_output.
+
+  lv_tabix = lv_tabix + 1.
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input
+                       CHANGING lv_tabix.
+  ls_output = gc_edp12.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+*Data operation ( delete, update, insert ) for Partner Profile outbound
+* with message control
+  PERFORM data_operation TABLES lt_sub_input
+                                lt_output
+                         USING 'EDP12'.
+  APPEND ls_output TO lt_output.
+  FREE lt_sub_input.
+  CLEAR ls_output.
+
+  lv_tabix = lv_tabix + 1.
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input
+                       CHANGING lv_tabix.
+  ls_output = gc_edp21.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+*Data operation ( delete, update, insert ) for Partner Profile Inbound
+* parameters
+  PERFORM data_operation TABLES lt_sub_input
+                                lt_output
+                         USING 'EDP21'.
+  APPEND ls_output TO lt_output.
+  FREE lt_sub_input.
+  CLEAR ls_output.
+
+  lv_tabix = lv_tabix + 1.
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input
+                       CHANGING lv_tabix.
+  ls_output = gc_ediphone.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* Data operation ( delete, update, insert ) for Partner Profile
+* telephone data
+  PERFORM data_operation TABLES lt_sub_input
+                                lt_output
+                         USING 'EDIPHONE'.
+  APPEND ls_output TO lt_output.
+  FREE lt_sub_input.
+  CLEAR ls_output.
+
+  lv_tabix = lv_tabix + 1.
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input
+                       CHANGING lv_tabix.
+  ls_output = gc_edp21options.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* Data operation ( delete, update, insert ) for Partner Profile
+* option
+  PERFORM data_operation TABLES lt_sub_input
+                                lt_output
+                         USING 'EDP21OPTIONS'.
+  APPEND ls_output TO lt_output.
+  FREE lt_sub_input.
+  CLEAR ls_output.
+
+ENDFORM.
+*// FM to separate the data into tables from the input data
+FORM table_separate  TABLES   lt_input STRUCTURE tab512
+                              lt_sub_input STRUCTURE tab512
+                     CHANGING lv_tabix.
+
+  DATA: ls_input TYPE tab512,                      "+V001
+        ls_sub_input TYPE tab512.
+
+  LOOP AT lt_input INTO ls_input FROM lv_tabix.
+
+    IF ls_input IS NOT INITIAL.
+      ls_sub_input = ls_input.
+      APPEND ls_sub_input TO lt_sub_input.
+    ELSE.
+      lv_tabix = sy-tabix.
+      EXIT.
+    ENDIF.
+
+  ENDLOOP.
+
+
+ENDFORM.
+
+FORM data_operation  TABLES   lt_input TYPE table
+                              lt_output TYPE table
+                     USING iv_tablename TYPE string.
+
+  CONSTANTS: lc_sep       TYPE c       VALUE '|',
+             lc_deletemsg TYPE string VALUE
+             'Number of entries deleted in table',
+             lc_updatemsg TYPE string VALUE
+             'Number of entries updated in table',
+             lc_err_msg   TYPE char35 VALUE 'Notableentry',
+             lc_delete    TYPE c VALUE 'D',
+             lc_update    TYPE c VALUE 'U',
+             lc_insert    TYPE c VALUE 'I'.
+
+
+  DATA: ls_input               TYPE tab512,
+        lt_edpp1_delete        TYPE STANDARD TABLE OF edpp1,
+        lt_edpp1_update        TYPE STANDARD TABLE OF edpp1,
+        lt_edpp1_insert        TYPE STANDARD TABLE OF edpp1,
+        ls_edpp1               TYPE edpp1,
+        lt_edp13_delete        TYPE STANDARD TABLE OF edp13,
+        lt_edp13_update        TYPE STANDARD TABLE OF edp13,
+        lt_edp13_insert        TYPE STANDARD TABLE OF edp13,
+        ls_edp13               TYPE edp13,
+        lt_edp12_delete        TYPE STANDARD TABLE OF edp12,
+        lt_edp12_update        TYPE STANDARD TABLE OF edp12,
+        lt_edp12_insert        TYPE STANDARD TABLE OF edp12,
+        ls_edp12               TYPE edp12,
+        lt_edp21_delete        TYPE STANDARD TABLE OF edp21,
+        lt_edp21_update        TYPE STANDARD TABLE OF edp21,
+        lt_edp21_insert        TYPE STANDARD TABLE OF edp21,
+        ls_edp21               TYPE edp21,
+        lt_ediphone_delete     TYPE STANDARD TABLE OF ediphone,
+        lt_ediphone_update     TYPE STANDARD TABLE OF ediphone,
+        lt_ediphone_insert     TYPE STANDARD TABLE OF ediphone,
+        ls_ediphone            TYPE ediphone,
+        lt_edp21options_delete TYPE STANDARD TABLE OF edp21options,
+        lt_edp21options_update TYPE STANDARD TABLE OF edp21options,
+        lt_edp21options_insert TYPE STANDARD TABLE OF edp21options,
+        ls_edp21options        TYPE edp21options,
+        lv_count               TYPE char5,
+        ls_output              TYPE tab512,
+        lv_action              TYPE c,  "action
+        lv_text1               TYPE string,
+        lv_text2               TYPE string,
+        lv_lines               TYPE i,            "+V001
+        lv_text3               TYPE string.
+
+  DESCRIBE TABLE lt_input LINES lv_lines.
+  IF lv_lines > 1. " tables with more than 2 lines has data
+    PERFORM null_check TABLES lt_input.
+    DELETE lt_input INDEX 1.
+
+    CASE iv_tablename. " Table name
+      WHEN gc_edpp1. " EDPP1 table
+        LOOP AT lt_input INTO ls_input.
+          SPLIT ls_input AT lc_sep INTO" Split into fields of EDPP1
+          ls_edpp1-mandt
+          ls_edpp1-parnum
+          ls_edpp1-partyp
+          ls_edpp1-class
+          ls_edpp1-matlvl
+          ls_edpp1-test
+          ls_edpp1-archiv
+          ls_edpp1-usrtyp
+          ls_edpp1-usrkey
+          ls_edpp1-usrlng
+          lv_text1 "Partn.Type text
+          lv_text2 "User Type text
+          lv_text3 "Partn.status text
+          lv_action.   " Action
+          CASE lv_action.
+            WHEN lc_delete. " If action is Delete
+              APPEND ls_edpp1 TO lt_edpp1_delete.
+            WHEN lc_update. " If action is Update
+              APPEND ls_edpp1 TO lt_edpp1_update.
+            WHEN lc_insert.   " If action is Insert
+              APPEND ls_edpp1 TO lt_edpp1_insert.
+          ENDCASE.
+          CLEAR: ls_edpp1, lv_action, lv_text1, lv_text2, lv_text3.
+        ENDLOOP.
+        IF lt_edpp1_delete IS NOT INITIAL.
+          DELETE edpp1 FROM TABLE lt_edpp1_delete.  "Data deleted
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edpp1_update IS NOT INITIAL.
+          UPDATE edpp1 FROM TABLE lt_edpp1_update. " Data updated
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edpp1_insert IS NOT INITIAL.
+          MODIFY edpp1 FROM TABLE lt_edpp1_insert. "Data inserted
+          COMMIT WORK.
+        ENDIF.
+        " Number of entries deleted
+        DESCRIBE TABLE lt_edpp1_delete LINES lv_count.
+        CONCATENATE lc_deletemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries updated
+        DESCRIBE TABLE lt_edpp1_update LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries inserted
+        DESCRIBE TABLE lt_edpp1_insert LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        FREE: lt_edpp1_insert, lt_edpp1_update, lt_edpp1_delete.
+
+      WHEN gc_edp13. "EDP13 table
+        LOOP AT lt_input INTO ls_input.
+          SPLIT ls_input AT lc_sep INTO " Split into fields of EDP13
+          ls_edp13-mandt
+          ls_edp13-rcvprn
+          ls_edp13-rcvprt
+          ls_edp13-rcvpfc
+          ls_edp13-mestyp
+          ls_edp13-mescod
+          ls_edp13-mesfct
+          ls_edp13-test
+          ls_edp13-method
+          ls_edp13-doctyp
+          ls_edp13-synchk
+          ls_edp13-usrtyp
+          ls_edp13-usrkey
+          ls_edp13-usrlng
+          ls_edp13-aleadr
+          ls_edp13-alesca
+          ls_edp13-outmod
+          ls_edp13-rcvpor
+          ls_edp13-idoctyp
+          ls_edp13-cimtyp
+          ls_edp13-std
+          ls_edp13-stdvrs
+          ls_edp13-stdmes
+          ls_edp13-pcksiz
+          ls_edp13-idocvrs
+          ls_edp13-segrel
+          ls_edp13-ediview
+          ls_edp13-segapplrel
+          ls_edp13-qurule
+          ls_edp13-synnorun
+          lv_text1 "Partner Role text
+          lv_text2 "Output mode text
+          lv_text3 "User Type text
+          lv_action.
+          CASE lv_action.
+            WHEN lc_delete. " If action is Delete
+              APPEND ls_edp13 TO lt_edp13_delete.
+            WHEN lc_update. " If action is Updated
+              APPEND ls_edp13 TO lt_edp13_update.
+            WHEN lc_insert.   " If action is Inserted
+              APPEND ls_edp13 TO lt_edp13_insert.
+          ENDCASE.
+          CLEAR: ls_edp13, lv_action.
+        ENDLOOP.
+        IF lt_edp13_delete IS NOT INITIAL.
+          DELETE edp13 FROM TABLE lt_edp13_delete. " Data deleted
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp13_update IS NOT INITIAL.
+          UPDATE edp13 FROM TABLE lt_edp13_update.  "Data updated
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp13_insert IS NOT INITIAL.
+          MODIFY edp13 FROM TABLE lt_edp13_insert. " Data inserted
+          COMMIT WORK.
+        ENDIF.
+        " Number of entries deleted
+        DESCRIBE TABLE lt_edp13_delete LINES lv_count.
+        CONCATENATE lc_deletemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries updated
+        DESCRIBE TABLE lt_edp13_update LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries inserted
+        DESCRIBE TABLE lt_edp13_insert LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count, lv_text1, lv_text2, lv_text3.
+        FREE: lt_edp13_insert, lt_edp13_update, lt_edp13_delete.
+
+      WHEN gc_edp12. "EDP12 table
+        LOOP AT lt_input INTO ls_input.
+          SPLIT ls_input AT lc_sep INTO "Split into fields of EDP12
+          ls_edp12-mandt
+          ls_edp12-rcvprn
+          ls_edp12-rcvprt
+          ls_edp12-rcvpfc
+          ls_edp12-kappl
+          ls_edp12-kschl
+          ls_edp12-aende
+          ls_edp12-evcoda
+          ls_edp12-mestyp
+          ls_edp12-mescod
+          ls_edp12-mesfct
+          ls_edp12-test
+          lv_action.
+          CASE lv_action.
+            WHEN lc_delete. " If action is Delete
+              APPEND ls_edp12 TO lt_edp12_delete.
+            WHEN lc_update. " If action is Updated
+              APPEND ls_edp12 TO lt_edp12_update.
+            WHEN lc_insert.  " If action is Inserted
+              APPEND ls_edp12 TO lt_edp12_insert.
+          ENDCASE.
+          CLEAR: ls_edp12, lv_action.
+        ENDLOOP.
+        IF lt_edp12_delete IS NOT INITIAL.
+          DELETE edp12 FROM TABLE lt_edp12_delete. " Data deleted
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp12_update IS NOT INITIAL.
+          UPDATE edp12 FROM TABLE lt_edp12_update.  " Data updated
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp12_insert IS NOT INITIAL.
+          MODIFY edp12 FROM TABLE lt_edp12_insert.  " Data inserted
+          COMMIT WORK.
+        ENDIF.
+        " Number of entries deleted
+        DESCRIBE TABLE lt_edp12_delete LINES lv_count.
+        CONCATENATE lc_deletemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries updated
+        DESCRIBE TABLE lt_edp12_update LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries inserted
+        DESCRIBE TABLE lt_edp12_insert LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        FREE: lt_edp12_insert, lt_edp12_update, lt_edp12_delete.
+
+      WHEN gc_edp21. "EDP21 table
+        LOOP AT lt_input INTO ls_input.
+          SPLIT ls_input AT lc_sep INTO
+          ls_edp21-mandt
+          ls_edp21-sndprn
+          ls_edp21-sndprt
+          ls_edp21-sndpfc
+          ls_edp21-mestyp
+          ls_edp21-mescod
+          ls_edp21-mesfct
+          ls_edp21-test
+          ls_edp21-evcode
+          ls_edp21-synchk
+          ls_edp21-method
+          ls_edp21-usrtyp
+          ls_edp21-usrkey
+          ls_edp21-usrlng
+          ls_edp21-inmod
+          ls_edp21-dcart
+          lv_text1 "Partner Role text
+          lv_text2 "Processing by function module text
+          lv_text3 "User Type text
+          lv_action.
+          CASE lv_action.
+            WHEN lc_delete.  " If action is Delete
+              APPEND ls_edp21 TO lt_edp21_delete.
+            WHEN lc_update.  " If action is Updated
+              APPEND ls_edp21 TO lt_edp21_update.
+            WHEN lc_insert.  " If action is Inserted
+              APPEND ls_edp21 TO lt_edp21_insert.
+          ENDCASE.
+          CLEAR: ls_edp21, lv_action.
+        ENDLOOP.
+        IF lt_edp21_delete IS NOT INITIAL.
+          DELETE edp21 FROM TABLE lt_edp21_delete.  " Data deleted
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp21_update IS NOT INITIAL.
+          UPDATE edp21 FROM TABLE lt_edp21_update. " Data updated
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp21_insert IS NOT INITIAL.
+          MODIFY edp21 FROM TABLE lt_edp21_insert. " Data inserted
+          COMMIT WORK.
+        ENDIF.
+        " Number of entries deleted
+        DESCRIBE TABLE lt_edp21_delete LINES lv_count.
+        CONCATENATE lc_deletemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries updated
+        DESCRIBE TABLE lt_edp21_update LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries inserted
+        DESCRIBE TABLE lt_edp21_insert LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count, lv_text1, lv_text2, lv_text3.
+        FREE: lt_edp21_insert, lt_edp21_update, lt_edp21_delete.
+
+      WHEN gc_ediphone.
+        LOOP AT lt_input INTO ls_input.
+          SPLIT ls_input AT lc_sep INTO
+          ls_ediphone-mandt
+          ls_ediphone-parnum
+          ls_ediphone-partyp
+          ls_ediphone-parfct
+          ls_ediphone-direct
+          ls_ediphone-mestyp
+          ls_ediphone-mescod
+          ls_ediphone-mesfct
+          ls_ediphone-test
+          ls_ediphone-tel_number
+          ls_ediphone-country_to
+          ls_ediphone-name
+          ls_ediphone-company
+          lv_action.
+          CASE lv_action.
+            WHEN lc_delete. " If action is Delete
+              APPEND ls_ediphone TO lt_ediphone_delete.
+            WHEN lc_update. " If action is Updated
+              APPEND ls_ediphone TO lt_ediphone_update.
+            WHEN lc_insert. " If action is Inserted
+              APPEND ls_ediphone TO lt_ediphone_insert.
+          ENDCASE.
+          CLEAR: ls_ediphone, lv_action.
+        ENDLOOP.
+        IF lt_ediphone_delete IS NOT INITIAL.
+          DELETE ediphone FROM TABLE lt_ediphone_delete. " Data deleted
+          COMMIT WORK.
+        ENDIF.
+        IF lt_ediphone_update IS NOT INITIAL.
+          UPDATE ediphone FROM TABLE lt_ediphone_update. " Data updated
+          COMMIT WORK.
+        ENDIF.
+        IF lt_ediphone_insert IS NOT INITIAL.
+          MODIFY ediphone FROM TABLE lt_ediphone_insert. "Data inserted
+          COMMIT WORK.
+        ENDIF.
+        " Number of entries deleted
+        DESCRIBE TABLE lt_ediphone_delete LINES lv_count.
+        CONCATENATE lc_deletemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries updated
+        DESCRIBE TABLE lt_ediphone_update LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries inserted
+        DESCRIBE TABLE lt_ediphone_insert LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        FREE: lt_ediphone_insert, lt_ediphone_update,
+        lt_ediphone_delete.
+
+      WHEN gc_edp21options. " EDP21options table
+        LOOP AT lt_input INTO ls_input.
+          SPLIT ls_input AT lc_sep INTO
+          ls_edp21options-mandt
+          ls_edp21options-sndprn
+          ls_edp21options-sndprt
+          ls_edp21options-sndpfc
+          ls_edp21options-mestyp
+          ls_edp21options-mescod
+          ls_edp21options-mesfct
+          ls_edp21options-test
+          ls_edp21options-parid
+          ls_edp21options-value
+          lv_action.
+          CASE lv_action.
+            WHEN lc_delete. " If action is Delete
+              APPEND ls_edp21options TO lt_edp21options_delete.
+            WHEN lc_update. " If action is Updated
+              APPEND ls_edp21options TO lt_edp21options_update.
+            WHEN lc_insert. " If action is Inserted
+              APPEND ls_edp21options TO lt_edp21options_insert.
+          ENDCASE.
+          CLEAR: ls_edp21options, lv_action.
+        ENDLOOP.
+        IF lt_edp21options_delete IS NOT INITIAL. " Data deleted
+          DELETE edp21options FROM TABLE lt_edp21options_delete.
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp21options_update IS NOT INITIAL. " Data updated
+          UPDATE edp21options FROM TABLE lt_edp21options_update.
+          COMMIT WORK.
+        ENDIF.
+        IF lt_edp21options_insert IS NOT INITIAL. " Data inserted
+          MODIFY edp21options FROM TABLE lt_edp21options_insert.
+          COMMIT WORK.
+        ENDIF.
+        " Number of entries deleted
+        DESCRIBE TABLE lt_edp21options_delete LINES lv_count.
+        CONCATENATE lc_deletemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries updated
+        DESCRIBE TABLE lt_edp21options_update LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        " Number of entries inserted
+        DESCRIBE TABLE lt_edp21options_insert LINES lv_count.
+        CONCATENATE lc_updatemsg  ':' lv_count
+        INTO ls_output SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_count.
+        FREE: lt_edp21options_insert, lt_edp21options_update,
+        lt_edp21options_delete.
+
+
+      WHEN OTHERS.
+
+    ENDCASE.
+  ELSE.
+    " No entries in the table
+    ls_output = lc_err_msg.
+    APPEND ls_output TO lt_output.
+
+  ENDIF.
+
+ENDFORM.
+*//Form to replace NULL values from PYTHON to BLANK value of fields
+FORM null_check TABLES lt_table TYPE table.
+
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '|NULL|'
+    IN TABLE lt_table WITH '||'.
+    FIND '|NULL|' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '|NULL'
+    IN TABLE lt_table WITH ' '.
+    FIND '|NULL' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

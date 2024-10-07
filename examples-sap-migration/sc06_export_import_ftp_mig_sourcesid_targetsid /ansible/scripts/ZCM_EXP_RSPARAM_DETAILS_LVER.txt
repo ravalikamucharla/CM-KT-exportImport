@@ -1,0 +1,192 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_EXP_RSPARAM_DETAILS_LVER                *
+* Title               :   Export Memory Settings                      *
+* Purpose             :   To Capture Memory settings from RSPARAM     *
+*                         report                                      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RSPARAM                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TPFYPROPTY                X                                         *
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*00-28-2021  Initial  Soumya Ray     Local    To Capture memory       *
+*                                             settings from RSPARAM   *
+*---------------------------------------------------------------------*
+REPORT zcm_exp_rsparam_details_lver.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  TYPES: BEGIN OF lty_par_usub ,
+           status       TYPE sy-index,
+           pname        TYPE c LENGTH 60,
+           user_wert    TYPE c LENGTH 60,
+           default_wert TYPE c LENGTH 60,
+         END OF lty_par_usub,
+
+         BEGIN OF lty_tpfypropty,
+           paraname TYPE pfeparname,
+           descr    TYPE comment,
+         END OF lty_tpfypropty.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                    LENGTH 1,
+             lc_null      TYPE c VALUE 'NULL'                 LENGTH 4,
+             lc_missing   TYPE c VALUE 'missing'              LENGTH 7,
+             lc_noinput   TYPE c VALUE 'No input given'       LENGTH 20,
+             lc_inc_input TYPE c VALUE 'Incorrect input'      LENGTH 20,
+             lc_export    TYPE c VALUE 'EXPORT'               LENGTH 6,
+             lc_title     TYPE c VALUE 'Profile Parameters'   LENGTH 25,
+             lc_error     TYPE c VALUE 'No data found'        LENGTH 40,
+             lc_name      TYPE c VALUE 'ParameterName'        LENGTH 15,
+             lc_user      TYPE c VALUE 'UserDefinedValue'     LENGTH 20,
+             lc_system    TYPE c VALUE 'SystemDefaultValue'   LENGTH 22,
+             lc_unsub     TYPE c VALUE 'SystemDefaultUnsubst' LENGTH 24,
+             lc_comment   TYPE c VALUE 'Comment'              LENGTH 7.
+
+  DATA: ls_output          TYPE tab512,
+        ls_input           TYPE tab512,
+        lv_action          TYPE char6,
+        ls_usub            TYPE lty_par_usub,
+        ls_sub             TYPE lty_par_usub,
+        ls_tpfypropty      TYPE lty_tpfypropty,
+        lv_parname         TYPE c LENGTH 60,
+        lv_parstatus       TYPE sy-index,
+        lv_pardefault_wert TYPE c LENGTH 60,
+        lv_paruser_wert    TYPE c LENGTH 60,
+        lt_tpfypropty_upd  TYPE STANDARD TABLE OF lty_tpfypropty,
+        lt_tpfypropty      TYPE STANDARD TABLE OF lty_tpfypropty,
+        lt_sub             TYPE STANDARD TABLE OF lty_par_usub,
+        lt_usub            TYPE STANDARD TABLE OF lty_par_usub.
+
+  CLEAR: ls_output, ls_input, lv_action, ls_usub, ls_sub, lv_parname,
+  ls_tpfypropty, lv_parstatus, lv_pardefault_wert, lv_paruser_wert.
+
+  FREE: lt_tpfypropty, lt_tpfypropty_upd, lt_sub, lt_usub.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.               " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.  " When action is EXPORT
+
+      " The logic is got from perform 'READ_ACTUAL_PAR_VALUES' from
+      "report 'RSPFPAR'
+      CALL 'C_SAPGALLPARAM'
+      ID 'PAR_USUB' FIELD lt_usub
+      ID 'PAR_SUB'  FIELD lt_sub.
+
+      SELECT paraname descr FROM tpfypropty INTO TABLE lt_tpfypropty.
+      IF sy-subrc EQ 0.
+        LOOP AT lt_tpfypropty INTO ls_tpfypropty.
+          TRANSLATE ls_tpfypropty-paraname TO UPPER CASE.
+          APPEND ls_tpfypropty TO lt_tpfypropty_upd.
+          CLEAR ls_tpfypropty.
+        ENDLOOP.
+        SORT lt_tpfypropty_upd BY paraname.
+      ENDIF.
+
+      "No data found
+      IF lt_usub IS INITIAL.
+        ls_output = lc_error.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+
+      SORT lt_sub BY pname.
+      SORT lt_usub BY pname.
+
+      "Column Headings
+      CONCATENATE lc_name   lc_sep
+      lc_user   lc_sep
+      lc_system lc_sep
+      lc_unsub  lc_sep
+      lc_comment INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      " The logic is got from perform 'SHOW_ACTUAL_PAR_VALUES_ALV' from
+      "report 'RSPFPAR'
+      LOOP AT lt_usub INTO ls_usub.
+        lv_parname = ls_usub-pname.
+        lv_parstatus = ls_usub-status.
+        lv_pardefault_wert = ls_usub-default_wert.
+
+        CALL 'C_SAPGPARAM'
+        ID 'NAME'  FIELD lv_parname
+        ID 'VALUE' FIELD lv_pardefault_wert.
+        IF ls_usub-user_wert = space.
+          IF lv_paruser_wert = lv_pardefault_wert.
+            lv_paruser_wert = space.
+          ENDIF.
+        ENDIF.
+
+        TRANSLATE lv_parname TO UPPER CASE.
+        READ TABLE lt_tpfypropty INTO ls_tpfypropty
+        WITH KEY paraname = lv_parname BINARY SEARCH.
+        IF ls_tpfypropty-descr = lc_missing.
+          CLEAR ls_tpfypropty-descr.
+        ENDIF.
+
+        IF ls_tpfypropty-descr IS INITIAL.
+          ls_tpfypropty-descr = lc_null.
+        ENDIF.
+
+        READ TABLE lt_sub INTO ls_sub WITH KEY pname = ls_usub-pname.
+        IF sy-subrc NE 0.
+          CLEAR ls_sub.
+        ENDIF.
+
+        CONCATENATE lv_parname lv_paruser_wert ls_sub-default_wert
+        ls_usub-default_wert ls_tpfypropty-descr
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+
+        CLEAR: ls_sub, ls_usub, lv_parname, lv_paruser_wert,
+        lv_pardefault_wert, ls_tpfypropty, lv_parstatus.
+
+      ENDLOOP.
+      FREE: lt_tpfypropty, lt_tpfypropty_upd, lt_sub, lt_usub.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  IF lt_output[] IS NOT INITIAL.
+    "Adding NULL values in between
+    DO.
+      REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+      IN TABLE lt_output WITH '|NULL|'.
+      FIND '||' IN TABLE lt_output.
+      IF sy-subrc <> 0.
+        EXIT .
+      ENDIF.
+    ENDDO.
+
+  ENDIF.
+ENDFORM.                    "get_config

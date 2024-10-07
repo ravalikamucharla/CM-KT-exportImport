@@ -1,0 +1,31 @@
+---
+- name: table_splitting | Setting up table splitting files
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    file_path:
+      - tblsplt_order.py
+  set_fact:
+    path: "{{ lookup('first_found', file_path) }}"
+  delegate_to: localhost
+  tags: tab_split_order_by 
+
+- name: table_splitting | Create table-splitting directory
+  file:
+    path: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/table_splitting"
+    owner: "{{ cloudmigrate_server_sudo_user }}"
+    group: "{{ cloudmigrate_server_sudo_user_group }}"
+    mode: '0755'
+    state: directory
+  delegate_to: localhost
+  tags: tab_split_order_by 
+
+- name: table_splitting | Execute the command 
+  command: python3 {{path}} --input="{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/ZCM_ORACLE_TOP_TABLES_EXP.json" --size_in_GB="5" --output="{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/table_splitting"
+  delegate_to: localhost
+  tags: tab_split_order_by 
+
+- copy:
+    src: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/table_splitting/"
+    dest: "{{ params.export.mainExportDir }}"
+    mode: '0777'
+  tags: tab_split_order_by 

@@ -1,0 +1,5 @@
+virtual_hostname: "{{ source.sap.logical_hosts.ascs.hostname }}"
+virtual_ip: "{{ source.sap.logical_hosts.ascs.ip }}"
+os_user: "{{ users.os.source.ascs }}"
+os_type: "{{ source.sap.os_type.ascs }}"
+instance_number: "{{ source.sap.instance_numbers.ascs }}"

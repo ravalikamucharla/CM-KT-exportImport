@@ -1,0 +1,197 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_EXP_RSPARAM_DETAILS_HVER                *
+* Title               :   Export Memory Settings                      *
+* Purpose             :   To Capture Memory settings from RSPARAM     *
+*                         report                                      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RSPARAM                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*   X                       X                                         *
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*05-18-2021  Initial  Yasaswini K    Local    To Capture memory       *
+*                                             settings from RSPARAM   *
+*09-28-2022  V001     Soumya Ray     Local    To pass 'No data found' *
+*                                             in case of no data in   *
+*                                             system                  *
+*---------------------------------------------------------------------*
+REPORT zcm_exp_rsparam_details_hver.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                  LENGTH 1,
+             lc_null      TYPE c VALUE 'NULL'               LENGTH 4,
+             lc_noinput   TYPE c VALUE 'No input given'
+                                                            LENGTH 20,
+             lc_inc_input TYPE c VALUE 'Incorrect input'    LENGTH 20,
+             lc_export    TYPE c VALUE 'EXPORT'             LENGTH 6,
+             lc_title     TYPE c VALUE 'Profile Parameters'
+                                                            LENGTH 25,
+             lc_name      TYPE c VALUE 'ParameterName'      LENGTH 15,
+             lc_user      TYPE c VALUE 'UserDefinedValue'
+                                                            LENGTH 20,
+             lc_system    TYPE c VALUE 'SystemDefaultValue'
+                                                            LENGTH 22,
+             lc_unsub     TYPE c VALUE 'SystemDefaultUnsubst'
+                                                            LENGTH 24,
+             lc_comment   TYPE c VALUE 'Comment'            LENGTH 7,
+* Begin of changes in V001
+             lc_error     TYPE c VALUE 'No data found'      LENGTH 40.
+* End of changes in V001
+
+  DATA: ls_output        TYPE tab512,
+        ls_input         TYPE tab512,
+        lv_action        TYPE char6,
+        tt_sub           TYPE spfl_parameter_list_t,
+        tt_usub          TYPE spfl_parameter_list_t,
+        lv_rc            TYPE i,
+        lv_par_value2    TYPE string,
+        lv_par_user_wert TYPE pfeparname,
+        lv_item_value    TYPE pfeparname,
+        lv_sub_value     TYPE pfeparname,
+        lv_description   TYPE pfecomment,
+        ls_metadata      TYPE spfl_parameter_metadata,
+        ls_item          TYPE spfl_parameter_list,
+        ls_sub           TYPE spfl_parameter_list.
+
+  CLEAR: ls_output,ls_input, lv_action, lv_rc, lv_par_value2,
+         lv_par_user_wert, ls_metadata, ls_item, ls_sub,
+         lv_item_value, lv_sub_value, lv_description.
+
+  FREE: tt_sub,
+        tt_usub.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.               " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      "Get all parameter details
+      cl_spfl_profile_parameter=>get_all_parameter(
+            IMPORTING
+              parameter_sub = tt_sub
+              parameter_usub = tt_usub ).
+
+      "No data found
+      IF tt_usub IS INITIAL.
+        ls_output = lc_error.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+
+      SORT tt_sub BY name.
+      SORT tt_usub BY name.
+
+      "Column Headings
+      CONCATENATE lc_name   lc_sep
+      lc_user   lc_sep
+      lc_system lc_sep
+      lc_unsub  lc_sep
+      lc_comment INTO ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      LOOP AT tt_usub INTO ls_item.
+
+        "Get User defined Value
+        lv_rc = cl_spfl_profile_parameter=>get_value(
+        EXPORTING
+        name = ls_item-name
+        IMPORTING
+        value = lv_par_value2 ).
+
+        lv_par_user_wert = lv_par_value2.
+
+        IF ls_item-user_value IS INITIAL.
+          IF lv_par_value2 = ls_item-default_value.
+            lv_par_user_wert = space.
+          ENDIF.
+        ENDIF.
+
+        "Get Description of parameter
+        lv_rc = cl_spfl_profile_parameter=>get_metadata(
+        EXPORTING
+        name = ls_item-name
+        IMPORTING
+        metadata = ls_metadata ).
+
+        IF lv_rc <> 0 OR ls_metadata-description IS INITIAL.
+          ls_metadata-description = lc_null.
+        ENDIF.
+
+        "Get System Default value
+        READ TABLE tt_sub INTO ls_sub WITH KEY name = ls_item-name
+                                            BINARY SEARCH.
+
+        "Issue with blank spaces
+        CONDENSE ls_item-default_value.
+        CONDENSE ls_sub-default_value.
+
+        lv_item_value = ls_item-default_value.
+        lv_sub_value  = ls_sub-default_value.
+        lv_description = ls_metadata-description.
+* Begin of changes in V001
+        IF lv_description IS INITIAL.
+          lv_description = lc_null.
+        ENDIF.
+* End of changes in V001
+
+        CONCATENATE ls_item-name          lc_sep
+                    lv_par_user_wert      lc_sep
+                    lv_sub_value          lc_sep
+                    lv_item_value         lc_sep
+                    lv_description
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        CLEAR: ls_item, ls_sub, lv_par_value2, ls_metadata,
+               lv_par_user_wert, lv_rc, lv_item_value, lv_sub_value,
+               lv_description.
+
+      ENDLOOP.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  IF lt_output[] IS NOT INITIAL.
+    "Adding NULL values in between
+    DO.
+      REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+      IN TABLE lt_output WITH '|NULL|'.
+      FIND '||' IN TABLE lt_output.
+      IF sy-subrc <> 0.
+        EXIT .
+      ENDIF.
+    ENDDO.
+
+  ENDIF.
+ENDFORM.

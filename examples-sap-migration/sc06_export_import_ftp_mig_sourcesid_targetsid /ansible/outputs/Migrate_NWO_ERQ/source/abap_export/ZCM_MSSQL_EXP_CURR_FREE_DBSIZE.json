@@ -1,0 +1,4 @@
+{"OUTPUT": 
+    [
+    {"TITLE": "Current & Free DB size", "DATA": 
+        [{"RESULT": "This script is not valid for ['hana', 'sql', 'sybase', 'db2'] database"}]}]}

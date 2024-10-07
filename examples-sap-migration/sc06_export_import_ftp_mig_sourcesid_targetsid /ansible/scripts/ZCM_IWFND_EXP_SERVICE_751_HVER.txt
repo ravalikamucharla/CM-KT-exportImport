@@ -1,0 +1,689 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_IWFND_EXP_SERVICES_751_HVER             *
+* Title               :   Export Services in /IWFND/MAINT_SERVICE     *
+* Purpose             :   This report is used to Export Services      *
+*                         in /IWFND/MAINT_SERVICE for Cloud Migration *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* /IWFND/MAINT_SERVICE , /IWFND/R_MGW_REGISTRATION                    *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version    Author       TR#/Local     Description        *
+*---------------------------------------------------------------------*
+*08-25-2021  Initial   Ruchir Kamble  Local     To Export Services in *
+*                                               /IWFND/MAINT_SERVICE  *
+*---------------------------------------------------------------------*
+
+" Code referred from report /IWFND/R_MGW_REGISTRATION
+" Subrountine referred
+" Services     - GET_DATA_SERVICE
+" ICF Nodes    - GET_DATA_ICF
+" System Alias - GET_DATA_ALIAS
+
+REPORT zcm_iwfnd_exp_service_751_hver.
+
+LOAD-OF-PROGRAM.
+
+  TYPES: gtt_service  TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_service,
+         gtt_icf_node TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_icf,
+         gtt_alias    TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_alias.
+
+CLASS lcl_service DEFINITION FINAL.
+
+
+  PUBLIC SECTION.
+    METHODS:
+      get_services
+        EXPORTING
+          et_service TYPE gtt_service,
+
+      get_icf_node
+        IMPORTING
+          it_service        TYPE gtt_service
+          iv_srv_identifier TYPE /iwfnd/med_mdl_srg_identifier
+        EXPORTING
+          et_icfs           TYPE gtt_icf_node,
+
+      get_sys_alias
+        IMPORTING
+          iv_srv_identifier TYPE /iwfnd/med_mdl_srg_identifier
+        EXPORTING
+          et_sys_alias      TYPE gtt_alias.
+
+ENDCLASS.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep               TYPE c VALUE '|'                   LENGTH 1,
+    lc_null              TYPE c VALUE 'NULL'                LENGTH 4,
+    lc_export            TYPE c VALUE 'EXPORT'              LENGTH 6,
+    lc_title             TYPE c VALUE 'Services'            LENGTH 8,
+    lc_inc_input         TYPE c VALUE 'Incorrect input'     LENGTH 20,
+    lc_noinput           TYPE c VALUE 'No input given'      LENGTH 20,
+    lc_no_data           TYPE c VALUE 'No data found'       LENGTH 20,
+    lc_service_catalog   TYPE c VALUE 'Service Catalog'     LENGTH 15,
+    lc_type              TYPE c VALUE 'Type'                LENGTH 4,
+    lc_tech_service_name TYPE c VALUE
+    'Technical Service Name'                                LENGTH 22,
+    lc_version           TYPE c VALUE 'Version'             LENGTH 7,
+    lc_description       TYPE c VALUE 'Service Description' LENGTH 20,
+    lc_ext_service_name  TYPE c VALUE
+    'External Service Name'                                 LENGTH 21,
+    lc_namespace         TYPE c VALUE 'Namespace'           LENGTH 9,
+    lc_oauth_scope       TYPE c VALUE 'OAuth scope exists'  LENGTH 18,
+    lc_soft_state        TYPE c VALUE 'Soft State Status'   LENGTH 17,
+    lc_proc_mode         TYPE c VALUE 'Processing Mode'     LENGTH 15,
+    lc_icfnodes          TYPE c VALUE 'ICF Nodes'           LENGTH 9,
+    lc_status            TYPE c VALUE 'Status'              LENGTH 6,
+    lc_icf_node          TYPE c VALUE 'ICF Node'            LENGTH 8,
+    lc_session_timeout   TYPE c VALUE
+    'Session Time-out Soft State'                           LENGTH 27,
+    lc_sys_alias         TYPE c VALUE 'System Aliases'      LENGTH 14,
+    lc_sap_sys_alias     TYPE c VALUE 'SAP System Alias'    LENGTH 16,
+    lc_default_sys       TYPE c VALUE 'Default System'      LENGTH 14,
+    lc_metadata          TYPE c VALUE 'Metadata'            LENGTH 8,
+    lc_user_role         TYPE c VALUE 'User Role'           LENGTH 9,
+    lc_host_name         TYPE c VALUE 'Host Name'           LENGTH 9.
+
+  DATA: ls_input     TYPE tab512,
+        ls_output    TYPE tab512,
+        lv_action    TYPE char6,
+        lr_service   TYPE REF TO lcl_service,
+        ls_service   TYPE /iwfnd/s_mgw_reg_service,
+        lt_service   TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_service,
+        lt_icfs      TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_icf,
+        lt_icfs_all  TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_icf,
+        ls_sys_alias TYPE /iwfnd/s_mgw_reg_alias,
+        lt_sys_alias TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_alias,
+        lt_alias_all TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_alias.
+
+  FIELD-SYMBOLS: <fs_icfs> TYPE /iwfnd/s_mgw_reg_icf.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, lv_action, ls_service, ls_sys_alias.
+
+  FREE: lt_output, lt_service, lt_icfs, lt_icfs_all, lt_sys_alias,
+        lt_alias_all.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      " Adding sub title to the output for Services
+      ls_output = lc_service_catalog.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Create object of class lcl_service
+      CREATE OBJECT lr_service.
+
+      IF lr_service IS BOUND.
+
+        " To get service catalog
+        CALL METHOD lr_service->get_services
+          IMPORTING
+            et_service = lt_service.
+
+        IF lt_service IS NOT INITIAL.
+
+          " Adding heading to the output for Services
+          CONCATENATE lc_type
+                      lc_tech_service_name
+                      lc_version
+                      lc_description
+                      lc_ext_service_name
+                      lc_namespace
+                      lc_oauth_scope
+                      lc_soft_state
+                      lc_proc_mode
+                      INTO ls_output
+                      SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_service INTO ls_service.
+
+            IF ls_service-type IS INITIAL.
+              ls_service-type = lc_null.
+            ENDIF.
+
+            IF ls_service-process_mode_text IS INITIAL.
+              ls_service-process_mode_text = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_service-type
+                        ls_service-service_name
+                        ls_service-service_version
+                        ls_service-description
+                        ls_service-external_service_name
+                        ls_service-namespace
+                        ls_service-oauth_scope_exists
+                        ls_service-soft_state_status
+                        ls_service-process_mode_text
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output, ls_service.
+
+          ENDLOOP.
+
+        ELSE.
+          " No data found
+          ls_output = lc_no_data.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " Adding empty space line in the output
+        ls_output = space.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding sub title to the output for ICF Nodes
+        ls_output = lc_icfnodes.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_service INTO ls_service.
+
+          " To get ICF Node
+          CALL METHOD lr_service->get_icf_node
+            EXPORTING
+              it_service        = lt_service
+              iv_srv_identifier = ls_service-srv_identifier
+            IMPORTING
+              et_icfs           = lt_icfs.
+
+          APPEND LINES OF lt_icfs TO lt_icfs_all.
+          FREE: lt_icfs.
+          CLEAR: ls_service.
+        ENDLOOP.
+
+        IF lt_icfs_all IS NOT INITIAL.
+
+          " Adding heading to the output for ICF Nodes
+          CONCATENATE lc_tech_service_name
+                      lc_status
+                      lc_icf_node
+                      lc_session_timeout
+                      lc_description
+                      INTO ls_output
+                      SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_icfs_all ASSIGNING <fs_icfs>.
+
+            CONCATENATE <fs_icfs>-srv_identifier
+                        <fs_icfs>-icon
+                        <fs_icfs>-icf_node
+                        <fs_icfs>-icf_description
+                        <fs_icfs>-icf_sess_time
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+          ENDLOOP.
+
+        ELSE.
+          " No data found
+          ls_output = lc_no_data.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+        " Adding empty space line in the output
+        ls_output = space.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding sub title to the output for System Alias
+        ls_output = lc_sys_alias.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_service INTO ls_service.
+
+          " To get System Aliases
+          CALL METHOD lr_service->get_sys_alias
+            EXPORTING
+              iv_srv_identifier = ls_service-srv_identifier
+            IMPORTING
+              et_sys_alias      = lt_sys_alias.
+
+          IF lt_sys_alias IS NOT INITIAL.
+
+            APPEND LINES OF lt_sys_alias TO lt_alias_all.
+            FREE: lt_sys_alias.
+          ENDIF.
+
+          CLEAR: ls_service.
+
+        ENDLOOP.
+
+        IF lt_alias_all IS NOT INITIAL.
+
+          " Adding headings to the output for System Alias
+          CONCATENATE lc_tech_service_name
+                      lc_sap_sys_alias
+                      lc_default_sys
+                      lc_metadata
+                      lc_user_role
+                      lc_host_name
+                      INTO ls_output
+                      SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          LOOP AT lt_alias_all INTO ls_sys_alias.
+
+            IF ls_sys_alias-host_name IS INITIAL.
+              ls_sys_alias-host_name = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_sys_alias-srv_identifier
+                        ls_sys_alias-system_alias
+                        ls_sys_alias-system_alias_description
+                        ls_sys_alias-is_default
+                        ls_sys_alias-is_def_for_meta
+                        ls_sys_alias-user_role
+                        ls_sys_alias-host_name
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output, ls_sys_alias.
+          ENDLOOP.
+
+        ELSE.
+          " No data found
+          ls_output = lc_no_data.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+      ENDIF.
+
+    WHEN OTHERS.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.
+
+CLASS lcl_service IMPLEMENTATION.
+
+  METHOD get_services.        " To get Services
+
+    FREE: et_service.
+
+    CONSTANTS:
+      lc_soft_active        TYPE c VALUE 'A'                 LENGTH 1,
+      lc_soft_inactive      TYPE c VALUE 'I'                 LENGTH 1,
+      lc_soft_not_supported TYPE c VALUE 'N'                 LENGTH 1,
+      lc_active             TYPE c VALUE 'Active'            LENGTH 6,
+      lc_inactive           TYPE c VALUE 'Inactive'          LENGTH 8,
+      lc_not_supported      TYPE c VALUE 'Not Supported'     LENGTH 13,
+      lc_disabled           TYPE c VALUE 'Active (disabled)' LENGTH 18,
+      lc_routing_based      TYPE c VALUE 'Routing-based'     LENGTH 14,
+      lc_deployed_only      TYPE c VALUE 'Co-deployed only'  LENGTH 16,
+      lc_outh2_pgmid        TYPE pgmid VALUE 'R3TR',
+      lc_outh2_object       TYPE trobjtype VALUE 'IWSG',
+      lc_oauth_impl         TYPE seoclskey-clsname
+                                 VALUE '/IWFND/CL_OAUTH_SCOPES'.
+
+    DATA:lv_softstate         TYPE abap_bool,
+         lv_scope_exists      TYPE boolean,
+         lv_outh_class_exists TYPE boolean,
+         ls_service           TYPE /iwfnd/s_mgw_reg_service,
+         ls_object            TYPE /iwfnd/if_oauth_scopes=>ty_s_object,
+         lt_parameters        TYPE /iwfnd/t_ifl_selection_par,
+         lt_service_groups    TYPE /iwfnd/t_med_rst_sg_headers,
+         ls_service_group     TYPE /iwfnd/s_med_rst_sg_header,
+         lt_srv_infos         TYPE /iwfnd/if_med_info=>ty_t_med_sin,
+         ls_srv_info          TYPE /iwfnd/if_med_info=>ty_s_med_sin,
+         lr_config_info       TYPE REF TO /iwfnd/if_config_info,
+         lr_oauth_scope_hdl   TYPE REF TO /iwfnd/if_oauth_scopes.
+
+    CLEAR: lv_softstate, lv_scope_exists, lv_outh_class_exists,
+           ls_service, ls_object, ls_service_group, ls_srv_info.
+
+    FREE: lt_parameters, lt_service_groups, lt_srv_infos.
+
+    lr_config_info = /iwfnd/cl_config_info=>get_config_provider( ).
+    lr_config_info->get_boolean_parameter(
+      EXPORTING
+        iv_name  = /iwfnd/if_config_info=>gc_softstate_enabled
+      IMPORTING
+        ev_value = lv_softstate ).
+
+*-read all Service Groups from DB
+    /iwfnd/cl_med_exploration=>query_for_service_groups(
+      EXPORTING
+        it_parameters              = lt_parameters
+      IMPORTING
+        et_matching_service_groups = lt_service_groups ).
+
+*-read complete /IWFND/I_MED_SIN table to fill missing information
+    /iwfnd/cl_med_info=>get_all_services(
+      IMPORTING
+        et_services = lt_srv_infos ).
+
+*-copy fields to ALV
+    LOOP AT lt_service_groups INTO ls_service_group.
+
+      MOVE-CORRESPONDING ls_service_group TO ls_service.
+
+      ls_service-service_name        = ls_service_group-object_name.
+      ls_service-external_service_name = ls_service_group-service_name.
+
+*---Type
+      CLEAR ls_srv_info.
+      READ TABLE lt_srv_infos INTO ls_srv_info
+      WITH TABLE KEY srv_identifier  = ls_service-srv_identifier
+                     is_active       = 'A'
+                     name =
+/iwfnd/if_med_info=>gcs_med_service_info_name-external_data_source_type.
+      ls_service-external_data_source_type = ls_srv_info-value.
+
+      CASE ls_service-external_data_source_type.
+        WHEN /iwfnd/cl_med_rem_activation=>gc_s_model_types-bep.
+          ls_service-type = 'BEP'.
+        WHEN /iwfnd/cl_med_rem_activation=>gc_s_model_types-bw.
+          ls_service-type = 'BW'.
+        WHEN /iwfnd/cl_med_rem_activation=>gc_s_model_types-hana.
+          ls_service-type = 'HANA'.
+        WHEN /iwfnd/cl_med_rem_activation=>gc_s_model_types-bopf.
+          ls_service-type = 'BOPF'.
+        WHEN /iwfnd/cl_med_rem_activation=>gc_s_model_types-iwf.
+          ls_service-type = 'IWF'.
+        WHEN OTHERS.
+          ls_service-type = space.
+      ENDCASE.
+
+*---External Data Source ID
+      CLEAR ls_srv_info.
+      READ TABLE lt_srv_infos INTO ls_srv_info
+      WITH TABLE KEY srv_identifier  = ls_service-srv_identifier
+                     is_active       = 'A'
+                     name =
+/iwfnd/if_med_info=>gcs_med_service_info_name-external_data_source_id.
+
+      ls_service-external_data_source_id = ls_srv_info-value.
+
+*---default Client
+      CLEAR ls_srv_info.
+      READ TABLE lt_srv_infos INTO ls_srv_info
+      WITH TABLE KEY srv_identifier = ls_service-srv_identifier
+                     is_active      = 'A'
+                     name           =
+     /iwfnd/if_med_info=>gcs_med_service_info_name-default_client.
+
+      ls_service-default_client = ls_srv_info-value.
+
+      IF lv_outh_class_exists EQ abap_true.
+*---check if an oauth scope has already been created for the service
+
+        CHECK lv_outh_class_exists EQ abap_true.
+
+        IF lr_oauth_scope_hdl IS NOT BOUND.
+
+          CREATE OBJECT lr_oauth_scope_hdl TYPE (lc_oauth_impl).
+
+        ENDIF.
+
+        ls_object-obj_name = ls_service_group-srv_identifier.
+        ls_object-object = lc_outh2_object.
+        ls_object-pgmid = lc_outh2_pgmid.
+
+        lv_scope_exists = lr_oauth_scope_hdl->check_scope_exists(
+                            is_object = ls_object ).
+
+        ls_service-oauth_scope_exists = lv_scope_exists.
+
+      ENDIF.
+
+*   map from the fixed value of Soft State status to the description
+      ls_service-soft_state_status_flag =
+      ls_service_group-soft_state_stat.
+
+      CASE ls_service_group-soft_state_stat.
+        WHEN lc_soft_active.
+          "Undefined -> Softstate is also active!
+          IF lv_softstate =
+            /iwfnd/if_mgw_core_types=>gcs_softstate_enabled-true OR
+
+             lv_softstate =
+            /iwfnd/if_mgw_core_types=>gcs_softstate_enabled-undefined.
+
+            ls_service-soft_state_status = lc_active. "Active
+          ELSE.
+            ls_service-soft_state_status = lc_disabled. "Disabled
+          ENDIF.
+
+        WHEN lc_soft_inactive.
+          ls_service-soft_state_status = lc_inactive. "Inactive
+
+        WHEN lc_soft_not_supported.       "Not Supported
+          ls_service-soft_state_status = lc_not_supported.
+      ENDCASE.
+
+      " map from the fixed value of Process Mode
+      " to the Mode description
+      ls_service-process_mode = ls_service_group-process_mode.
+      IF ls_service-process_mode =
+        /iwfnd/if_mgw_core_types=>gcs_process_mode-routing_based.
+        ls_service-process_mode_text = lc_routing_based.
+      ELSEIF ls_service-process_mode =
+        /iwfnd/if_mgw_core_types=>gcs_process_mode-co_deployed_only.
+        ls_service-process_mode_text = lc_deployed_only.
+      ENDIF.
+
+      APPEND ls_service TO et_service.
+      CLEAR: ls_service, ls_service_group.
+    ENDLOOP.
+
+    SORT et_service BY external_service_name ASCENDING.
+
+  ENDMETHOD.
+
+  METHOD get_icf_node.      " To get ICF Nodes
+
+    FREE: et_icfs.
+
+    CONSTANTS:
+      lc_serv_active   TYPE c VALUE 'Service is active'   LENGTH 17,
+      lc_serv_inactive TYPE c VALUE 'Service is inactive' LENGTH 19,
+      lc_serv_initial  TYPE c VALUE 'Service is initial'  LENGTH 20,
+      lc_icf_initial   TYPE string   VALUE 'ICF_INITIAL',
+      lc_icf_deactive  TYPE string   VALUE 'ICF_DEACTIVE',
+      lc_icf_active    TYPE string   VALUE 'ICF_ACTIVE'.
+
+    DATA: lv_alter_name     TYPE icfaltnme,
+          lv_active         TYPE flag,
+          ls_icf            TYPE /iwfnd/s_mgw_reg_icf,
+          lt_icfs           TYPE STANDARD TABLE OF /iwfnd/s_mgw_reg_icf,
+          lt_icfdocu        TYPE /iwfnd/cl_icf_access=>ty_t_icfdocu,
+          ls_icfdocu        TYPE icfdocu,
+          ls_service        TYPE /iwfnd/s_mgw_reg_service,
+          lr_icf_access     TYPE REF TO /iwfnd/cl_icf_access.
+
+    FIELD-SYMBOLS <ls_icf> TYPE /iwfnd/s_mgw_reg_icf.
+
+    CLEAR: lv_alter_name, lv_active, ls_icf, ls_icfdocu, ls_service.
+
+    FREE: lt_icfdocu.
+
+    lr_icf_access = /iwfnd/cl_icf_access=>get_icf_access( ).
+
+    IF lt_icfs IS INITIAL.
+      lt_icfdocu = lr_icf_access->get_icf_docu_for_gw_libs( ).
+
+      LOOP AT lt_icfdocu INTO ls_icfdocu.
+        CLEAR ls_icf.
+        ls_icf-icf_node         = ls_icfdocu-icf_name.
+        ls_icf-icf_description  = ls_icfdocu-icf_docu.
+
+*-----Get the Node GUID
+        lv_alter_name = ls_icfdocu-icf_name.
+        ls_icf-icf_lib_guid = lr_icf_access->get_node_guid(
+                              iv_icf_parent_guid = ls_icfdocu-icfparguid
+                              iv_icf_node_name   = lv_alter_name
+                              ).
+
+*-----read selected service
+        ls_icf-srv_identifier = iv_srv_identifier.
+        READ TABLE it_service INTO ls_service
+             WITH KEY srv_identifier = iv_srv_identifier.
+
+        "Generic Channel Services are in camel case /
+        " conflict with ICF Alternative name in table ICFSERVICE
+        TRANSLATE ls_service-external_service_name TO UPPER CASE.
+
+*-----get all icf node GUIDS for service and lib
+        lr_icf_access->get_icf_guids_for_service(
+          EXPORTING
+            iv_icf_root_node_guid = ls_icf-icf_lib_guid
+            iv_namespace          = ls_service-namespace
+            iv_external_name      = ls_service-external_service_name
+          IMPORTING
+            ev_service_guid       = ls_icf-icf_service_guid
+            ev_namespace_guid     = ls_icf-icf_namespace_guid
+            ev_service_timeout    = ls_icf-icf_sess_time
+        ).
+
+        APPEND ls_icf TO et_icfs.
+        CLEAR: ls_icf,ls_icfdocu.
+      ENDLOOP.
+
+    ENDIF.
+
+*-get status and set icon
+    LOOP AT et_icfs ASSIGNING <ls_icf>.
+
+*---is service active?
+      TRY .
+          lv_active = lr_icf_access->is_service_active_by_nodeguid(
+           iv_nodeguid = <ls_icf>-icf_service_guid ).
+
+          IF lv_active = abap_true.
+            <ls_icf>-status = lc_icf_active.
+            <ls_icf>-icon = lc_serv_active.
+          ELSE.
+            <ls_icf>-status = lc_icf_deactive.
+            <ls_icf>-icon = lc_serv_inactive.
+          ENDIF.
+
+        CATCH /iwfnd/cx_cos_icf.
+          <ls_icf>-status = lc_icf_initial.
+          <ls_icf>-icon = lc_serv_initial.
+
+      ENDTRY.
+
+      CLEAR: lv_active.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD get_sys_alias.     " To get System Alias
+
+    FREE: et_sys_alias.
+
+    DATA:
+      lv_error     TYPE string,
+      ls_sys_alias TYPE /iwfnd/s_mgw_reg_alias,
+      lr_inst_man  TYPE REF TO /iwfnd/cl_mgw_inst_man_dba,
+      lr_dest      TYPE REF TO /iwfnd/cl_destin_finder,
+      lr_excp      TYPE REF TO /iwfnd/cx_destin_finder,
+      lt_alias     TYPE
+      /iwfnd/cl_mgw_inst_man_dba=>ty_gt_system_aliases.
+
+    FIELD-SYMBOLS: <fs_alias> TYPE
+                   /iwfnd/cl_mgw_inst_man_dba=>ty_gs_system_alias.
+
+    CLEAR: lv_error, ls_sys_alias.
+
+    FREE: lt_alias.
+
+    lr_inst_man =
+    /iwfnd/cl_mgw_inst_man_dba=>get_inst_man_dba( ).
+
+    lr_dest =
+    /iwfnd/cl_destin_finder=>get_destination_finder( ).
+
+    TRY.
+        " To get system aliases in the system
+        lt_alias =
+        lr_inst_man->get_system_aliases_all_for_srv(
+                                      iv_srv_identifier ).
+
+        LOOP AT lt_alias ASSIGNING <fs_alias>.
+
+          MOVE-CORRESPONDING <fs_alias> TO ls_sys_alias.
+          ls_sys_alias-srv_identifier = iv_srv_identifier.
+
+          TRY.
+              " To get system alias description
+              ls_sys_alias-system_alias_description =
+              lr_dest->get_system_alias_description(
+                  iv_system_alias = ls_sys_alias-system_alias
+                  iv_language     = sy-langu
+              ).
+
+            CATCH /iwfnd/cx_destin_finder INTO lr_excp.
+              lv_error = lr_excp->if_message~get_text( ).
+
+          ENDTRY.
+
+          APPEND ls_sys_alias TO et_sys_alias.
+          CLEAR : ls_sys_alias,lv_error.
+        ENDLOOP.
+
+      CATCH /iwfnd/cx_destin_finder INTO lr_excp.
+        lv_error = lr_excp->if_message~get_text( ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+ENDCLASS.

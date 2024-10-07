@@ -1,0 +1,87 @@
+- name: main | Restarting target primary database
+  block:
+    - name: stop hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: stop.yml
+
+    - name: status 
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: status.yml
+
+    - name: start hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: start.yml
+
+    - name: status 
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: status.yml
+  delegate_to: "{{ groups['target_master_db'][0] }}"
+
+- name: main | Restarting target secondary database
+  block:
+    - name: stop hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: stop.yml
+
+    - name: status 
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: status.yml
+
+    - name: start hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: start.yml
+
+    - name: status 
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: status.yml
+
+    - name: main | Set primary node to maintenance mode
+      command: sudo pcs property set maintenance-mode="false"
+      async: 12000
+      poll: 10
+      register: out
+      when: ansible_os_family == 'RedHat'
+
+    - debug: 
+        var: out
+
+    - name: main | Set primary node to maintenance mode
+      command: sudo crm configure property maintenance-mode="false"
+      async: 12000
+      poll: 10
+      register: output
+      when: ansible_os_family == 'Suse'
+
+    - debug: 
+        var: output
+
+    - name: main | Set primary node to maintenance mode
+      command: sudo pcs resource cleanup SAPHana_{{ sid | upper }}_02
+      async: 12000
+      poll: 10
+      register: out1
+      when: ansible_os_family == 'RedHat'
+
+    - debug: 
+        var: out1
+
+    - name: main | Set primary node to maintenance mode
+      command: sudo crm resource cleanup 
+      async: 12000
+      poll: 10
+      register: out1
+      when: ansible_os_family == 'Suse'
+
+    - debug: 
+        var: out1
+  when: ansible_hostname == node1 
+
+

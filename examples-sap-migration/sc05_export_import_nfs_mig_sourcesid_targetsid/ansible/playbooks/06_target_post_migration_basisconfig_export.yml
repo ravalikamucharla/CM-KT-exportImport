@@ -1,0 +1,15 @@
+---
+- hosts: localhost
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    stage: postmigrate_export
+    hostname: "{{ groups['target_pas'][0] }}"
+    hostip: "{{ hostvars[groups['target_pas'][0]].ansible_host }}"   
+  vars_files:
+    - ../inventory/group_vars/target_pas.yml
+    - ../inventory/host_vars/{{ groups['target_pas'][0] }}.yml
+    - ../../../../ansible-sap-migration-collection/roles/sap_abap_execute_queries/defaults/target_export.yml
+  roles:
+    - folder_creation
+    - sap_abap_execute_queries

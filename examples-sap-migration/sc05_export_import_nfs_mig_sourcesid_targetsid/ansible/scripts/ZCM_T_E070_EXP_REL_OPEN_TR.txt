@@ -1,0 +1,399 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_T_E070_EXP_REL_OPEN_TR                  *
+* Title               :   Check for open / unreleased TRs             *
+* Purpose             :   This report is used to release and/or export*
+*                         the list of open TRs (i.e - not released )  *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXX                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author           TR#/Local     Description     *
+*---------------------------------------------------------------------*
+*09-23-2020  Initial   Fathima Hussain   Local        To fetch open   *
+*                                                     TRS             *
+*07-09-2022  V001      Yasaswini K        Local       To add no data  *
+*                                                    found changes and*
+*                                                    to remove inline *
+*                                                    declarations     *
+*---------------------------------------------------------------------*
+REPORT zcm_t_e070_exp_rel_open_tr.
+
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c       VALUE '|',
+             lc_trkorr     TYPE c       VALUE 'Request' LENGTH 10,
+             lc_trfunction TYPE c       VALUE 'Type'
+                                                        LENGTH 4,
+             lc_trstatus   TYPE c       VALUE 'Status'  LENGTH 6,
+             lc_tarsystem  TYPE c       VALUE 'TargetSystem'
+                                                        LENGTH 12,
+             lc_korrdev    TYPE c       VALUE 'Category'
+                                                        LENGTH 8,
+             lc_as4user    TYPE c       VALUE 'Owner'   LENGTH 6,
+             lc_as4date    TYPE c       VALUE 'LastChangedOn'
+                                                        LENGTH 15,
+             lc_as4time    TYPE c       VALUE 'LastChangedAt'
+                                                        LENGTH 15,
+             lc_strkorr    TYPE c       VALUE 'HigherLevelRequest'
+                                                        LENGTH 30,
+             lc_export     TYPE char20   VALUE 'EXPORT',
+             lc_release    TYPE char20   VALUE 'RELEASE',
+             lc_msg_nodata TYPE string VALUE
+             'No data found',
+             lc_tr_deleted TYPE string VALUE
+             'Transport Request has been released',
+*  Begin of changes in V001
+             lc_title      TYPE c      VALUE
+             'RELANDOPENTRS'                               LENGTH 30,
+             lc_inc_input  TYPE c      VALUE
+             'Incorrect input'                             LENGTH 20,
+             lc_noinput    TYPE c      VALUE
+             'No input passed'                             LENGTH 20.
+*  End of changes in V001
+
+
+  DATA: ls_input    TYPE tab512,
+        ls_output   TYPE tab512,
+        ls_prefinal TYPE string,
+        lv_action   TYPE char8,
+        lv_index    TYPE sy-tabix,
+        lv_error    TYPE boolean,
+*  Begin of changes in V001
+        lt_e070     TYPE STANDARD TABLE OF e070,
+        ls_e070     TYPE e070,
+        lt_tasks    TYPE STANDARD TABLE OF e070,
+        ls_tasks    TYPE e070.
+*  End of changes in V001
+
+  CLEAR: ls_input, lv_action.
+
+*  Table name
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read the action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export OR lc_release.
+
+*     Read the list of unreleased TRs
+      SELECT * FROM e070 INTO TABLE lt_e070             "+V001
+        WHERE trfunction IN ('K','W','C','O','E','T')
+          AND trstatus IN   ('D','L').
+      IF sy-subrc <> 0.
+        ls_output = lc_msg_nodata.
+        APPEND ls_output TO lt_output.
+        RETURN.
+      ENDIF.
+
+      FREE: lt_output[].               "+V001
+
+      IF lv_action = lc_release.
+
+*      Table Name
+        ls_output = 'ReleaseTRs'.
+        APPEND ls_output TO lt_output.
+
+*      Table Name
+        ls_output = 'Status'.
+        APPEND ls_output TO lt_output.
+
+*     Read the list of tasks belonging to these TRs that need to be
+*     released
+        SELECT * FROM e070 INTO TABLE lt_tasks          "+V001
+          FOR ALL ENTRIES IN lt_e070
+          WHERE strkorr = lt_e070-trkorr.
+        IF sy-subrc <> 0.
+        ENDIF.
+
+
+
+* Release the tasks and then release the main TR. Track errors
+
+        LOOP AT lt_e070 INTO ls_e070.
+          lv_index = sy-tabix.
+
+
+
+*         Release tasks first
+          CLEAR lv_error.
+          LOOP AT lt_tasks INTO ls_tasks               "+V001
+            WHERE strkorr = ls_e070-trkorr
+            AND ( trstatus = 'D'
+            OR  trstatus = 'L' ).
+
+            CALL FUNCTION 'TR_RELEASE_REQUEST'
+              EXPORTING
+                iv_trkorr                  = ls_tasks-trkorr
+                iv_dialog                  = ' '
+                iv_as_background_job       = ' '
+                iv_success_message         = ' '
+                iv_display_export_log      = ' '
+              EXCEPTIONS
+                cts_initialization_failure = 1
+                enqueue_failed             = 2
+                no_authorization           = 3
+                invalid_request            = 4
+                request_already_released   = 5
+                repeat_too_early           = 6
+                error_in_export_methods    = 7
+                object_check_error         = 8
+                docu_missing               = 9
+                db_access_error            = 10
+                action_aborted_by_user     = 11
+                export_failed              = 12
+                OTHERS                     = 13.
+            IF sy-subrc = 5.
+            ELSEIF sy-subrc <> 0.
+              ls_output = ls_e070-trkorr.
+              APPEND ls_output TO lt_output.
+
+              MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+                 INTO ls_output.
+              APPEND ls_output TO lt_output.
+
+              lv_error = 'X'.
+              EXIT.
+
+            ENDIF.
+
+
+          ENDLOOP.
+
+*         If there was an issue, then proceed to next TR
+          IF lv_error = 'X'.
+            CONTINUE.
+          ENDIF.
+
+          CALL FUNCTION 'TR_RELEASE_REQUEST'
+            EXPORTING
+              iv_trkorr                  = ls_e070-trkorr
+              iv_dialog                  = ' '
+              iv_as_background_job       = ' '
+              iv_success_message         = ' '
+              iv_display_export_log      = ' '
+            EXCEPTIONS
+              cts_initialization_failure = 1
+              enqueue_failed             = 2
+              no_authorization           = 3
+              invalid_request            = 4
+              request_already_released   = 5
+              repeat_too_early           = 6
+              error_in_export_methods    = 7
+              object_check_error         = 8
+              docu_missing               = 9
+              db_access_error            = 10
+              action_aborted_by_user     = 11
+              export_failed              = 12
+              OTHERS                     = 13.
+*          FORM release_request
+          IF sy-subrc = 5.
+          ELSEIF sy-subrc <> 0.
+            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+               WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+               INTO ls_output.
+            CONCATENATE ls_e070-trkorr ':' ls_output
+              INTO ls_output.
+            APPEND ls_output TO lt_output.
+          ELSE.
+            CONCATENATE ls_e070-trkorr ':' lc_tr_deleted
+              INTO ls_output.
+            APPEND ls_output TO lt_output.
+            DELETE lt_e070 INDEX lv_index.
+          ENDIF.
+
+        ENDLOOP.
+
+*     Empty line
+        CLEAR ls_output.
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+
+
+*      Table Name
+      ls_output = 'OpenTRs'.
+      APPEND ls_output TO lt_output.
+
+      " Column Headings
+      CONCATENATE lc_trkorr     lc_sep
+                  lc_trfunction lc_sep
+                  lc_trstatus   lc_sep
+                  lc_tarsystem  lc_sep
+                  lc_korrdev    lc_sep
+                  lc_as4user    lc_sep
+                  lc_as4date    lc_sep
+                  lc_as4time    lc_sep
+                  lc_strkorr INTO ls_output.
+      APPEND ls_output TO lt_output.
+
+      IF lt_e070 IS INITIAL .
+        ls_output = lc_msg_nodata.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+      LOOP AT lt_e070 INTO ls_e070.
+        CONCATENATE  ls_e070-trkorr      lc_sep
+                     ls_e070-trfunction  lc_sep
+                     ls_e070-trstatus    lc_sep
+                     ls_e070-tarsystem   lc_sep
+                     ls_e070-korrdev     lc_sep
+                     ls_e070-as4user     lc_sep
+                     ls_e070-as4date     lc_sep
+                     ls_e070-as4time     lc_sep
+                     ls_e070-strkorr  INTO ls_prefinal.
+        PERFORM end_null_check CHANGING ls_prefinal.
+        ls_output = ls_prefinal.
+        APPEND ls_output TO lt_output.
+      ENDLOOP.
+
+      " Table Data
+      PERFORM null_check TABLES  lt_output.
+
+    WHEN OTHERS.
+*  Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+
+ENDFORM.
+
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+
+
+FORM null_check TABLES lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.
+
+
+
+
+
+
+FORM release_request USING    iv_trkorr TYPE e070-trkorr
+                     CHANGING cv_subrc  LIKE sy-subrc.
+
+  DATA : lv_trfunction LIKE e070-trfunction.
+
+*---Read request type for authority check-------------------------------
+  SELECT SINGLE trfunction FROM e070 INTO lv_trfunction
+                           WHERE trkorr = iv_trkorr.
+  IF sy-subrc <> 0.
+    MESSAGE e806(tr) WITH iv_trkorr RAISING invalid_request.
+  ENDIF.
+
+*---authority check-----------------------------------------------------
+  CALL FUNCTION 'TR_AUTHORITY_CHECK_TRFUNCTION'
+    EXPORTING
+      iv_trfunction = lv_trfunction
+      iv_activity   = 'RELE'
+    EXCEPTIONS
+      OTHERS        = 1.
+  IF sy-subrc <> 0.
+*    current_message_raising no_authorization.
+  ENDIF.
+
+
+*---enqueue request-----------------------------------------------------
+  CALL FUNCTION 'CTS_LOCK_TRKORR'        " eclipse compatible locking
+    EXPORTING
+      iv_trkorr = iv_trkorr
+    EXCEPTIONS
+      OTHERS    = 1.
+  IF sy-subrc  =    1.
+    cv_subrc = 1.
+    RETURN.
+*      current_message_raising enqueue_failed.
+  ENDIF.
+
+*---call trint_release_request------------------------------------------
+*    CLEAR lt_messages.
+  CALL FUNCTION 'TRINT_RELEASE_REQUEST'
+    EXPORTING
+      iv_trkorr                   = iv_trkorr
+      iv_dialog                   = ' '
+      iv_as_background_job        = ' '
+      iv_success_message          = ' '
+      iv_without_objects_check    = ' '
+      iv_without_locking          = ' '
+      iv_display_export_log       = ' '
+      iv_simulation               = ' '
+*      IMPORTING
+*     es_request                  = es_request
+*     et_deleted_tasks            = et_deleted_tasks
+*     et_messages                 = lt_messages
+    EXCEPTIONS
+      cts_initialization_failure  = 1
+      enqueue_failed              = 2
+      no_authorization            = 3
+      invalid_request             = 4
+      request_already_released    = 5
+      repeat_too_early            = 6
+      object_lock_error           = 7
+      object_check_error          = 8
+      docu_missing                = 9
+      db_access_error             = 10
+      action_aborted_by_user      = 11
+      export_failed               = 12
+      execute_objects_check       = 13
+      release_in_bg_mode          = 14
+      release_in_bg_mode_w_objchk = 15
+      error_in_export_methods     = 16
+      object_lang_error           = 17.
+
+  cv_subrc = sy-subrc.
+
+*---dequeue request-----------------------------------------------------
+  CALL FUNCTION 'CTS_UNLOCK_TRKORR'
+    EXPORTING
+      iv_trkorr = iv_trkorr
+    EXCEPTIONS
+      OTHERS    = 0.
+
+
+ENDFORM.

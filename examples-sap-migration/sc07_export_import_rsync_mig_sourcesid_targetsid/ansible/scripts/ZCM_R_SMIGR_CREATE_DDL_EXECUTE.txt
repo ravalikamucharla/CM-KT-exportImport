@@ -1,0 +1,137 @@
+*&---------------------------------------------------------------------*
+*&*******************************************************************&*
+* Report              :   ZCM_R_SMIGR_CREATE_DDL_EXECUTE              *
+* Title               :   Execute SMIGR_CREATE_DDL                    *
+* Created by          :   Fathima Hussain                             *
+* Created on          :   11/09/2020                                  *
+* Purpose             :   This report to execute SMIGR_CREATE_DDL     *
+*---------------------------------------------------------------------*
+REPORT ZCM_R_SMIGR_CREATE_DDL_EXECUTE.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+TABLES lt_input  STRUCTURE tab512
+  lt_output STRUCTURE tab512.
+
+  CONSTANTS : lc_sep   TYPE char1 VALUE '|',
+  l_c_true TYPE char1 VALUE 'X'.
+
+  DATA: ls_input     TYPE tab512,
+        ls_output    TYPE tab512,
+        lv_action    TYPE char20,
+        lv_path      TYPE string,
+        lv_dbvers    TYPE string,
+        lv_db_type   TYPE string,
+        lt_selection TYPE TABLE OF rsparams,
+        ls_selection LIKE LINE OF lt_selection,
+  BEGIN OF lt_ascilist OCCURS 0 ,
+    LINE(200),
+  END OF lt_ascilist,
+  ls_ascilist TYPE char200,
+  lt_list     TYPE TABLE OF abaplist,
+  lt_lines    TYPE TABLE OF soli,
+  ls_lines    TYPE soli.
+
+  DATA:
+        p_db2 TYPE boolean VALUE ' ',
+        p_db4 TYPE boolean VALUE ' ',
+        p_db6 TYPE boolean VALUE ' ',
+        p_ora TYPE boolean VALUE ' ',
+        p_msq TYPE boolean VALUE ' ',
+        p_mdb TYPE boolean VALUE ' ',
+        p_syb TYPE boolean VALUE ' ',
+        p_hdb TYPE boolean VALUE ' '.
+
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  CHECK sy-subrc EQ 0.
+  SPLIT ls_input AT lc_sep INTO
+  lv_action
+  lv_db_type
+  lv_dbvers
+  lv_path  .
+
+
+  ls_selection-selname = 'P_DBVERS'.
+  ls_selection-kind    = 'P'.
+  ls_selection-SIGN    = 'I'.
+  ls_selection-option  = 'EQ'.
+  ls_selection-low     = lv_dbvers.
+  "'SQL Server 2008 (R2) (max. 1000 partitions)'.
+  APPEND ls_selection TO lt_selection.
+
+  ls_selection-selname = 'P_PATH'.
+  ls_selection-kind    = 'P'.
+  ls_selection-SIGN    = 'I'.
+  ls_selection-option  = 'EQ'.
+  ls_selection-low     = lv_path.
+  "'/usr/sap/tmp'.
+  APPEND ls_selection TO lt_selection.
+
+  CASE lv_db_type.
+  WHEN 'DB2'.
+    p_db2 = l_c_true.
+  WHEN 'DB4'.
+    p_db4 = l_c_true.
+  WHEN 'DB6'.
+    p_db6 = l_c_true.
+  WHEN 'ORACLE'.
+    p_ora = l_c_true.
+  WHEN 'MSSQL'.
+    p_msq = l_c_true.
+  WHEN 'MaxDB'.
+    p_mdb = l_c_true.
+  WHEN 'Sybase ASE'.
+    p_syb = l_c_true.
+  WHEN 'SAP HANA Database'.
+    p_hdb = l_c_true.
+  WHEN OTHERS.
+  ENDCASE.
+
+
+  SUBMIT smigr_create_ddl WITH SELECTION-TABLE  lt_selection
+  WITH p_db2 = p_db2
+  WITH p_db4 = p_db4
+  WITH p_db6 = p_db6
+  WITH p_ora = p_ora
+  WITH p_msq = p_msq
+  WITH p_mdb = p_mdb
+  WITH p_syb = p_syb
+  WITH p_hdb = p_hdb
+  AND RETURN EXPORTING LIST TO MEMORY .
+
+  ls_output = 'SMIGR'.
+  APPEND ls_output TO lt_output.
+  ls_output = 'Result'.
+  APPEND ls_output TO lt_output.
+
+  CALL FUNCTION 'LIST_FROM_MEMORY'
+  TABLES
+    listobject = lt_list
+  EXCEPTIONS
+    not_found  = 1
+    OTHERS     = 2.
+  IF sy-subrc EQ 0.
+
+
+    CALL FUNCTION 'LIST_TO_ASCI'
+    TABLES
+      listasci           = lt_ascilist
+      listobject         = lt_list
+    EXCEPTIONS
+      empty_list         = 1
+      list_index_invalid = 2
+      OTHERS             = 3.
+
+    LOOP AT lt_ascilist INTO ls_ascilist.
+      IF ls_ascilist IS INITIAL.
+        ls_ascilist = 'NULL'.
+      ENDIF.
+      ls_output = ls_ascilist.
+      APPEND ls_output TO lt_output.
+    ENDLOOP.
+
+  ENDIF.
+
+ENDFORM.

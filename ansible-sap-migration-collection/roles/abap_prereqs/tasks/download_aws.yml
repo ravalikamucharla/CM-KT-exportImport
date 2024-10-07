@@ -1,0 +1,8 @@
+- name: download | download softwares
+  command: aws s3 cp s3://{{ bucket_name }}/{{ item.url }} "{{ item.dest }}" --recursive
+  args:
+    chdir: "/usr/local/sap"
+  with_items:
+    - "{{ downloads_path }}"
+  tags:
+    - download

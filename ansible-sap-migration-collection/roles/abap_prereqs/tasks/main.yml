@@ -1,0 +1,83 @@
+- name: Check Ansible Version
+  command: "ansible --version"
+  register: ansible_python_version
+
+- debug: 
+    msg: 
+      - ansible version="{{ ansible_python_version.stdout_lines[0].split()[1] }}"
+      - python version="{{ ansible_python_version.stdout_lines[5].split()[3] }}"
+
+- name: Check Ansible Version
+  command: "git --version"
+  register: git_version
+
+- debug: 
+    msg: 
+      - git version="{{ git_version.stdout_lines[0].split()[2] }}"
+      
+- name: create a home directory
+  become_method: sudo
+  become: yes
+  file: 
+    path: /usr/local/sap
+    state: directory
+    mode: '777'
+
+- name: Install azcopy
+  include_tasks: azcopy_install.yml
+
+- name: download softwares/binaries
+  include_tasks: download_{{ platform }}.yml
+
+- name: install package
+  package:
+    name: unzip
+
+- name: unzip the nwrfc750P_6-70002752.zip file and set environment variable
+  command: sudo su -c "unzip nwrfc750P_6-70002752.zip"
+  args:
+    chdir: /usr/local/sap
+  environment:
+    SAPNWRFC_HOME: /usr/local/sap/nwrfcsdk
+    PATH: $PATH:/usr/local/sap/nwrfcsdk/lib
+
+- name: Create a file nwrfcsdk.conf 
+  become_method: sudo
+  become: yes
+  file:
+    path: /etc/ld.so.conf.d/nwrfcsdk.conf
+    state: touch 
+
+- name: include nwrfcsdk lib path in nwrfcsdk.conf file
+  become_method: sudo
+  become: yes
+  lineinfile: 
+    path: /etc/ld.so.conf.d/nwrfcsdk.conf
+    line: /usr/local/sap/nwrfcsdk/lib
+
+- name: execute the config command
+  become_method: sudo
+  become: yes
+  command: ldconfig
+  
+
+- name: check if libraries are installed
+  command: ldconfig -p | grep sap
+  register: output_lib
+
+- debug: 
+    var: output_lib
+
+- name: Install pyrfc
+  command: sudo su -c "wget {{ pyrfc.url }}"
+  args:
+    chdir: /usr/local/sap
+
+- name: Install Python connector PYRFC
+  command: sudo pip3 install {{ pyrfc.file_name }}
+  register: pyrfc
+
+- name: delete azcopy folder
+  file:
+    path: /cm_sap_migration/azcopy
+    state: absent

@@ -1,0 +1,11 @@
+- name: Check NFS Service
+  service:
+   name: nfs
+   state: started
+  register: process_output
+  when: ("'source_ascs' not in group_names") and ("'target_ascs' not in group_names")
+  ignore_errors: true
+
+- name: Display Service Status
+  debug:
+    msg: "NFS Service is {{ 'running' if process_output.changed else 'not running' }}"

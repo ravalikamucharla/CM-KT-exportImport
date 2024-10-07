@@ -1,0 +1,9 @@
+[{% for data in db_outputs.results[index].stdout_lines %}
+    {% if (loop.index == 7 or loop.index == 11 or loop.index == 15 or loop.index == 19 or loop.index == 23 or loop.index == 27 or loop.index == 31 or loop.index == 35) and loop.index <= loop.length-1 %}
+        {
+            "data-val":{{ data }}
+            "device_name": "{{ data.split(' ')[1] }}",
+            "physical_name": "{{ data.split('         ')[1] }}"
+        },
+    {% endif %}   
+{% endfor %}]

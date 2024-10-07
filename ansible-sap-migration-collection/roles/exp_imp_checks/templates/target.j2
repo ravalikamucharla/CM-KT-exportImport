@@ -1,0 +1,10 @@
+# Target Checks
+---
+|HostName|swpm port status|
+|-|-|
+{% set row = [ 
+  ansible_hostname,
+  port_status 
+  ] 
+%}
+|{{ row | join('|') }}|

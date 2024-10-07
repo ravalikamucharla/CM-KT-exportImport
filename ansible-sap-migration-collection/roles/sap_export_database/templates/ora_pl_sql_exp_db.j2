@@ -1,0 +1,244 @@
+######################################################################################################################################################################
+#                                                                                                                                                                    #
+# Installation service 'SAP NetWeaver 7.5 > Oracle > System Copy > Source System > Based on AS ABAP > Database Instance Export', product id 'NW_Export:NW750.ORA.CP' #
+#                                                                                                                                                                    #
+######################################################################################################################################################################
+# IMPORTANT DO NOT DELETE!!! SAPInstDes25Hash=$nU7aq1GyRzPE$pbziOjO3tH27Mk09HeIEpjLtvI3R6cerpVrOk6i/jTA8mRo3rRv/qaowkVSbBpOJuuCqCOTrymbReYqrH02SQqys+YLSQa3c
+
+# Password for the Diagnostics Agent specific <dasid>adm user. Provided value may be encoded.
+# DiagnosticsAgent.dasidAdmPassword = 
+
+# Windows domain in which the Diagnostics Agent users must be created. This is an optional property (Windows only).
+# DiagnosticsAgent.domain = 
+
+# Windows only: Password for the Diagnostics Agent specific 'SAPService<DASID>' user.
+# DiagnosticsAgent.sapServiceDASIDPassword = 
+
+# Specify whether you want to decluster during the export.
+InitDeclusteringForExport.decluster = false
+
+# Sort order for export. Possible values are: 'SIZE', 'RUNTIME' , 'NAME'
+NW_ABAP_Export_Dialog.customPackageOrder = NAME
+
+# Custom sort order file which defines tables to be exported first. This parameter is valid if 'NW_ABAP_Export_Dialog.useCustomSortOrder' is set to 'true'.
+# NW_ABAP_Export_Dialog.customSortOrderFile = 
+
+# Time analyzer file from a previous export. This is  mandatory if 'NW_ABAP_Export_Dialog.useCustomPackageOrder' is set to 'true' and 'NW_ABAP_Export_Dialog.customPackageOrder' is set to 'RUNTIME'.
+# NW_ABAP_Export_Dialog.exportTimeFile = 
+
+# Time analyzer file from a previous import. This is optional if 'NW_ABAP_Export_Dialog.useCustomPackageOrder' is set to 'true' and 'NW_ABAP_Export_Dialog.customPackageOrder' is set to 'RUNTIME'.
+# NW_ABAP_Export_Dialog.importTimeFile = 
+
+# The number of jobs for group 'large'. This group contains packages sorted from the biggest value downwards, for example size or runtime.
+# NW_ABAP_Export_Dialog.jobNumberGroupLarge = 7
+
+# The number of jobs for group 'small'. This group contains packages sorted from the smallest value upwards, for example size or runtime.
+# NW_ABAP_Export_Dialog.jobNumberGroupSmall = 4
+
+# Communication host for the Migration Monitor
+# NW_ABAP_Export_Dialog.migmonComHost = 
+
+# Communication port for the Migration Monitor
+# NW_ABAP_Export_Dialog.migmonComPort = 
+
+# Communication type for the Migration Monitor. Possible values are: 'EXCHANGE', 'SOCKETS', none
+# NW_ABAP_Export_Dialog.migmonComType = EXCHANGE
+
+# Data transfer type for the Migration Monitor. Possible values are: 'NET', 'FTP', none
+# NW_ABAP_Export_Dialog.migmonDataTransferType = NET
+
+# FTP exchange directory for the Migration Monitor
+# NW_ABAP_Export_Dialog.migmonFtpExchangeDir = 
+
+# FTP export directory
+# NW_ABAP_Export_Dialog.migmonFtpExportDir = 
+
+# FTP host name or IP address
+# NW_ABAP_Export_Dialog.migmonFtpHost = 
+
+# Password of FTP user
+# NW_ABAP_Export_Dialog.migmonFtpPassword = 
+
+# Name of FTP user
+# NW_ABAP_Export_Dialog.migmonFtpUser = 
+
+# Number of parallel Migration Monitor jobs
+NW_ABAP_Export_Dialog.migmonJobNum = 48
+
+# Additional 'R3load' arguments for the LOAD phase
+NW_ABAP_Export_Dialog.migmonLoadArgs = -stop_on_error
+
+# Network exchange directory for the Migration Monitor
+NW_ABAP_Export_Dialog.migmonNetExchangeDir = {{ params.export.exp_migmonNetExchangeDir }}
+
+# Additional 'R3load' arguments for the TASK phase
+# NW_ABAP_Export_Dialog.migmonTaskArgs = 
+
+# If 'NW_ABAP_Export_Dialog.useSqlFiles' is set to 'NOSQL' the export stops if non-standard ABAP objects are detected in the database. Set it to 'true' to skip this error. The  default value is 'false'.
+# NW_ABAP_Export_Dialog.nonStandardAbapObjectsHandlingSkip = false
+
+# Execute R3szck in parallel. Default is 'false'.
+NW_ABAP_Export_Dialog.parallelR3szchkExecution = true
+
+# Call R3szchk option -s with DDIC with database specific ('DD', 'DB').
+NW_ABAP_Export_Dialog.r3szchkDetermineSizeValue = DB
+
+# Number of parallel R3szck processes. Default is '10'.
+# NW_ABAP_Export_Dialog.r3szchkJobNum = 10
+
+# Export can be done from scratch or reusing files. Possible values are: 'COMPLETE', 'REPEAT','REUSE_FILES'
+# NW_ABAP_Export_Dialog.repeatExport = COMPLETE
+
+# Maximum number of tables per package
+# NW_ABAP_Export_Dialog.splitMaxTableNumVal = 1000
+
+# Number of tables to be extracted
+# NW_ABAP_Export_Dialog.splitPackageLimitVal = 1000
+
+# File with predefined tables to be extracted.
+NW_ABAP_Export_Dialog.splitTableFile = /Data/ORA_DUMP/ABAP/DATA/whr.txt
+
+# Table size limit in MB
+# NW_ABAP_Export_Dialog.splitTableLimitVal = 300
+
+# Package size limit in MB
+# NW_ABAP_Export_Dialog.splitTableNumVal = 10
+
+# 'true' to split packages with number of tables more than limit.
+# NW_ABAP_Export_Dialog.splitUseMaxTableNum = false
+
+# Set to 'true' to split packages with size more than limit.
+# NW_ABAP_Export_Dialog.splitUsePackageLimit = true
+
+# Set to 'true' to extract predefined tables specified in table file.
+NW_ABAP_Export_Dialog.splitUseTableFile = true
+
+# Set to 'true' to extract tables with size more than limit.
+NW_ABAP_Export_Dialog.splitUseTableLimit = true
+
+# Set to 'true' to split largest tables in separate packages.
+# NW_ABAP_Export_Dialog.splitUseTableNum = true
+
+# The directory where the SQL files are located
+NW_ABAP_Export_Dialog.sqlFileDir = /Data/DDL
+
+# Target database type, supported names are: 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB'
+NW_ABAP_Export_Dialog.targetDbType = ORA
+
+# Type of target hardware platform ('BIG_ENDIAN' or 'LITTLE_ENDIAN').
+NW_ABAP_Export_Dialog.targetHardwarePlatform = LITTLE_ENDIAN
+
+# Use an additional host for exporting the database. Only valid if 'NW_ABAP_Export_Dialog.targetDbType' is set to 'HDB'.
+# NW_ABAP_Export_Dialog.useAdditionalExportHosts = false
+
+# Enables setting advanced 'R3load' options
+NW_ABAP_Export_Dialog.useAdvancedUnloadConfig = true
+
+# Use custom package order for migration monitor.  Default value is 'false'.
+NW_ABAP_Export_Dialog.useCustomPackageOrder = true
+
+# Use a custom sort order file which defines the tables to be exported first. Default is 'false'.
+# NW_ABAP_Export_Dialog.useCustomSortOrder = false
+
+# Enables manual configuration and execution of the Migration Monitor
+# NW_ABAP_Export_Dialog.useMigMonConfig = false
+
+# Enables setting attribues for parallel export/import
+NW_ABAP_Export_Dialog.useParallelExportImport = true
+
+# Enables setting attribues for splitting of export packages.
+# NW_ABAP_Export_Dialog.useSplit = true
+
+# Use SQL files created by the ABAP program SMIGR_CREATE_DDL. Set to 'NOSQL' for performing the export without SQL files. Default value is 'USESQL'.
+# NW_ABAP_Export_Dialog.useSqlFiles = USESQL
+
+# 'true' if target system should be Unicode system, 'false' if non-Unicode.
+# NW_ABAP_Export_Dialog.useUnicodeTargetSystem = 
+
+# Enables unsorted unload for Migration Monitor.
+NW_ABAP_Export_Dialog.useUnsortedUnload = true
+
+# Specify whether the all operating system users are to be removed from group 'sapinst' after the execution of Software Provisioning Manager has completed.
+# NW_Delete_Sapinst_Users.removeUsers = false
+
+# UNIX only: If this parameter is set to 'RESTRICTED' the export subdirectories will belong to '<sapsid>adm:sapsys' with permission '700'. Leave empty for default.
+# NW_Export.accessLevel4ExportDir = DEFAULT
+
+# Default Value is false. Set it to 'true' if want to use dedicated kernel archives for the ABAP export.
+NW_Export.choiceSepKernel = true
+
+# Main export directory with ABAP and Java subdirectories
+NW_Export.mainExportDir = /Data/ORA_DUMP
+
+# Set this parameter to 'true' if you want the running system to be stopped before data is unloaded.
+NW_Export.stopRunningSystem = false
+
+# The database host
+NW_getDBInfoGeneric.dbhost = gsc70oracle
+
+# The database ID (DBSID)
+NW_getDBInfoGeneric.dbsid = NW1
+
+# Only use this parameter if recommended by SAP.
+# NW_getDBInfoGeneric.strictDbSidCheck = true
+
+# The FQDN of the system
+# NW_getFQDN.FQDN = 
+
+# Specify whether you want to set FQDN for the system.
+# NW_getFQDN.setFQDN = true
+
+# The load type chosen by the user. Valid values are: 'SAP', 'STD', 'OBR', 'HCP', 'FLASHCOPY', 'MDA', 'HBR', 'SBR'
+NW_getLoadType.loadType = STD
+
+# ABAP system is Unicode (true|false), only needed if it cannot be determined from the system.
+# NW_getUnicode.isUnicode = 
+
+# Provide  'profile' directory of SAP Netweaver-based system.
+NW_readProfileDir.profileDir = /usr/sap/NW1/SYS/profile
+
+# Windows only: The drive to use
+# NW_readProfileDir.sapdrive = 
+
+# The folder containing all archives that have been downloaded from http://support.sap.com/swdc and are supposed to be used in this procedure
+archives.downloadBasket = /usr/sap/sapinst/KERNEL
+
+# Windows only: The domain of the SAP Host Agent user
+# hostAgent.domain = 
+
+# Password for the 'sapadm' user of the SAP Host Agent
+# hostAgent.sapAdmPassword = 
+
+# Windows only: The domain of all users of this SAP system. Leave empty for default.
+# nwUsers.sapDomain = 
+
+# Windows only: The password of the 'SAPServiceSID' user
+# nwUsers.sapServiceSIDPassword = 
+
+# UNIX only: The user ID of the 'sapadm' user, leave empty for default. The ID is ignored if the user already exists.
+# nwUsers.sapadmUID = 
+
+# UNIX only: The group id of the 'sapsys' group, leave empty for default. The ID is ignored if the group already exists.
+nwUsers.sapsysGID = 79
+
+# UNIX only: The user id of the <sapsid>adm user, leave empty for default. The ID is ignored if the user already exists.
+nwUsers.sidAdmUID = 54322
+
+# The password of the '<sapsid>adm' user
+# nwUsers.sidadmPassword = 
+
+# 'UPDATE' if database statistics should be updated before export, 'SKIP' to skip statistics update.
+# ora.updateStatisticsCode = UPDATE
+
+# possible values are
+#         isSingle:  Database on filesystem exist.
+#         isSHOH:    Database installation with SHared Oracle Home.
+#         isASM:     Database on ASM.
+#         isRAC:     Database on RAC.
+#         isRacAsm:  Database on RAC and ASM.
+ora.whatInstallation = true
+
+# possible values are
+#         true:  Database Software installed as oracle user.
+#         false: Database Software installed as orasid user.
+# ora.whatIsOracleUser = true

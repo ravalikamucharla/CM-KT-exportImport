@@ -1,0 +1,4 @@
+{"OUTPUT": [
+    {"TITLE": "Fiori Launchpad Checks", "DATA": [{"RESULT": "This script is not valid for ['hana', 'sql', 'sybase', 'db2'] database"}]}, 
+    {"TITLE": "Stringfields", "DATA": [{"RESULT": "This script is not valid for ['hana', 'sql', 'sybase', 'db2'] database"}]},
+    {"TITLE": "Fiori Launchpad Intent Checks", "DATA": [{"RESULT": "This script is not valid for ['hana', 'sql', 'sybase', 'db2'] database"}]}]}

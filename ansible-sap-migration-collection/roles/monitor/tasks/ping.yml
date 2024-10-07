@@ -1,0 +1,7 @@
+- name: Ping server
+  ping:
+  register: ping_result
+
+- name: Display ping results
+  debug:
+    var: ping_result

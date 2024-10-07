@@ -1,0 +1,47 @@
+- name: Register node
+  block:
+    - name: stop hana
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: stop.yml
+
+    - name: status 
+      include_role: 
+        name: sap_db_start_stop
+        tasks_from: status.yml
+
+    - name: register node
+      command: "{{ item }}"
+      loop:
+        - sudo su - {{ sid|lower }}adm -c "hdbnsutil -sr_register --remoteHost={{ rep_source_db }} --remoteInstance={{ instance_number }} --replicationMode={{ rep_mode }} --operationMode={{ oper_mode | default(logreplay) }} --name={{ rep_target_db }}"
+        - sleep 20
+      register: result
+      async: 12000
+      poll: 3
+      failed_when: 
+        - result.rc != 0 
+        - not "this site is already enabled as source site" in result.stdout
+  when: reg_mode == 'register'
+
+- name: register node
+  command: "{{ item }}"
+  loop:
+    - sudo su - {{ sid|lower }}adm -c "hdbnsutil -sr_register --remoteHost={{ rep_source_db }} --remoteInstance={{ instance_number }} --replicationMode={{ rep_mode }} --operationMode={{ oper_mode | default(logreplay) }} --name={{ rep_target_db }} --online"
+    - sleep 20
+  register: result
+  async: 12000
+  poll: 10
+  failed_when: 
+    - result.rc != 0 
+    - not "this site is already enabled as source site" in result.stdout
+  when: reg_mode == 'register_online'
+
+- name: start hana
+  include_role: 
+    name: sap_db_start_stop
+    tasks_from: start.yml
+
+- name: status 
+  include_role: 
+    name: sap_db_start_stop
+    tasks_from: status.yml

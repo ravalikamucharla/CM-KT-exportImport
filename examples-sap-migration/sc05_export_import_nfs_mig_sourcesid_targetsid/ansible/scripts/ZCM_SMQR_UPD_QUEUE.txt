@@ -1,0 +1,240 @@
+*&*******************************************************************&*
+* Report              :   ZCM_SMQR_UPD_QUEUE                          *
+* Title               :   Restore Queue in SMQR                       *
+* Purpose             :   This report is used to export logon group   *
+*                     :   details from tcode SMLG pre migration       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*11-26-2020  Initial  Ruchir Kamble Local        To restore Queue in  *
+*                                                SMQR                 *
+*28-09-2022  V001     Yasaswini K   Local        To remove inline dec *
+*                                                and dead code        *
+*---------------------------------------------------------------------*
+REPORT zcm_smqr_upd_queue.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep        TYPE c VALUE '|'         LENGTH 1,
+             lc_insert     TYPE c VALUE 'I'         LENGTH 1,
+             lc_update     TYPE c VALUE 'U'         LENGTH 1,
+             lc_delete     TYPE c VALUE 'D'         LENGTH 1,
+             lc_register   TYPE c VALUE 'R'         LENGTH 1,
+             lc_deregister TYPE c VALUE 'U'         LENGTH 1,
+             lc_limited    TYPE c VALUE 'E'         LENGTH 1,
+             lc_title      TYPE c VALUE
+             'Restore SMQR'                         LENGTH 20,
+             lc_insert_msg TYPE c VALUE
+             'Number of entries created in SMQR : ' LENGTH 40,
+             lc_update_msg TYPE c VALUE
+             'Number of entries updated in SMQR : ' LENGTH 40,
+             lc_delete_msg TYPE c VALUE
+             'Number of entries deleted in SMQR : ' LENGTH 40,
+             lc_err_msg    TYPE c VALUE
+             'No entries to restore'                LENGTH 35.
+
+  DATA:ls_input    TYPE tab512,
+       ls_output   TYPE tab512,
+       lv_lines    TYPE i,
+       lv_cnt_ins  TYPE i,
+       lv_cnt_upd  TYPE i,
+       lv_cnt_del  TYPE i,
+* Begin of Changes V001
+       lv_ins      TYPE string,
+       lv_upd      TYPE string,
+       lv_del      TYPE string,
+* End of Changes V001
+       lv_action   TYPE char1,
+       lv_mandt    TYPE mandt,
+       lv_qname    TYPE trfcqnam,
+       lv_type     TYPE char1,
+       lv_exemode  TYPE char1,
+       lv_maxtime  TYPE char10,
+       lv_nretry   TYPE char4,
+       lv_tdelay   TYPE char10,
+       lv_userdest TYPE userdest,
+       lv_runtime  TYPE int4,
+       lv_pause    TYPE int4,
+       lv_attempts TYPE numc4.
+
+  PERFORM null_check TABLES lt_input.
+
+  CLEAR lv_lines.
+  DESCRIBE TABLE lt_input LINES lv_lines.
+
+  " To delete header info from the input
+  DELETE lt_input FROM 1 TO 3.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  IF lv_lines < 2.
+
+    " No entries to restore
+    ls_output = lc_err_msg.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CLEAR:  lv_mandt, lv_qname, lv_type, lv_exemode,lv_maxtime,
+          lv_nretry, lv_tdelay, lv_userdest, lv_action,
+          lv_cnt_ins, lv_cnt_upd, lv_cnt_del.
+
+  " To delete duplicate values
+  DELETE ADJACENT DUPLICATES FROM lt_input.
+
+  LOOP AT lt_input INTO ls_input.
+
+    SPLIT ls_input AT lc_sep INTO
+          lv_mandt
+          lv_qname
+          lv_type
+          lv_exemode
+          lv_maxtime
+          lv_nretry
+          lv_tdelay
+          lv_userdest
+          lv_action.
+
+    IF lv_action EQ lc_delete.                " If action is Delete
+
+      " Fm to delete queue in SMQR
+      CALL FUNCTION 'QIWK_UNREGISTER'
+        EXPORTING
+          qname              = lv_qname
+        EXCEPTIONS
+          invalid_queue_name = 1
+          OTHERS             = 2.
+
+      IF sy-subrc EQ 0.
+        lv_cnt_del = lv_cnt_del + 1.
+      ENDIF.
+
+    ELSEIF lv_action EQ lc_insert.           " If action is Insert
+
+      " Converting String into INT4
+      lv_runtime  = lv_maxtime.
+      lv_attempts = lv_nretry.
+      lv_pause    = lv_tdelay.
+
+      " Fm to register new Queue in SMQR
+      CALL FUNCTION 'QIWK_REGISTER'
+        EXPORTING
+          qname              = lv_qname
+          exemode            = lv_exemode
+          maxtime            = lv_runtime
+          userdest           = lv_userdest
+          nretry             = lv_attempts
+          tdelay             = lv_pause
+        EXCEPTIONS
+          invalid_queue_name = 1
+          invalid_exe_mode   = 2
+          OTHERS             = 3.
+
+      IF sy-subrc EQ 0.
+        lv_cnt_ins = lv_cnt_ins + 1.
+      ENDIF.
+
+    ELSEIF lv_action EQ lc_update.          " If action is Update
+
+      IF lv_type EQ lc_register.
+
+        " Fm to register existing Queue in SMQR
+        CALL FUNCTION 'QIWK_REGISTER'
+          EXPORTING
+            qname              = lv_qname
+            userdest           = lv_userdest
+          EXCEPTIONS
+            invalid_queue_name = 1
+            invalid_exe_mode   = 2
+            OTHERS             = 3.
+
+        IF sy-subrc EQ 0.
+          lv_cnt_upd = lv_cnt_upd + 1.
+        ENDIF.
+
+      ELSEIF lv_type EQ lc_deregister.
+
+        " Fm to Deregister existing queue in SMQR
+        CALL FUNCTION 'QIWK_UNREGISTER'
+          EXPORTING
+            qname              = lv_qname
+            limited            = lc_limited
+          EXCEPTIONS
+            invalid_queue_name = 1
+            OTHERS             = 2.
+
+        IF sy-subrc = 0.
+          lv_cnt_upd = lv_cnt_upd + 1.
+        ENDIF.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDLOOP.
+
+* Begin of Changes V001
+  "Removing inline declarations
+  lv_ins = lv_cnt_ins.
+  lv_upd = lv_cnt_upd.
+  lv_del = lv_cnt_del.
+
+  CONDENSE lv_ins.
+  CONDENSE lv_upd.
+  CONDENSE lv_del.
+
+  CONCATENATE lc_insert_msg lv_ins INTO ls_output
+  SEPARATED BY space.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CONCATENATE lc_update_msg lv_upd INTO ls_output
+  SEPARATED BY space.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CONCATENATE lc_delete_msg lv_del INTO ls_output
+  SEPARATED BY space.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of Changes V001
+
+ENDFORM.
+
+FORM null_check TABLES lt_table TYPE table.
+
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '|NULL|'
+    IN TABLE lt_table WITH '| |'.
+    FIND '|NULL|' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '|NULL'
+    IN TABLE lt_table WITH '| '.
+    FIND '|NULL' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

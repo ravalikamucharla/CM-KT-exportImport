@@ -1,0 +1,22 @@
+#################################### port status ############################################
+- name: To check if ports are open 
+  command: nc -vz {{ hostip }} 4237
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  register: port_status
+  failed_when: port_status.rc not in [0,1]
+
+- name: copy the content of port status to a file
+  set_fact: 
+    port_status: "{{ port_status.stderr.split('] ')[1] | replace('!','') }}"
+  when: port_status.stderr is search('succeeded')
+
+- name: copy the content of port status to a file
+  set_fact: 
+    port_status: "{{ port_status.stderr.split()[-2] }} {{ port_status.stderr.split()[-1] }}"
+  when: port_status.stderr is search('Connection refused')
+
+- name: source checks
+  template:
+    src: "source.j2"
+    dest: "{{ output }}/source_checks.md"
+  delegate_to: localhost

@@ -1,0 +1,155 @@
+---
+- name: Delete old logs files
+  win_file:
+    path: "C:\\Program Files\\sapinst_instdir"
+    state: absent
+  tags: table_split
+
+- win_file:
+    path: "C:\\Users\\cloudcoe\\.sapinst"
+    state: absent
+  tags: table_split
+
+- name: check for additional install items
+  win_shell: (Get-Childitem –Path E:\SilentInstall\EXPORT\NetWeaver75\ABAP\ -Include *LABEL*.ASC -Recurse | Select-Object -Property Directory -unique).Directory.FullName
+  register: sap_exports_folders
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- debug:
+    var: sap_exports_folders
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- name: check for additional install items
+  win_shell: (Get-Childitem –Path E:\SilentInstall\sybase -Include "*.ZIP" -Recurse | Select-Object -Property FullName).FullName
+  register: sybase_software_path
+  when: sybase is defined
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- name: main | set installation directory facts
+  set_fact:
+    sybase_zip_path: "{{ sybase_software_path.stdout_lines[0] }}"
+  when: sybase is defined
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- name: create sapinst.params
+  template:
+    src: exp_tablesplit_windows.j2
+    dest: "E:\\{{ role }}_tablesplit_{{hostname}}.params"
+  tags: table_split
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: set sapinst command line arguments
+  set_fact:
+    win_sap_install_arguments: >-
+      SAPINST_INPUT_PARAMETERS_URL=E:\{{ role }}_tablesplit_{{hostname}}.params
+      SAPINST_CWD=E:\{{ role }}_tablesplit_Logs
+      SAPINST_EXECUTE_PRODUCT_ID={{ params.product_ids.table_split }}
+      SAPINST_USE_HOSTNAME={{ hostname }}
+      SAPINST_SKIP_DIALOGS=true
+      SAPINST_START_GUISERVER=true
+      SAPINST_START_GUI=true
+    win_sap_install_sapinst_path: "E:\\SilentInstall\\SWPM\\sapinst.exe"
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- debug: var=win_sap_install_arguments
+
+- name: validate the required win_sap_install_arguments variable
+  assert:
+    that:
+      - win_sap_install_arguments is defined
+      - win_sap_install_arguments | length
+  tags: table_split
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: validate that the path to sapinst.exe has been passed
+  assert:
+    that:
+      - win_sap_install_sapinst_path is defined
+      - win_sap_install_sapinst_path is regex('^.+sapinst.exe$')
+  tags: table_split
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: stat the sapinst.exe path
+  win_stat:
+    path: "{{ win_sap_install_sapinst_path }}"
+  register: win_sap_install_sapinst_stat
+  tags: table_split
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+- name: validate that the sapinst.exe file exists
+  assert:
+    that:
+      - win_sap_install_sapinst_stat.stat.exists
+  tags: table_split
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+
+  # due to a known error the sap installation can fail in the initial attempt
+  # however a subsequent installation can be successfully performed
+  # based on the actions of the first installation attempt
+  # therefor ignore_errors on install attempt one
+- name: install sap
+  vars:
+    ansible_become_user: "{{ ansible_user }}"
+    ansible_become_pass: "{{ ansible_password }}"
+  win_sap_install:
+    arguments: "{{ win_sap_install_arguments }}"
+    checks: "{{ win_sap_install_checks }}"
+    delay: "{{ win_sap_install_delay }}"
+    path: "{{ win_sap_install_sapinst_path }}"
+    sleep: "{{ win_sap_install_sleep }}"
+    timeout: "{{ win_sap_install_timeout }}"
+  register: win_sap_inst
+  become: yes
+  become_method: runas
+  tags: table_split
+
+- name: debug win_sap_inst
+  debug:
+    var: win_sap_inst
+    verbosity: "{{ verbosity_level }}"
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- name: fail if the installation failed other than the known issue
+  fail:
+    msg: "SAP installation failed"
+  when:
+    - win_sap_inst is failed
+    - win_sap_inst.msg != 'The sapinst process was forcibly stopped'
+  become: yes
+  become_user: "{{ ansible_user }}"
+  become_method: runas
+  tags: table_split
+
+- debug:
+    var: export_expre
+  tags: 
+    - table_split
+    - retry_table_split

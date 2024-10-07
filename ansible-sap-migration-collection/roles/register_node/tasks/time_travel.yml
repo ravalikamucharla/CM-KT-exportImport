@@ -1,0 +1,28 @@
+- name: stop hana
+  include_role: 
+    name: sap_db_start_stop
+    tasks_from: stop.yml
+
+- name: status 
+  include_role: 
+    name: sap_db_start_stop
+    tasks_from: status.yml
+
+- name: time travel 
+  command: hdbnsutil -sr_timetravel --startTime={{ time_travel_value }}
+  async: 12000
+  poll: 3
+  register: time_trav
+
+- debug:
+    var: time_trav
+
+- name: start hana
+  include_role: 
+    name: sap_db_start_stop
+    tasks_from: start.yml
+  
+- name: status 
+  include_role: 
+    name: sap_db_start_stop
+    tasks_from: status.yml

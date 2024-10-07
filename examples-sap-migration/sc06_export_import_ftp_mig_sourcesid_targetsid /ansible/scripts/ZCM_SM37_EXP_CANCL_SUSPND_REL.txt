@@ -1,0 +1,307 @@
+*---------------------------------------------------------------------*
+* Program Name        : ZCM_SM37_EXP_CANCL_SUSPND_REL                 *
+* Title               : SM37 Held/Failed Jobs                         *
+* Purpose             : This report is used to display list of Held   *
+*                       and Failed Jobs for last one weeek (SM37)     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM37                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TBTCO                     X                                         *
+* TBTCP                     X                                         *
+* TBTCCNTXT                 X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-30-2020  Initial  Yasaswini K     Local     This report is used   *
+*                                               to display held and   *
+*                                               failed jobs           *
+*09-27-2022  V001     Yasaswini K     Local     To pass "No data      *
+*                                               found" in case no     *
+*                                               data present          *
+*---------------------------------------------------------------------*
+REPORT zcm_sm37_exp_cancl_suspnd_rel.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+  TYPES: BEGIN OF t_spoolid ,
+           jobname   TYPE btcjob,
+           jobcount  TYPE btcjobcnt,
+           stepcount TYPE btcstepcnt,
+           listident TYPE btclistid,
+         END OF t_spoolid.
+
+  TYPES: BEGIN OF t_job,
+           jobname  TYPE btcjob,
+           jobcount TYPE btcjobcnt,
+           ctxttype TYPE btcctxttyp,
+           ctxtval  TYPE btcctxt,
+         END OF t_job.
+
+  CONSTANTS: lc_sep        TYPE c VALUE '|',
+             lc_flag       TYPE c VALUE 'X',
+             lc_msg_nodata TYPE string   VALUE
+             'No data found',
+             lc_export     TYPE char20  VALUE 'EXPORT',
+             lc_tabname    TYPE char80 VALUE
+             'Failed and Held Jobs List',
+             lc_canceled   TYPE char20 VALUE 'Canceled',
+             lc_release    TYPE char20 VALUE 'Released',
+             lc_suspended  TYPE char20 VALUE 'Released/Susp.',
+             lc_jobname    TYPE char8  VALUE 'Jobname',
+             lc_spool      TYPE char8  VALUE 'Spool',
+             lc_jobdoc     TYPE char8  VALUE 'Job doc',
+             lc_name       TYPE char20 VALUE 'Job CreatedBy',
+             lc_status     TYPE char8  VALUE 'Status',
+             lc_strtdat    TYPE char20 VALUE 'Start date',
+             lc_strtime    TYPE char20 VALUE 'Start Time',
+             lc_duration   TYPE char20 VALUE 'Duration(sec.)',
+             lc_delay      TYPE char20 VALUE 'Delay(sec.)',
+* Begin of changes in V001
+             lc_noinput    TYPE c      VALUE
+             'No input passed'                            LENGTH 15,
+             lc_inc_input  TYPE c      VALUE
+             'Incorrect Input'                            LENGTH 20.
+* End of changes in V001
+
+  DATA: lt_tbtco      TYPE STANDARD TABLE OF tbtco,
+        ls_tbtco      TYPE tbtco,
+        lv_date       TYPE sydats,
+        lv_delay_time TYPE i,
+        lv_status     TYPE string,
+        lv_dura_time  TYPE i,
+        lv_spool_icon TYPE char1,
+        lv_jobdoc     TYPE char1,
+        lv_delay      TYPE string,
+        lv_dura       TYPE string,
+        ls_prefinal   TYPE string,
+        ls_output     TYPE tab512,
+        ls_input      TYPE tab512,
+        lv_action     TYPE char8,
+        r_status      TYPE RANGE OF btcstatus,
+        s_status      LIKE LINE OF r_status,
+        r_date        TYPE RANGE OF sydats,
+        s_date        LIKE LINE OF r_date,
+        lt_spoolid    TYPE SORTED TABLE OF t_spoolid WITH UNIQUE KEY
+                jobname jobcount stepcount listident,
+        lt_solmanjobs TYPE SORTED TABLE OF t_job WITH UNIQUE KEY
+                        jobname jobcount ctxttype ctxtval.
+
+  REFRESH: lt_tbtco[],
+           lt_spoolid[],
+           lt_solmanjobs[].
+
+"Title
+      ls_output = lc_tabname.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+      "Get last one weeek data
+      lv_date = sy-datum - 7.
+
+      s_date-option = 'BT'.
+      s_date-sign   = 'I'.
+      s_date-low    = lv_date.
+      s_date-high   = sy-datum.
+      APPEND s_date TO r_date.
+
+      s_status-option = 'EQ'.
+      s_status-sign   = 'I'.
+      s_status-low    = 'Z'.
+      APPEND s_status TO r_status.
+
+      s_status-option = 'EQ'.
+      s_status-sign   = 'I'.
+      s_status-low    = 'A'.
+      APPEND s_status TO r_status.
+
+      s_status-option = 'EQ'.
+      s_status-sign   = 'I'.
+      s_status-low    = 'S'.
+      APPEND s_status TO r_status.
+
+
+      SELECT * FROM tbtco INTO TABLE lt_tbtco
+        WHERE sdlstrtdt IN r_date
+        AND status IN r_status.
+      IF sy-subrc = 0.
+        SORT lt_tbtco BY jobname jobcount sdlstrtdt sdlstrttm.
+        SELECT jobname jobcount stepcount listident
+         FROM tbtcp
+         INTO CORRESPONDING FIELDS OF TABLE lt_spoolid
+         FOR ALL ENTRIES IN lt_tbtco
+         WHERE jobname = lt_tbtco-jobname AND
+         jobcount = lt_tbtco-jobcount AND
+         listident <> '0000000000'.
+
+        SELECT jobname jobcount ctxttype ctxtval
+        FROM tbtccntxt INTO CORRESPONDING FIELDS OF TABLE lt_solmanjobs
+      FOR ALL ENTRIES IN lt_tbtco
+      WHERE jobname  = lt_tbtco-jobname
+      AND jobcount = lt_tbtco-jobcount
+      AND ctxttype = 'SOLMAN_REQUEST_ID'.
+
+        "Column Heading
+        CLEAR: ls_output.
+        CONCATENATE lc_jobname   lc_sep
+                    lc_spool     lc_sep
+                    lc_jobdoc    lc_sep
+                    lc_name      lc_sep
+                    lc_status    lc_sep
+                    lc_strtdat   lc_sep
+                    lc_strtime   lc_sep
+                    lc_duration  lc_sep
+                    lc_delay    INTO ls_output.
+
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        "Column Data
+        LOOP AT lt_tbtco INTO ls_tbtco.
+
+          IF ls_tbtco-status = 'A'.
+            lv_status = lc_canceled.
+          ELSEIF ls_tbtco-status = 'Z'.
+            lv_status = lc_suspended.
+          ELSEIF  ls_tbtco-status = 'S'.
+            lv_status = lc_release.
+          ENDIF.
+
+          PERFORM calculate_time_diff_in_sec
+                    USING ls_tbtco-sdlstrtdt
+                          ls_tbtco-sdlstrttm
+                          ls_tbtco-strtdate
+                          ls_tbtco-strttime
+                          lv_delay_time.
+
+          PERFORM calculate_time_diff_in_sec
+                    USING ls_tbtco-strtdate
+                          ls_tbtco-strttime
+                          ls_tbtco-enddate
+                          ls_tbtco-endtime
+                          lv_dura_time.
+
+          lv_delay = lv_delay_time.
+          lv_dura  = lv_dura_time.
+
+          READ TABLE lt_spoolid WITH KEY jobname = ls_tbtco-jobname
+            jobcount = ls_tbtco-jobcount
+            TRANSPORTING NO FIELDS.
+          IF sy-subrc <> 0.
+            lv_spool_icon = space.
+          ELSE.
+            lv_spool_icon = lc_flag.
+          ENDIF.
+
+          READ TABLE lt_solmanjobs WITH KEY jobname = ls_tbtco-jobname
+          jobcount = ls_tbtco-jobcount
+          TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
+            lv_jobdoc = lc_flag.
+          ENDIF.
+
+          CONCATENATE ls_tbtco-jobname  lc_sep
+                      lv_spool_icon     lc_sep
+                      lv_jobdoc         lc_sep
+                      ls_tbtco-sdluname lc_sep
+                      lv_status         lc_sep
+                      ls_tbtco-strtdate lc_sep
+                      ls_tbtco-strttime lc_sep
+                      lv_dura           lc_sep
+                      lv_delay INTO ls_prefinal.
+          PERFORM end_null_check CHANGING ls_prefinal.
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_tbtco,
+                 lv_delay_time,
+                 lv_dura_time,
+                 lv_dura,
+                 lv_delay.
+        ENDLOOP.
+
+        "adding null to blanks - in betweeen
+        PERFORM null_check TABLES  lt_output.
+
+      ELSE.
+        ls_output = lc_msg_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+    WHEN OTHERS.
+* Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+  ENDCASE.
+ENDFORM.
+FORM calculate_time_diff_in_sec  USING  ls_tbtco_sdlstrtdt LIKE sy-datum
+                                        ls_tbtco_sdlstrttm LIKE sy-uzeit
+                                        ls_tbtco_strtdate  LIKE sy-datum
+                                        ls_tbtco_strttime LIKE sy-uzeit
+                                        lv_delay_time TYPE i.
+  DATA: lv_delta_date TYPE i,
+        lv_delta_time TYPE i.
+
+  lv_delta_date = ls_tbtco_strtdate - ls_tbtco_sdlstrtdt.
+  lv_delta_time = ls_tbtco_strttime - ls_tbtco_sdlstrttm.
+
+  IF lv_delta_date < 0.                   " irregular situation
+    lv_delay_time = 0.
+  ELSEIF lv_delta_date > 2000.             " avoid overflow
+    lv_delay_time = 0.
+  ELSE.
+    lv_delay_time = lv_delta_date * 86400 + lv_delta_time.
+    IF lv_delay_time < 0.                  " irregular situation
+      lv_delay_time = 0.
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+
+FORM null_check TABLES lt_table TYPE table.
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+  ENDDO.
+ENDFORM.

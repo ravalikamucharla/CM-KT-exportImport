@@ -1,0 +1,68 @@
+---
+
+- name: xml and html format of imort time 
+  shell: ./import_time.sh -xml -html
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: xml_html_output
+
+- debug: 
+    var: xml_html_output
+
+- name: copy file
+  copy:
+    src: "../xml/export_time.xml"
+    dest: "{{ install_dir_path }}"
+
+- name: copy file
+  copy:
+    src: "../xml/export_time.html"
+    dest: "{{ install_dir_path }}"
+
+- name: delete the xml file
+  file:
+    path: "../xml/"
+    state: absent
+  delegate_to: localhost
+    
+- name: remove /bin/java
+  replace: 
+    path: "{{ install_dir_path }}/time_join.sh"
+    regexp: '/bin/java'
+    replace: ''
+
+- name: time join
+  shell: ./time_join.sh -exportFile export_time.xml -importFile import_time.xml -html
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: time_join_output
+
+- debug: 
+    var: time_join_output
+
+
+- name: create folder
+  file:
+    path: "../Migration_checkers"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: create folder
+  file:
+    path: "../Migration_checkers/time_join"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path }}/time_join.txt"
+    dest: "../Migration_checkers/time_join/time_join.txt"
+    flat: yes

@@ -1,0 +1,40 @@
+---
+
+- name: take backup of .dat file
+  command: sudo su - {{ sid | lower }}adm -c "cp /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT-ARC"
+  async: 12000
+  poll: 3
+  delegate_to: "{{ primary_host }}"
+
+- name: take backup of .key file
+  command: sudo su - {{ sid | lower }}adm -c "cp /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY-ARC"
+  async: 12000
+  poll: 3
+  delegate_to: "{{ primary_host }}"
+
+- name: take backup of .dat file
+  command: sudo su - {{ sid | lower }}adm -c "cp /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/data/SSFS_{{ sid|upper }}.DAT-ARC"
+  async: 12000
+  poll: 3
+
+- name: take backup of .key file
+  command: sudo su - {{ sid | lower }}adm -c "cp /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY /usr/sap/{{ sid|upper }}/SYS/global/security/rsecssfs/key/SSFS_{{ sid|upper }}.KEY-ARC"
+  async: 12000
+  poll: 3
+
+- name: ppk | install pexpect
+  command: sudo pip3 install pexpect 
+  when: (ansible_os_family == 'RedHat') and (auth_type == "ppk_with_passphrase" or auth_type == "with_password") 
+  register: install_package
+
+- name: copy files with passwordless authentication
+  include_tasks: copy_passwordless.yml
+  when: auth_type == "passwordless"
+
+- name: copy files with password authentication
+  include_tasks: copy_with_password.yml
+  when: auth_type == "with_password"
+
+- name: copy files with password authentication
+  include_tasks: copy_passwordless.yml
+  when: auth_type == "ppk" or auth_type == "ppk_with_passphrase" or auth_type == "pem"

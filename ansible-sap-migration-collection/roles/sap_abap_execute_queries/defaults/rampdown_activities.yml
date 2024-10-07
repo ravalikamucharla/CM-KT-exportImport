@@ -1,0 +1,22 @@
+---
+abap_pre_migration_list:
+  abap:
+    - { name: "ZCM_SP12_EXP_TEMSE_CONSISTENCY.txt", input_params: EXPORT }
+    - { name: "ZCM_SP12_DEL_TEMSE_OBJECTS.txt", input_params: 'DELETE' }
+    - { name: "ZCM_SE14_DEL_QCM_TABLES.txt", input_params: EXPORT }
+    - { name: "ZCM_SMIGR_EXE_LIST_DBVERS.txt", input_params: '{{ rampdown_activities.smigr.target_db_type | upper }}' }
+    - { name: "ZCM_R_SMIGR_CREATE_DDL_EXECUTE.txt", input_params: 'EXECUTE,{{ rampdown_activities.smigr.target_db_type | upper }},{{ rampdown_activities.smigr.db_version }},{{ rampdown_activities.smigr.installation_directory }}' }
+    - { name: "ZCM_R_BTCTRNS_REL_SUSPND_JOBS.txt", input_params: SUSPEND }
+    - { name: "ZCM_SM02_UPD_SYSTEM_MESSAGE.txt", input_params: '{{ sm02_message | upper }}' }
+    - { name: "ZCM_SM13_DEL_FAILED_REQUEST.txt", input_params: CANCEL }
+    - { name: "ZCM_SMQR_EXP_QUEUE.txt", input_params: DEREGISTER }
+    - { name: "ZCM_SMQS_EXP_DESTINATION.txt", input_params: DEREGISTER }
+    - { name: "ZCM_DEL_SPOOL_RQST_INCNSTNCY.txt", input_params: 'DELETE|000|X|10| | | |X| |50' } #input_params format - Action|Client|Requests past expiration date|Minimum age in days|Completed request with min age|All requests with min age|Do you want to log everything|Log instead of dialog boxes|Log only without deletion|COMMIT all Spool requests
+    - { name: "ZCM_SCOT_DEACTIVATE_NODES.txt", input_params: DEACTIVATE }
+    - { name: "ZCM_DEL_TABLE_ENTRIES.txt", input_params: 'DELETE,{{ del_table_entry }}' } 
+    - { name: "ZCM_DB13_CHK_UPD_DB_CONSITENCY.txt", input_params: EXPORT }
+    - { name: "ZCM_R_DEL_D020S_DYNPSRC.txt", input_params: DELETE }
+
+  oracle:
+    - { name: "ZCM_T_TATGPC_TATGPCA_CLEAR.txt", input_params: DELETE }
+    - { name: "ZCM_DB13_CHK_UPD_DB_STATS.txt", input_params: EXPORT }

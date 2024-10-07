@@ -1,0 +1,229 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_T_TATGPC_TATGPCA_EXPORT                  *
+* Title               :  Fetch entries of TATGPC and TATGPCA          *
+* Purpose             :  To fetch entries of TATGPC and TATGPCA       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XX                                                                  *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TATGPC                   X                                          *
+* TATGPCA                  X                                          *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-30-2021  Initial   Soumya Ray   Local         To fetch entries of *
+*                                                 TATGPC and TATGPCA  *
+*---------------------------------------------------------------------*
+REPORT zcm_t_tatgpc_tatgpca_export.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|',
+             lc_export    TYPE c VALUE 'EXPORT'          LENGTH 6,
+             lc_head      TYPE c VALUE
+             'Check table TATGPC and TATGPCA entries'    LENGTH 50,
+             lc_noinput   TYPE c VALUE
+             'No input passed'                           LENGTH 20,
+             lc_inc_input TYPE c VALUE
+             'Incorrect input'                           LENGTH 20,
+             lc_nodata    TYPE c VALUE
+             'No data found'                             LENGTH 20,
+             lc_tatgpc    TYPE tabname VALUE 'TATGPC',
+             lc_tatgpca   TYPE tabname VALUE 'TATGPCA',
+             lc_k1n5      TYPE c VALUE 'K1N5'            LENGTH 4,
+             lc_k2c5      TYPE c VALUE 'K2C5'            LENGTH 4,
+             lc_k3n5      TYPE c VALUE 'K3N5'            LENGTH 4,
+             lc_f8        TYPE c VALUE 'F8'              LENGTH 2,
+             lc_i1        TYPE c VALUE 'I1'              LENGTH 2,
+             lc_i2        TYPE c VALUE 'I2'              LENGTH 2,
+             lc_i4        TYPE c VALUE 'I4'              LENGTH 2,
+             lc_n5        TYPE c VALUE 'N5'              LENGTH 2,
+             lc_n8        TYPE c VALUE 'N8'              LENGTH 2,
+             lc_d04       TYPE c VALUE 'D04'             LENGTH 3,
+             lc_d08       TYPE c VALUE 'D08'             LENGTH 3,
+             lc_d14       TYPE c VALUE 'D14'             LENGTH 3,
+             lc_d15       TYPE c VALUE 'D15'             LENGTH 3,
+             lc_dt8       TYPE c VALUE 'DT8'             LENGTH 3,
+             lc_tm6       TYPE c VALUE 'TM6'             LENGTH 3,
+             lc_c01       TYPE c VALUE 'C01'             LENGTH 3,
+             lc_c20       TYPE c VALUE 'C20'             LENGTH 3,
+             lc_c33       TYPE c VALUE 'C33'             LENGTH 3,
+             lc_r8        TYPE c VALUE 'R8'              LENGTH 2,
+             lc_c226      TYPE c VALUE 'C226'            LENGTH 4,
+             lc_c254      TYPE c VALUE 'C254'            LENGTH 4,
+             lc_len       TYPE c VALUE 'LEN'             LENGTH 3,
+             lc_varc      TYPE c VALUE 'VARC'            LENGTH 4,
+             lc_null      TYPE c VALUE 'NULL'            LENGTH 4,
+             lc_blank     TYPE c VALUE '||'              LENGTH 2,
+             lc_sepnull   TYPE c VALUE '|NULL|'         LENGTH 6.
+
+  DATA: ls_output    TYPE tab512,
+        ls_prefinal  TYPE string,
+        lv_action    TYPE string,
+        ls_input     TYPE tab512,
+        lv_f8_value  TYPE string,
+        lv_i1_value  TYPE string,
+        lv_i2_value  TYPE string,
+        lv_i4_value  TYPE string,
+        lv_d04_value TYPE string,
+        lv_d14_value TYPE string,
+        lv_d15_value TYPE string,
+        lv_d08_value TYPE string,
+        lv_r8_value  TYPE string,
+        lv_len_value TYPE string,
+        lt_tatgpc    TYPE STANDARD TABLE OF tatgpc,
+        lt_tatgpca   TYPE STANDARD TABLE OF tatgpca.
+
+  FIELD-SYMBOLS: <fs_tatgpc>  TYPE tatgpc,
+                 <fs_tatgpca> TYPE tatgpca.
+
+  ls_output = lc_head.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export. "EXPORT
+
+      FREE: lt_output.
+
+      "TATGPC
+      ls_output = lc_tatgpc.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      SELECT * FROM tatgpc INTO TABLE lt_tatgpc.
+      IF lt_tatgpc IS INITIAL.
+        ls_output = lc_nodata. "No data found
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ELSE.
+        "subheading
+        CONCATENATE lc_k1n5 lc_k2c5 lc_k3n5 lc_f8 lc_i1 lc_i2
+        lc_i4 lc_n5 lc_n8 lc_d04 lc_d08 lc_d14 lc_d15 lc_dt8
+        lc_tm6 lc_c01 lc_c20 lc_c33 lc_r8 lc_c226 lc_c254
+        lc_len lc_varc INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_tatgpc ASSIGNING <fs_tatgpc>.
+          lv_f8_value = <fs_tatgpc>-f8.
+          lv_i1_value = <fs_tatgpc>-i1.
+          lv_i2_value = <fs_tatgpc>-i2.
+          lv_i4_value = <fs_tatgpc>-i4.
+          lv_d04_value = <fs_tatgpc>-d04.
+          lv_d08_value = <fs_tatgpc>-d08.
+          lv_d14_value = <fs_tatgpc>-d14.
+          lv_d15_value = <fs_tatgpc>-d15.
+          lv_r8_value = <fs_tatgpc>-r8.
+          lv_len_value = <fs_tatgpc>-len.
+
+          IF <fs_tatgpc>-varc IS INITIAL.
+            <fs_tatgpc>-varc = lc_null.
+          ENDIF.
+
+          CONCATENATE <fs_tatgpc>-k1n5 <fs_tatgpc>-k2c5
+          <fs_tatgpc>-k3n5 lv_f8_value lv_i1_value
+          lv_i2_value lv_i4_value <fs_tatgpc>-n5 <fs_tatgpc>-n8
+          lv_d04_value lv_d08_value  lv_d14_value
+          lv_d15_value <fs_tatgpc>-dt8 <fs_tatgpc>-tm6
+          <fs_tatgpc>-c01 <fs_tatgpc>-c20 <fs_tatgpc>-c33
+          lv_r8_value <fs_tatgpc>-c226 <fs_tatgpc>-c254
+          lv_len_value <fs_tatgpc>-varc INTO ls_prefinal
+          SEPARATED BY lc_sep.
+          CONDENSE ls_prefinal.
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_prefinal, lv_f8_value, lv_i1_value,
+          lv_i2_value, lv_i4_value, lv_d04_value, lv_d08_value,
+          lv_d14_value, lv_d15_value, lv_r8_value, lv_len_value.
+        ENDLOOP.
+      ENDIF.
+
+      CLEAR: ls_output.
+      APPEND ls_output TO lt_output.
+
+      "TATGPCA
+      ls_output = lc_tatgpca.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      SELECT * FROM tatgpca INTO TABLE lt_tatgpca.
+      IF lt_tatgpca IS INITIAL.
+        ls_output = lc_nodata. "No data found
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ELSE.
+        "subheading
+        CONCATENATE lc_k1n5 lc_k2c5 lc_k3n5 lc_f8 lc_i1 lc_i2
+        lc_i4 lc_n5 lc_n8 lc_d04 lc_d08 lc_d14 lc_d15 lc_dt8
+        lc_tm6 lc_c01 lc_c20 lc_c33 lc_r8 lc_c226 lc_c254
+        lc_len lc_varc INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_tatgpca ASSIGNING <fs_tatgpca>.
+          lv_f8_value = <fs_tatgpc>-f8.
+          lv_i1_value = <fs_tatgpca>-i1.
+          lv_i2_value = <fs_tatgpca>-i2.
+          lv_i4_value = <fs_tatgpca>-i4.
+          lv_d04_value = <fs_tatgpca>-d04.
+          lv_d08_value = <fs_tatgpca>-d08.
+          lv_d14_value = <fs_tatgpca>-d14.
+          lv_d15_value = <fs_tatgpca>-d15.
+          lv_r8_value = <fs_tatgpca>-r8.
+          lv_len_value = <fs_tatgpca>-len.
+
+          IF <fs_tatgpca>-varc IS INITIAL.
+            <fs_tatgpca>-varc = lc_null.
+          ENDIF.
+          CONCATENATE <fs_tatgpca>-k1n5 <fs_tatgpca>-k2c5
+          <fs_tatgpca>-k3n5 lv_f8_value lv_i1_value
+          lv_i2_value lv_i4_value <fs_tatgpca>-n5 <fs_tatgpca>-n8
+          lv_d04_value lv_d08_value  lv_d14_value lv_d15_value
+          <fs_tatgpca>-dt8 <fs_tatgpca>-tm6 <fs_tatgpca>-c01
+          <fs_tatgpca>-c20 <fs_tatgpca>-c33  lv_r8_value
+          <fs_tatgpca>-c226 <fs_tatgpca>-c254 lv_len_value
+          <fs_tatgpca>-varc INTO ls_prefinal SEPARATED BY lc_sep.
+          CONDENSE ls_prefinal.
+          ls_output = ls_prefinal.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_prefinal, lv_f8_value, lv_i1_value,
+          lv_i2_value, lv_i4_value, lv_d04_value, lv_d08_value,
+          lv_d14_value, lv_d15_value, lv_r8_value, lv_len_value.
+        ENDLOOP.
+      ENDIF.
+
+      "Null check for middle fields
+      DO .
+        REPLACE ALL OCCURRENCES OF SUBSTRING lc_blank
+        IN TABLE lt_output WITH lc_sepnull.
+        FIND lc_blank IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+      ENDDO.
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+ENDFORM.

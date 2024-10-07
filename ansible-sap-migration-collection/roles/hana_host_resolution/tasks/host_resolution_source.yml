@@ -1,0 +1,84 @@
+- name: Create a sql folder
+  file:
+    path: "/tmp/globalini_hostres.sql"
+    state: touch
+    mode: '777'
+  delegate_to: "{{ primary_host }}"
+
+- name: check if the path is present
+  become_method: sudo
+  become: yes 
+  stat: 
+      path: "/usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/global.ini_bak"
+  register: st
+  delegate_to: "{{ primary_host }}"
+
+- name: take backup of global ini file
+  become_method: sudo
+  become: yes 
+  copy:
+    src: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/global.ini
+    dest: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/global.ini_bak
+    remote_src: yes
+  when: not st.stat.exists
+  delegate_to: "{{ primary_host }}"
+
+- name: Inserting host resolution query in global.ini file
+  lineinfile:
+    path: /tmp/globalini_hostres.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('global.ini', 'SYSTEM') SET ('system_replication_communication', 'listeninterface') = '{{ host_resolution.source_host.value }}';
+  delegate_to: "{{ primary_host }}"
+
+- name: Inserting host resolution query in global.ini file if value is .global
+  lineinfile:
+    path: /tmp/globalini_hostres.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('global.ini', 'SYSTEM') SET ('system_replication_hostname_resolution', '{{ item.ip }}') = '{{ item.hostname }}';
+  with_items: "{{ host_resolution.target_host.entries }}"
+  when: host_resolution.source_host.value == '.global'
+  delegate_to: "{{ primary_host }}"
+
+- name: Inserting host resolution query in global.ini file if value is .global
+  lineinfile:
+    path: /tmp/globalini_hostres.sql
+    line: ALTER SYSTEM ALTER CONFIGURATION ('global.ini', 'SYSTEM') SET ('system_replication_hostname_resolution', '{{ item.ip }}') = '{{ item.hostname }}';
+  with_items: 
+    - "{{ host_resolution.source_host.entries }}"
+    - "{{ host_resolution.target_host.entries }}"
+  when: 
+    - host_resolution.source_host.value == '.internal'
+  delegate_to: "{{ primary_host }}"
+
+- name: set fact 
+  block:
+    - set_fact:
+        tenant_db: "{{ sid | upper }}"
+
+    - set_fact:
+        db_name: "{{ hana_db_name | default(tenant_db) }}"
+  when: hsr_source.mode == "user"
+
+- name: execute the sql query 
+  command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -U {{ hdbuserstore_key_source.key_name | default('BACKUP') }} -I /tmp/globalini_hostres.sql'
+  async: 12000
+  poll: 10
+  register: output
+  delegate_to: "{{ primary_host }}"
+  when: hsr_source.mode == "hdbuserstorekey"
+
+- debug: 
+    var: output
+  when: hsr_source.mode == "hdbuserstorekey"
+
+- name: execute the sql query 
+  command: sudo su - {{ sid | lower }}adm -c '/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I /tmp/globalini_hostres.sql'
+  async: 12000
+  poll: 10
+  register: output_user
+  delegate_to: "{{ primary_host }}"
+  when: hsr_source.mode == "user"
+
+- name: delete sql file
+  file:
+    path: /tmp/globalini_hostres.sql
+    state: absent
+  delegate_to: "{{ primary_host }}"

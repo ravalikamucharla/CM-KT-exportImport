@@ -1,0 +1,100 @@
+---
+abap_pre_migration_list:
+  abap:
+    - { name: "ZCM_STZAC_EXP_CUSTOM_TIMEZONE.txt" }
+    - { name: "ZCM_RZ70_EXP_SLD_REGISTRATION.txt" }
+    - { name: "ZCM_SCC4_EXP_CLIENT_SETTINGS.txt" }
+    - { name: "ZCM_DB13_EXP_DBA_CALENDAR_JOBS.txt" }
+    - { name: "ZCM_SM13_EXP_ADMINISTRATION_DT.txt" }
+    - { name: "ZCM_SM61_EXP_SERVER_GROUPS.txt" }
+    - { name: "ZCM_SMQS_EXP_DESTINATION.txt" }
+    - { name: "ZCM_SLDAPICUST_EXP_SLDDATA.txt" }
+    - { name: "ZCM_SPAD_EXP_PRINTER_LOCKUNLOC.txt" }
+    - { name: "ZCM_RZ04_SM63_EXP_OPERAT_MODES.txt" }
+    - { name: "ZCM_T_HTTPURLLOC_EXPORT.txt" }
+    - { name: "ZCM_SMLG_EXP_LOGON_GROUPS.txt" }
+    - { name: "ZCM_SPAD_EXP_OPDEVICE_SERVERS.txt" }
+    - { name: "ZCM_RZ70_CHK_SLD_CONNECTION.txt" }
+    - { name: "ZCM_SMQR_EXP_QUEUE.txt" }
+    - { name: "ZCM_RZ21_DEL_OLDAPPL_SERV.txt" } 
+    - { name: "ZCM_SM19_EXP_SEC_AUDIT_PROFILE.txt" }
+    - { name: "ZCM_T_SAPWLSERV_EXPORT.txt" }
+    - { name: "ZCM_AL11_EXP_SAP_DIRECTORY.txt" }
+
+  oracle:
+    - { name: "ZCM_ORA_MSS_CHK_DB_ENCRYPTION.txt" }
+    - { name: "ZCM_ORACLE_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_ORACLE_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_ORACLE_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_T_TAORA_IAORA_CHK_CONSTNCY.txt" }
+    - { name: "ZCM_T_TATGPC_TATGPCA_EXPORT.txt" }
+    - { name: "ZCM_ORA_ST04_SYSTEM_PERFORMANC.txt" }
+    - { name: "ZCM_ORA_EXPORT_DB_SIZE.txt" }
+    - { name: "ZCM_DXB_ST04_EXP_ALERT_MONITOR.txt" }
+    - { name: "ZCM_ORA_DB02_CHK_LOGBCKUP_ENBL.txt" }
+
+  hana:
+    - { name: "ZCM_HANA_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_HANA_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_HANA_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_HANA_CHK_DB_ENCRYPTION.txt" }
+    - { name: "ZCM_DB01_EXP_BLOCKED_TXN_HANA.txt" }
+    - { name: "ZCM_HDB_ST04_SYSTEM_PERFORMANC.txt" }
+    - { name: "ZCM_HDB_ST04_EXP_ALERT_MONITOR.txt" }
+    - { name: "ZCM_HDB_NWBC_CONFIG_OVRVW.txt" }
+    - { name: "ZCM_HDB_FIORI_LAUNCH_CHCK.txt" } # component_version == "751" & == "754"
+
+  sql:
+    - { name: "ZCM_ORA_MSS_CHK_DB_ENCRYPTION.txt" }
+    - { name: "ZCM_SQLSERVER_TOP_TABLES_EXP.txt" , input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SQLSERVER_TOP_TABLES_EXP_RCNT.txt" , input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SQLSERVER_TOP_TABLES_EXP_TSIZ.txt" , input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_DXB_ST04_EXP_ALERT_MONITOR.txt" }
+    - { name: "ZCM_MSS_ST04_SYSTEM_PERFORMANC.txt" }
+    - { name: "ZCM_MSSQL_EXP_CURR_FREE_DBSIZE.txt", input_params: FETCH }
+
+  sybase:
+    - { name: "ZCM_SYB_CHK_DB_ENCRYPTION.txt" }
+    - { name: "ZCM_SYBASE_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SYBASE_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SYBASE_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_SYB_EXP_LAST_LOG_DB_BACKUP.txt" }
+    - { name: "ZCM_SYBASE_EXP_CURR_FREE_DBSIZ.txt" }
+
+  db2:
+    - { name: "ZCM_DB2_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_DB2_TOP_TABLES_EXP_RCNT.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_DB2_TOP_TABLES_EXP_TSIZ.txt", input_params: 'FETCH,100,{{ schema_name }}' }
+    - { name: "ZCM_DB2_CHK_DB_ENCRYPTION.txt" }
+    - { name: "ZCM_DB2_ST04_SYSTEM_PERFORMANC.txt" }
+    - { name: "ZCM_DXB_ST04_EXP_ALERT_MONITOR.txt" }
+
+version_specific_scripts:
+  - { name: "ZCM_STRUST_EXP_CERT.txt" }
+  - { name: "ZCM_STRUST_EXP_WEBDIS.txt" }
+  - { name: "ZCM_WE20_EXP_PART_PROFILE.txt" }
+  - { name: "ZCM_RSA1_EXP_LOGICAL_STAT.txt" }
+  - { name: "ZCM_RZ12_EXP_RFC_GRP.txt" }
+  - { name: "ZCM_EXP_INSTALL_PROD_VERS.txt" } # supportpackage_version >= "0000"
+
+abap_pre_migration_list_clients:
+  - { name: "ZCM_SMQ1_EXP_OUTBOUND_QUEUE.txt" }
+  - { name: "ZCM_SMQ2_EXP_INBOUND_QUEUE.txt" }
+  - { name: "ZCM_SMQR_EXP_QUEUE.txt" }
+  - { name: "ZCM_SMQS_EXP_DESTINATION.txt" }
+  - { name: "ZCM_WE20_EXP_PART_PROFILE.txt" }
+  - { name: "ZCM_WE02_EXP_FAILED_IDOCS.txt" }
+  - { name: "ZCM_WE21_EXP_IDOC_PORTS.txt" }
+  - { name: "ZCM_SCOT_EXP_SMTP_NODES.txt" }
+  - { name: "ZCM_RSA1_EXP_LOGICAL_STAT.txt" }
+  - { name: "ZCM_BD64_EXP_DISTRIBUTION_MDL.txt" }
+  - { name: "ZCM_SOST_EXP_FAILED_MAILS.txt" }
+  - { name: "ZCM_SWU3_EXP_ERROR_NODES.txt" }
+
+folders:
+  - path: "{{ abap_export_path }}"
+    owner: "{{ cloudmigrate_server_sudo_user }}"
+    group: "{{ cloudmigrate_server_sudo_user_group }}"
+    mode: '0755'
+
+

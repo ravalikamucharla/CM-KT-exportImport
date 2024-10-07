@@ -1,0 +1,9 @@
+---
+
+- name: start hana
+  command: "{{ item }}"
+  async: 12000
+  poll: 10
+  loop:
+    - sudo su - {{ sid|lower }}adm -c "sapcontrol -nr {{ instance_number }} -function StartSystem HDB && sapcontrol -nr {{ instance_number }} -function StartWait 600 10"
+    - sleep 30

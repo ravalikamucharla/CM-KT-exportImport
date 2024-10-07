@@ -1,0 +1,122 @@
+---
+# - name: install ftp package
+#   package:
+#     name:
+#      - vsftpd
+#     state: present
+#   when: 
+#     - os_type == 'linux_sudo'
+#     - ansible_os_family == 'RHEL'
+#   tags: ftp
+#   delegate_to: "{{ groups['source_db'][0] }}"
+#   ignore_errors: yes
+
+# - name: install ftp package
+#   command: sudo zypper install -y {{ item }}
+#   with_items:
+#     - vsftpd
+#     - ftp
+#   when: ansible_os_family == 'Suse'
+  # delegate_to: "{{ groups['source_db'][0] }}"
+#   tags: ftp
+
+- name: Enable firewall for Domain, Public and Private profiles
+  win_firewall:
+    state: disabled
+    profiles:
+    - Domain
+    - Private
+    - Public
+  tags: ftp
+  when: ansible_os_family == 'windows'
+  delegate_to: "{{ groups['source_db'][0] }}"
+
+- name: Ensure FTP servers present source
+  win_feature:
+    name: "{{ item }}"
+    state: present
+    include_sub_features: True
+  with_items: 
+    - Web-FTP-Server
+    - Web-Server
+  tags: ftp
+  when: ansible_os_family == 'windows'
+  delegate_to: "{{ groups['source_db'][0] }}"
+
+- name: add WebAdministration module source
+  win_psmodule:
+    name: WebAdministration
+    state: present
+  tags: ftp
+  when: ansible_os_family == 'windows'
+  delegate_to: "{{ groups['source_db'][0] }}"
+
+- name: Enable firewall for Domain, Public and Private profiles [source]
+  win_firewall:
+    state: disabled
+    profiles:
+    - Domain
+    - Private
+    - Public
+  tags: ftp
+  when: ansible_os_family == 'windows'
+
+- name: Ensure FTP servers present
+  win_feature:
+    name: "{{ item }}"
+    state: present
+    include_sub_features: True
+  with_items: 
+    - Web-FTP-Server
+    - Web-Server
+  tags: ftp
+
+- name: add WebAdministration module
+  win_psmodule:
+    name: WebAdministration
+    state: present
+  tags: ftp
+
+- debug:
+    var: "{{ ftp.ftp_usr_name }}"
+
+- name: create ftp site and set permissions win
+  win_shell: |
+    New-WebFtpSite -Name {{ ftp.ftp_usr_name }} -Port 21 -PhysicalPath H:\
+    cmd /c \Windows\System32\inetsrv\appcmd set SITE "{{ ftp.ftp_usr_name }}" "-virtualDirectoryDefaults.physicalPath:C:\inetpub\ftproot"
+    Set-ItemProperty "IIS:\Sites\{{ ftp.ftp_usr_name }}" -Name ftpServer.security.ssl.controlChannelPolicy -Value 0
+    Set-ItemProperty "IIS:\Sites\{{ ftp.ftp_usr_name }}" -Name ftpServer.security.ssl.dataChannelPolicy -Value 0
+    Set-ItemProperty "IIS:\Sites\{{ ftp.ftp_usr_name }}" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
+    Add-WebConfiguration "/system.ftpServer/security/authorization" -value @{accessType="Allow";roles="Administrators";permissions=3} -PSPath IIS:\ -location "{{ ftp.ftp_usr_name }}"
+    Restart-WebItem "IIS:\Sites\{{ ftp.ftp_usr_name }}"
+  tags: ftp
+
+- name: create local ftp user 
+  win_user:
+    name: "{{ ftp.ftp_usr_name }}"
+    password: "{{ passwords.ftpuser }}"
+    state: present
+    # groups: "{{ item.value.groups }}"
+  tags: ftp
+
+- name: Create directory structure
+  win_file:
+    path: "{{ item.path }}"
+    state: "{{ item.state }}"
+  with_items: "{{ folder_windows_target }}"
+  tags: ftp
+
+- name: restart ftp
+  win_service:
+    name: "{{ item }}"
+    state: restarted
+  with_items: 
+    - ftpsvc
+    - msftpsvc
+  tags: ftp
+
+- name: Recursively adding a file to sub directories 
+  win_command: for /f %d in ('dir export24nov /ad /b /s') do @xcopy empty1.txt "%d"
+  args:
+    chdir: H:/
+  tags: ftp

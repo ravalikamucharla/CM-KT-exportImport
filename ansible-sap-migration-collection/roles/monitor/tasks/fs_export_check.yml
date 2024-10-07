@@ -1,0 +1,14 @@
+- name: Check File System Usage
+  command: df -h | grep /sapmnt/{{ sid }}
+  register: df_output
+  ignore_errors: yes
+
+- name: Display File System Usage
+  debug:
+    msg: export directory mounted on {{ansible_hostname}}
+  when: df_output.stdout_lines | length <= 0
+
+- name: Display File System Usage
+  debug:
+    msg: export directory not mounted on {{ansible_hostname}}
+  when: df_output.stdout_lines | length > 0

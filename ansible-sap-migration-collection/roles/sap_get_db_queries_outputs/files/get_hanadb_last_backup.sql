@@ -1,0 +1,1 @@
+SELECT TOP 1 ENTRY_TYPE_NAME,STATE_NAME,SYS_END_TIME from "SYS"."M_BACKUP_CATALOG" where ENTRY_TYPE_NAME='complete data backup' and STATE_NAME='successful' order by SYS_END_TIME desc

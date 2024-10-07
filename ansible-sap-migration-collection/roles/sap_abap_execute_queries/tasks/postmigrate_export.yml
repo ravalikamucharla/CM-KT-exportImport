@@ -1,0 +1,92 @@
+- name: set fact exclusion list path
+  set_fact:
+    exclusion_list: "{{ lookup('first_found','exclusion.txt')}}"
+
+- name: establish connection and getting output from SAP installed System 
+  sap_pyrfc: 
+    username: "{{ user }}" 
+    password: "{{ password }}" 
+    hostname: "{{ hostname }}"
+    sncpartnername: "{{ sncpartner_name }}"
+    hostip: "{{ hostip }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.name }}" 
+    outputspath: "{{ abap_export_path }}" 
+    inputparams: "{{ item.input_params | default('EXPORT') }}"
+  with_items:
+    - "{{ version_specific_scripts }}"
+    - "{{ abap_pre_migration_list[sap_type | lower] | default([]) }}"
+    - "{{ abap_pre_migration_list[db_type | lower] | default([]) }}"
+  register: output
+  async: 3600
+  poll: 0
+
+- name: checking the job status running in background based.
+  async_status:
+     jid: "{{ output.results[index].ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 2000
+  delay: 10
+  with_items:
+    - "{{ version_specific_scripts }}"
+    - "{{ abap_pre_migration_list[sap_type | lower] | default([]) }}"
+    - "{{ abap_pre_migration_list[db_type | lower] | default([]) }}"
+  loop_control:
+      index_var: index
+  when:
+     - (item.name) == output.results[index].item.name
+
+- name: set fact
+  set_fact :
+    client_list: >
+        [
+        {% for e in abap_pre_migration_list_clients %}
+        {% for c in source.sap.all_clients %}
+        {{ e | combine (c) }},
+        {% endfor %}
+        {% endfor %}
+        ]
+  when: source.sap.all_clients is defined
+
+- name: establish connection and getting output from SAP installed System client
+  sap_pyrfc: 
+    username: "{{ item.user }}" 
+    password: "{{ item.password }}" 
+    hostname: "{{ hostname }}"
+    sncpartnername: "{{ sncpartner_name }}"
+    hostip: "{{ hostip }}" 
+    instance: "{{ instance_number }}" 
+    client: "{{ item.client }}" 
+    group: "{{ group }}" 
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: "{{ item.name }}" 
+    outputspath: "{{ abap_export_path }}{{ item.client }}_" 
+    inputparams: "{{ item.input_params | default('EXPORT') }}"
+    no_log: true
+  with_items:
+      - "{{ client_list }}"
+  when: source.sap.all_clients is defined
+  register: output_ls
+
+# - name: profile parameter update 
+#   sap_profile_update: 
+#     username: "{{ user }}" 
+#     password: "{{ password }}" 
+#     hostname: "{{ hostname }}" 
+#     hostip: "{{ hostip }}" 
+#     instance: "{{ instance_number }}" 
+#     client: "{{ client }}" 
+#     group: "{{ group }}" 
+#     abappath: "{{ abap_scripts_path }}" 
+#     abapscript: ZCM_RZ10_UPD_PROFILEPARA_UPD.txt 
+#     inclusion_param: "[]" 
+#     sourcevalues: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/ZCM_RZ10_EXP_PROFILEPARA_EXP.txt" 
+#     targetvalues: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/target/abap_export/ZCM_RZ10_EXP_PROFILEPARA_EXP.txt" 
+#     exclude_vars_file: "{{ exclusion_list }}"
+#   register: output_profile_update
+
+- debug: var=output_profile_update

@@ -1,0 +1,7 @@
+---
+- name: hana-hsr
+  hosts: "{{ groups['target_slave_db'][0] }}"
+  vars_files:
+    - ../inventory/group_vars/target_db.yml
+  roles:
+    - reset_maintenance_mode

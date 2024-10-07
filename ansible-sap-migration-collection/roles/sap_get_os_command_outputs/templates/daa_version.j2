@@ -1,0 +1,5 @@
+{% if DAA_output.stdout_lines | length == 4 %}
+{"DAA version": "{{DAA_output.stdout_lines[3].split('smdagentlauncher')[0].split(':')[-1].split('/')[1]}}"}
+{% else %}
+{"DAA version": "{{DAA_output.stdout_lines[0].split(' ')[-1]}}.{{DAA_output.stdout_lines[1].split(' ')[-1]}}"}
+{% endif %}

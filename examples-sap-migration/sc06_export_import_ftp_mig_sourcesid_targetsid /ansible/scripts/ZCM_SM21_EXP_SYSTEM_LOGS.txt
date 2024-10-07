@@ -1,0 +1,255 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SM21_EXP_SYSTEM_LOGS                    *
+* Title               :   SM21 Logs                                   *
+* Purpose             :   This report is used to display system logs  *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM21                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-08-2020  Initial   Yasaswini    Local         To display system   *
+*                                                 logs                *
+*09-07-2022  V001      Soumya Ray   Local         To fetch data for a *
+*                                                particular time range*
+*---------------------------------------------------------------------*
+
+REPORT zcm_sm21_exp_system_logs.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep          TYPE c        VALUE '|',
+             lc_greenicon    TYPE c        VALUE '04'       LENGTH 2,
+             lc_export       TYPE char20   VALUE 'EXPORT',
+             lc_tabname      TYPE char20   VALUE 'ErrorLogs',
+             lc_date         TYPE char20   VALUE 'Date',
+             lc_time         TYPE char20   VALUE 'Time',
+             lc_instance     TYPE char20   VALUE 'Instance',
+             lc_workprocess  TYPE char20   VALUE 'Workprocess',
+             lc_processs     TYPE char20   VALUE 'Processno',
+             lc_client       TYPE char20   VALUE 'Client',
+             lc_user         TYPE char20   VALUE 'User',
+             lc_priority     TYPE char20   VALUE 'Priority',
+             lc_msgid        TYPE char20   VALUE 'Messageid',
+             lc_msgtxt       TYPE char20   VALUE 'Messagetext',
+             lc_tcode        TYPE char20   VALUE 'Tcode',
+             lc_package      TYPE char20   VALUE 'Package',
+             lc_problemclass TYPE char20   VALUE 'Problemclass',
+             lc_program      TYPE char20   VALUE 'Program',
+             lc_sign_i       TYPE tvarv_sign VALUE 'I',
+             lc_opt_cp       TYPE tvarv_opti VALUE 'CP',
+*  Begin of changes in V001
+             lc_msg_nodata   TYPE c     VALUE
+             'No data found'                               LENGTH 20,
+             lc_inc_input    TYPE c          VALUE
+             'Incorrect input'                             LENGTH 20,
+             lc_noinput      TYPE c          VALUE
+             'No input passed'                             LENGTH 20.
+*  End of changes in V001
+
+  DATA: ls_input  TYPE tab512,
+        ls_output TYPE tab512,
+        lv_action TYPE char8.
+
+  "Declare Variable
+  DATA: lo_syslog        TYPE REF TO cl_syslog,
+        lo_syslog_filter TYPE REF TO cl_syslog_filter,
+        lv_datetime_fr   TYPE rslgtime VALUE
+        cl_syslog_filter=>emptyfilter_datetime,
+        lv_datetime_to   TYPE rslgtime VALUE
+        cl_syslog_filter=>emptyfilter_datetime,
+        lt_log_tab       TYPE rslgentr_tab,
+        lv_count         TYPE i,
+        lv_date          LIKE sy-datum,
+        ls_prefinal      TYPE string,
+        lr_instance      TYPE cl_syslog_filter=>range_of_instances,
+*   Begin of changes in V001
+        lv_days          TYPE n,
+        lv_authmsg       TYPE REF  TO cx_syslog_read_authorization.
+*    End of changes in V001
+
+  FIELD-SYMBOLS: <lfs_log>      TYPE rslgentry,
+                 <lfs_instance> LIKE LINE OF lr_instance.
+
+  REFRESH: lt_log_tab.
+
+  CLEAR: ls_input,
+  lv_action,
+  ls_prefinal,
+  ls_output,
+  lv_date,
+  lv_days. "+V001
+
+  "Table name
+  ls_output = lc_tabname.
+  APPEND ls_output TO lt_output.
+
+  " Read action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+    lv_action
+    lv_days.
+  ELSE.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_date = sy-datum - lv_days.
+* End of changes in V001
+
+  lv_datetime_fr = lv_date.
+  " Create object for filter
+  CREATE OBJECT lo_syslog_filter.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+      "Create Range for Instance
+      APPEND INITIAL LINE TO lr_instance ASSIGNING <lfs_instance>.
+      IF <lfs_instance> IS ASSIGNED.
+        <lfs_instance>-sign   = lc_sign_i.
+        <lfs_instance>-option = lc_opt_cp.
+        <lfs_instance>-low    = '*'.
+      ENDIF.
+      "Set filter options
+      "Filter Date and Time
+      lo_syslog_filter->set_filter_datetime(
+      im_datetime_from = lv_datetime_fr
+      im_datetime_to = lv_datetime_to ).
+      "Filter Instance
+      lo_syslog_filter->set_range_instance( lr_instance[] ).
+
+      "Get System Log Instance
+      TRY. "+V001
+          lo_syslog = cl_syslog=>get_instance_by_filter(
+          lo_syslog_filter ).
+*   Begin of changes in V001
+        CATCH cx_syslog_read_authorization INTO lv_authmsg.
+          ls_output = lv_authmsg->get_text( ).
+          APPEND ls_output TO lt_output.
+          RETURN.
+      ENDTRY.
+*   End of changes in V001
+
+      "Get SM21 log data
+      CALL METHOD lo_syslog->get_entries
+        RECEIVING
+          syslog_entries = lt_log_tab.
+
+      IF lt_log_tab IS NOT INITIAL.
+        SORT lt_log_tab BY zdate instance messageid text.
+
+        DELETE ADJACENT DUPLICATES FROM lt_log_tab COMPARING
+        zdate instance messageid text.
+        "no.of records
+        DESCRIBE TABLE lt_log_tab LINES lv_count.
+        IF lv_count > 1000.
+          "delete records
+          DELETE lt_log_tab FROM 1001.
+        ENDIF.
+
+        SORT lt_log_tab BY zdate DESCENDING.
+
+        "Header data
+        CONCATENATE   lc_date
+        lc_time
+        lc_instance
+        lc_workprocess
+        lc_processs
+        lc_client
+        lc_user
+        lc_priority
+        lc_msgid
+        lc_msgtxt
+        lc_tcode
+        lc_package
+        lc_problemclass
+        lc_program
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        "Display o/p
+        LOOP AT lt_log_tab ASSIGNING <lfs_log>.
+          IF <lfs_log>-severity NE lc_greenicon.
+            CONCATENATE <lfs_log>-zdate     lc_sep
+            <lfs_log>-ztime     lc_sep
+            <lfs_log>-instance  lc_sep
+            <lfs_log>-wp_type   lc_sep
+            <lfs_log>-processid lc_sep
+            <lfs_log>-client    lc_sep
+            <lfs_log>-zuser     lc_sep
+            <lfs_log>-icon+1(2) lc_sep
+            <lfs_log>-messageid lc_sep
+            <lfs_log>-text      lc_sep
+            <lfs_log>-tcode     lc_sep
+            <lfs_log>-devclass  lc_sep
+            <lfs_log>-clasid    lc_sep
+            <lfs_log>-repna
+            INTO ls_prefinal.
+
+            "adding null to blanks - at end of record
+            PERFORM end_null_check CHANGING ls_prefinal.
+
+            ls_output = ls_prefinal.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_prefinal,ls_output.
+          ENDIF.
+        ENDLOOP.
+
+        "adding null to blanks - in betweeen
+        PERFORM null_check TABLES  lt_output.
+
+      ELSE.
+        ls_output = lc_msg_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+        RETURN.
+      ENDIF.
+
+    WHEN OTHERS.
+
+*  Begin of changes in V001
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V001
+
+  ENDCASE.
+ENDFORM.
+FORM null_check TABLES lt_table TYPE table.
+
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.
+
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+  off = strlen( ls_string ) - 1
+  len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+    INTO ls_string.
+  ENDIF.
+
+ENDFORM.

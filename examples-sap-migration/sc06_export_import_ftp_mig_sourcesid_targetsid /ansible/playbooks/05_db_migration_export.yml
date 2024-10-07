@@ -1,0 +1,25 @@
+#tags: tab_split_order_by, exp_prep, table_split ,db_exp, db_imp
+---
+- name: ftp installation
+  hosts: target_db
+  tags: ftp
+  ignore_errors: true
+  vars:
+    ansible_become: true
+  roles:
+  - { role: ftp_setup, when: params.export.data_transfer_type == 'FTP' }
+
+- name: Export
+  hosts: source_db
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    ansible_become: true
+    mode: export
+  roles:
+    - table_splitting
+    - sap_export_preparation
+    - sap_export_tablesplit
+    - sap_export_database
+
+  

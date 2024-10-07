@@ -1,0 +1,81 @@
+---
+
+- name: input file path
+  set_fact:
+    text2json_filepath: "/tmp/txt2json.py"
+
+- name: copy the hanaminichecks file to the server
+  copy:
+    src: "hanaminichecks_2.txt"
+    dest: "/tmp/hanaminichecks100.txt"
+
+- name: copy the text to json python file to the server
+  copy:
+    src: "txt2json.py"
+    dest: "/tmp/txt2json.py"       
+
+- name: set fact the hana mini checks input and the output path
+  set_fact:
+    hanaminicheck_input_path: "/tmp/hanaminichecks100.txt"
+    output_path: "/tmp/outputhana.txt"
+
+- name: Setting max table count to 0
+  block:
+    - name: Create a sql folder
+      file:
+        path: "/tmp/table_count.sql"
+        state: touch
+        mode: '777'
+
+    - name: Take backup of nameserver_ini file
+      become_method: sudo
+      become: yes 
+      copy:
+        src: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/nameserver.ini
+        dest: /usr/sap/{{ sid | upper }}/SYS/global/hdb/custom/config/nameserver.ini_bak
+        remote_src: yes
+
+    - name: Inserting host resolution query in global.ini file
+      lineinfile:
+        path: /tmp/table_count.sql
+        line: ALTER SYSTEM ALTER CONFIGURATION ('nameserver.ini', 'SYSTEM') SET ('sql', 'max_table_count_in_statement') = '0' WITH RECONFIGURE;
+
+    - name: execute the sql query 
+      command: sudo su - {{ sid | lower }}adm -c 'hdbsql -U {{ hdbuserstore }} -I /tmp/table_count.sql'
+      register: output
+
+    - debug:
+        var: output
+
+    - name: Delete a sql folder
+      file:
+        path: "/tmp/table_count.sql"
+        state: absent
+        mode: '777'
+
+  when: set_max_table_count == 'yes'
+
+- name: running hdbsql command on source and target server
+  command: "sudo su - {{ sid | lower }}adm -c 'hdbsql -U {{ hdbuserstore }} -m -A -I {{ hanaminicheck_input_path }} -o {{ output_path }}'"
+  register: output
+
+- name: execute python code for converting minisql text to json
+  command: python {{ text2json_filepath }} -i {{ output_path }}
+  register: output_1
+  become: true
+
+- name: debug the contents
+  debug:
+    msg: "{{ output_1.stdout }}" 
+
+- name : copy contents from stdout to a file  
+  copy: 
+    content: "{{ output_1.stdout }}"
+    dest: "/tmp/jsonoutput.json"
+  
+- name: fetch file from target server to localhost
+  fetch:
+    src: "/tmp/jsonoutput.json"
+    dest: "{{ hana_mini_check_path }}/{{ ansible_hostname }}_hana.json"
+    flat: yes  
+  

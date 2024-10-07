@@ -1,0 +1,27 @@
+#For Linux, Please copy the contents of hosts_linux to hosts and fill the inputs
+#For Windows, Please copy the contents of hosts_windows to hosts and fill the inputs
+# Host details to be filled for source systems
+[source_ascs]
+DBOra ansible_host=192.168.0.11 ansible_user="cloudcoe" ansible_password="Cloudcoe123#"
+
+[source_pas]
+DBOra ansible_host=192.168.0.11 ansible_user="cloudcoe" ansible_password="Cloudcoe123#"
+
+[source_aas]
+DBOra ansible_host=192.168.0.11 ansible_user="cloudcoe" ansible_password="Cloudcoe123#"
+
+[source_db]
+DBOra ansible_host=192.168.0.11 ansible_user="cloudcoe" ansible_password="Cloudcoe123#"
+
+# Host details to be filled for target systems
+[target_ascs]
+gsc151std01 ansible_host=10.0.3.151 ansible_password="{{ passwords.os.target.ascs }}"
+
+[target_pas]
+gsc151std01 ansible_host=10.0.3.151 ansible_password="{{ passwords.os.target.pas }}"
+
+[target_aas]
+gsc151std01 ansible_host=10.0.3.151 ansible_password="{{ passwords.os.target.aas }}"
+
+[target_db]
+gsc151std01 ansible_host=10.0.3.151 ansible_user="admin_accenture" ansible_password="Cloudcoe123#"

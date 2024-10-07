@@ -1,0 +1,23 @@
+- name: Export 
+  block:
+    - name: splitting tables
+      include_tasks: "table_splitting.yml"
+      tags: tab_split_order_by 
+
+    - name: Export prep
+      include_tasks: "export_prep.yml"
+      tags: exp_prep
+      
+    - name: Export Table Split
+      include_tasks: "export_table_split.yml"
+      tags: table_split
+
+    - name: Export db
+      include_tasks: "export_db.yml"
+      tags: db_exp
+  when: mode == "export"
+
+- name: Import
+  include_tasks: "import_db.yml"
+  tags: db_imp
+  when: mode == "import"

@@ -1,0 +1,4 @@
+[{
+"Saphostexec": "{{ Hostagent_output.stdout_lines[1].split('/')[6].split(',')[0].split(':')[1] | trim }}",
+"Patch": "{{ Hostagent_output.stdout_lines[1].split(',')[1].split(' ')[2] }}"
+}]

@@ -1,0 +1,311 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_BD64_EXP_DISTRIBUTION_MDL               *
+* Title               :   To display distribution model               *
+* Purpose             :   This report is used to display distribution *
+*                     :   model                                       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* BD64                                                                *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                                                               *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*07-07-2020  Initial   Yasaswini K   NA          To get distribution  *
+*                                                model                *
+*09-07-2022   V001     Soumya Ray     Local   To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sysytem   *
+*---------------------------------------------------------------------*
+"Nested loops cannot be avoided as we need to display output in
+"tree structure
+
+REPORT zcm_bd64_exp_distribution_mdl.
+
+LOAD-OF-PROGRAM.
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  TYPES:
+    BEGIN OF bdm1_bcomm_type1,
+      viewname  TYPE string,
+      sndsystem TYPE bdm1_system_type,
+      bapi      TYPE bdm1_bapi_type,
+      rcvsystem TYPE bdm1_system_type,
+    END OF bdm1_bcomm_type1.
+
+  DATA: ls_bdm1model   TYPE bdm1_distmodel_type,
+        lt_bcomm_list  TYPE STANDARD TABLE OF bdm1_bcomm_type1,
+        ls_bcomm_list2 TYPE bdm1_bcomm_type1,
+        ls_bcomm_list  TYPE bdm1_bcomm_type1,
+        ls_bcomm_list1 TYPE bdm1_bcomm_type,
+        ls_mcomm_list  TYPE bdm1_mcomm_type,
+        ls_input       TYPE tab512,
+        ls_filter      TYPE bdm1_mcommfltgroup_type,
+        ls_list        TYPE bdm1_fltobj_type,
+        ls_value_list  TYPE tbd06-fobjvalue,
+        ls_output      TYPE tab512,
+        lv_action      TYPE char20,
+        ls_modelview   TYPE bdm1_modelview_type.
+
+  CONSTANTS: lc_sep         TYPE c VALUE '|'                LENGTH 1,
+             lc_title       TYPE c VALUE 'DisplayDistributionModel'
+                                                            LENGTH 30,
+             lc_invalid     TYPE c VALUE 'Invalid Input'    LENGTH 20,
+             lc_export      TYPE c VALUE 'EXPORT'           LENGTH 10,
+             lc_model       TYPE c VALUE 'DistibutionModel' LENGTH 20,
+             lc_sender      TYPE c VALUE 'Sender'           LENGTH 10,
+             lc_recipient   TYPE c VALUE 'Recipients'       LENGTH 14,
+             lc_msgtype     TYPE c VALUE 'MessageType'      LENGTH 18,
+             lc_object      TYPE c VALUE 'BussinessObject'  LENGTH 24,
+             lc_filtertype  TYPE c VALUE 'FilterType'       LENGTH 15,
+             lc_filtervalue TYPE c VALUE 'FilterObjectalue' LENGTH 30,
+             lc_null        TYPE c VALUE 'NULL'             LENGTH 4,
+*    Begin of changes in V001
+             lc_noinput     TYPE c VALUE 'No input passed'  LENGTH 40,
+             lc_nodata      TYPE c VALUE 'No data found'    LENGTH 40.
+*    End of changes in V001
+
+  CLEAR: ls_bdm1model,ls_mcomm_list,
+         ls_output,ls_modelview.
+
+  FREE: lt_output[].
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.      " Action
+
+  CASE lv_action.
+
+    WHEN lc_export.          " When action is EXPORT
+
+*   Get distribution model from db
+      CALL FUNCTION 'DISTMODEL_GETLIST'
+        EXPORTING
+          flag_get_emptyviews      = 'X'
+          flag_get_mcomms          = 'X'
+          flag_get_bcomms          = 'X'
+          flag_get_msg_filter      = 'X'
+          flag_get_bapi_rcvfilter  = 'X'
+          flag_get_bapi_datafilter = 'X'
+        IMPORTING
+          distmodel                = ls_bdm1model
+        EXCEPTIONS
+          unexpected_error         = 1
+          OTHERS                   = 2.
+
+      IF sy-subrc = 0.
+        "Column Heading
+        CONCATENATE  lc_model      lc_sep
+                     lc_sender     lc_sep
+                     lc_recipient  lc_sep
+                     lc_msgtype    lc_sep
+                     lc_object     lc_sep
+                     lc_filtertype lc_sep
+                     lc_filtervalue
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        "To avoid sort inside loop
+        LOOP AT ls_bdm1model-modelview_list INTO ls_modelview.
+          LOOP AT ls_modelview-bcomm_list INTO ls_bcomm_list1.
+            ls_bcomm_list2-viewname = ls_modelview-viewname.
+            ls_bcomm_list2-sndsystem = ls_bcomm_list1-sndsystem.
+            ls_bcomm_list2-bapi = ls_bcomm_list1-bapi.
+            ls_bcomm_list2-rcvsystem = ls_bcomm_list1-rcvsystem.
+            APPEND ls_bcomm_list2 TO lt_bcomm_list.
+            CLEAR: ls_bcomm_list1.
+          ENDLOOP.
+          CLEAR: ls_modelview.
+        ENDLOOP.
+
+        SORT lt_bcomm_list BY sndsystem rcvsystem.
+        "Model View
+        LOOP AT ls_bdm1model-modelview_list INTO ls_modelview.
+
+          IF ls_modelview-bcomm_list[] IS NOT INITIAL.
+            "Bussiness object
+            LOOP AT lt_bcomm_list INTO ls_bcomm_list WHERE
+              viewname = ls_modelview-viewname.
+              "Message types
+              LOOP AT ls_modelview-mcomm_list INTO ls_mcomm_list
+                WHERE snd_system = ls_bcomm_list-sndsystem
+                AND   rcv_system = ls_bcomm_list-rcvsystem.
+                "Filters
+                LOOP AT ls_mcomm_list-filter-filtergroup_list
+                   INTO ls_filter.
+                  LOOP AT ls_filter-filterobject_list INTO
+                    ls_list.
+*
+                    LOOP AT ls_list-value_list INTO ls_value_list.
+
+                      IF ls_value_list IS INITIAL.
+                        ls_value_list = lc_null.
+                      ENDIF.
+
+                      CONCATENATE ls_modelview-viewname lc_sep
+                            ls_mcomm_list-snd_system lc_sep
+                            ls_mcomm_list-rcv_system lc_sep
+                            ls_mcomm_list-messagetype lc_sep
+                            ls_bcomm_list-bapi lc_sep
+                            ls_list-fltobjtype lc_sep
+                            ls_value_list
+                            INTO ls_output.
+                      APPEND ls_output TO lt_output.
+                      CLEAR: ls_value_list, ls_output.
+
+                    ENDLOOP.
+
+                    CLEAR: ls_list.
+
+                  ENDLOOP.
+                  CLEAR: ls_filter.
+                ENDLOOP.
+
+                CONCATENATE ls_modelview-viewname lc_sep
+                           ls_bcomm_list-sndsystem lc_sep
+                           ls_bcomm_list-rcvsystem lc_sep
+                           ls_mcomm_list-messagetype lc_sep
+                           ls_bcomm_list-bapi        lc_sep
+                           lc_null                   lc_sep
+                           lc_null
+                           INTO ls_output.
+
+                APPEND ls_output TO lt_output.
+                CLEAR: ls_mcomm_list.
+              ENDLOOP.
+
+              IF sy-subrc NE 0.
+
+                CONCATENATE ls_modelview-viewname lc_sep
+                            ls_bcomm_list-sndsystem lc_sep
+                            ls_bcomm_list-rcvsystem lc_sep
+                            ls_mcomm_list-messagetype lc_sep
+                            ls_bcomm_list-bapi        lc_sep
+                            lc_null                   lc_sep
+                            lc_null INTO ls_output.
+
+                APPEND ls_output TO lt_output.
+                CLEAR: ls_bcomm_list, ls_output.
+
+              ENDIF.
+              CLEAR: ls_bcomm_list.
+            ENDLOOP.
+
+          ENDIF.
+
+          IF ls_modelview-mcomm_list[] IS NOT INITIAL AND
+             ls_modelview-bcomm_list[] IS INITIAL.
+            "Model View
+            LOOP AT ls_modelview-mcomm_list INTO ls_mcomm_list.
+              "Filter
+              LOOP AT ls_mcomm_list-filter-filtergroup_list
+                   INTO ls_filter.
+                "Filter list
+                LOOP AT ls_filter-filterobject_list INTO ls_list.
+                  "Filter Value
+                  LOOP AT ls_list-value_list INTO ls_value_list.
+
+                    IF ls_value_list IS INITIAL.
+                      ls_value_list = lc_null.
+                    ENDIF.
+
+                    CONCATENATE ls_modelview-viewname lc_sep
+                          ls_mcomm_list-snd_system lc_sep
+                          ls_mcomm_list-rcv_system lc_sep
+                          ls_mcomm_list-messagetype lc_sep
+                          ls_bcomm_list-bapi lc_sep
+                          ls_list-fltobjtype lc_sep
+                          ls_value_list
+                          INTO ls_output.
+                    APPEND ls_output TO lt_output.
+                    CLEAR: ls_value_list, ls_output.
+
+                  ENDLOOP.
+
+                  CLEAR: ls_list.
+
+                ENDLOOP.
+                "Append to output
+                IF sy-subrc NE 0.
+                  IF ls_value_list IS INITIAL.
+                    ls_value_list = lc_null.
+                  ENDIF.
+                  CONCATENATE ls_modelview-viewname lc_sep
+                                      ls_mcomm_list-snd_system lc_sep
+                                      ls_mcomm_list-rcv_system lc_sep
+                                      ls_mcomm_list-messagetype lc_sep
+                                      ls_bcomm_list-bapi lc_sep
+                                      ls_list-fltobjtype lc_sep
+                                      ls_value_list
+                                      INTO ls_output.
+                  APPEND ls_output TO lt_output.
+                  CLEAR: ls_value_list, ls_output.
+                ENDIF.
+                CLEAR: ls_filter.
+              ENDLOOP.
+
+              IF ls_value_list IS INITIAL.
+                ls_value_list = lc_null.
+              ENDIF.
+              "Append to output
+              CONCATENATE ls_modelview-viewname lc_sep
+                          ls_mcomm_list-snd_system lc_sep
+                          ls_mcomm_list-rcv_system lc_sep
+                          ls_mcomm_list-messagetype lc_sep
+                          ls_bcomm_list-bapi        lc_sep
+                          ls_list-fltobjtype        lc_sep
+                          ls_value_list
+                          INTO ls_output.
+
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_mcomm_list, ls_output.
+            ENDLOOP.
+
+          ENDIF.
+          CLEAR: ls_modelview.
+        ENDLOOP.
+      ELSE.
+        "No data found
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+        RETURN.
+      ENDIF.
+
+      IF lt_output[] IS NOT INITIAL.
+        "Adding NULL values in between
+        DO.
+          REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+          IN TABLE lt_output WITH '|NULL|'.
+          FIND '||' IN TABLE lt_output.
+          IF sy-subrc <> 0.
+            EXIT .
+          ENDIF.
+        ENDDO.
+
+      ENDIF.
+    WHEN OTHERS.
+      "Invalid input
+      ls_output = lc_invalid.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+      RETURN.
+  ENDCASE.
+ENDFORM.

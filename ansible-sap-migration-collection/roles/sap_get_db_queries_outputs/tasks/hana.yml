@@ -1,0 +1,100 @@
+- set_fact:
+    login: "{{ login_mechanism | default('sudo') }}"
+
+- name: Copy hana scripts from local to target nodes
+  copy:
+    src: "../files/"
+    dest: "/tmp/"
+    mode: '0777'
+    
+- name: Running selective hana tables query
+  file:
+    path: /tmp/{{ item }}.sql
+    state: touch
+    mode: u=rwx,g=rwx,o=rwx
+  with_items: 
+    - selective_hana_tables
+
+- name: Inserting query in selective-hana-tables.sql file 
+  lineinfile:
+    path: /tmp/selective_hana_tables.sql
+    line: "select count(*) row_count from {{ schema_name }}.{{ item }};"
+  when: default_table_name is defined
+  with_items: "{{ default_table_name }}"
+  register: default_queries
+
+- debug: var=default_queries
+
+- name: Running selective hana tables query
+  file:
+    path: /tmp/selective_hana_tables.sql
+    state: touch
+    mode: u=rwx,g=rwx,o=rwx
+    
+- name: Execute HDB version command
+  shell: '{{ login }} su - {{ sid | lower }}adm -c "/usr/sap/{{ sid }}/HDB{{ instance_number }}/HDB version"'
+  args:
+    executable: /bin/bash
+  register: db_version_outputs
+
+- name: Execute HDB info for hana information
+  shell: sudo su - {{ sid | lower }}adm -c "/usr/sap/{{ sid }}/HDB{{ instance_number }}/HDB info"
+  args:
+    executable: /bin/bash
+  register: db_info_output
+
+- name: Check db service status
+  shell: sudo su - {{ sid | lower }}adm -c "/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/sapcontrol -nr {{ instance_number }} -function GetProcessList"
+  failed_when: "db_service_status.rc not in [0,1,2,3,4,5]"
+  register: db_service_status
+
+- name: Write ouptut for hana db version
+  template:
+    src: "get_hana_version.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/get_hana_version_outputs.json'
+  become: yes
+  delegate_to: localhost
+
+- set_fact:
+    tenant_db: "{{ sid | upper }}"
+
+- set_fact:
+    db_name: "{{ hana_db_name | default(tenant_db) }}"
+
+- name: Execute hana queries
+  shell: '{{ login }} su - {{ sid | lower }}adm -c "/usr/sap/{{ sid }}/HDB{{ instance_number }}/exe/hdbsql -i {{ instance_number }} -d {{ db_name }} -u {{ db_user }} -p "{{ db_password }}" -I "/tmp/{{ item.name }}.sql""'
+  register: output
+  args:
+    executable: /bin/bash
+  with_items:
+    - "{{ hana_queries }}"  
+
+- debug: var=output  
+
+- name: Write ouptut for hana db version
+  template:
+    src: "{{ item.name }}.j2"
+    dest: '{{ db_export_path }}{{ db_type }}/{{ item.name }}.{{ item.format }}'
+  with_items:
+    - { name: get_hana_db_info, format: txt }
+    - { name: get_hana_service_status, format: txt }
+  become: yes
+  delegate_to: localhost
+
+- name: Write ouptut for hana queries
+  template:
+    src: "{{ item.name }}.j2"
+    dest: "{{ db_export_path }}{{ db_type }}/{{ item.name }}_outputs.{{ item.format | default('json') }}"
+  become: yes
+  delegate_to: localhost
+  with_items:
+       - "{{ hana_queries }}"
+  loop_control:
+      index_var: index
+
+- name: Delete query file from target nodes
+  file:
+     path: /tmp/{{ item.name }}.sql
+     state: absent
+  with_items:
+     - "{{ hana_queries }}"     

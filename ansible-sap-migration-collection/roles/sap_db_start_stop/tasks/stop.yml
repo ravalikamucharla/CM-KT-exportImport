@@ -1,0 +1,9 @@
+---
+
+- name: stop hana
+  command: "{{ item }}"
+  async: 12000
+  poll: 10
+  loop:
+    - sudo su - {{ sid|lower }}adm -c "sapcontrol -nr {{ instance_number }} -function StopSystem HDB && sapcontrol -nr {{ instance_number }} -function StopWait 600 10"
+    - sleep 20

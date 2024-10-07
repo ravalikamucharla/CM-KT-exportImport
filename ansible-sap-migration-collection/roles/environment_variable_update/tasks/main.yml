@@ -1,0 +1,12 @@
+---
+- name: Linux Environment Variable update
+  include_tasks: lin_env_update.yml
+  when: os_type == 'linux' 
+
+- name: Windows Environment Variable update
+  include_tasks: win_env_update.yml
+  when: os_type == 'windows'
+
+- name: Windows Environment Variable update
+  include_tasks: windows_registry.yml
+  when: env_var_update.windows_registry == 'yes'

@@ -1,0 +1,257 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SYB_EXP_LAST_LOG_DB_BACKUP              *
+* Title               :   Last Log & Database backup                  *
+* Purpose             :   This report is used to fetch last log and   *
+*                         database backup in the system               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXXX                                                            *
+*---------------------------------------------------------------------*
+*	Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*12-02-2020  Initial   Ruchir Kamble   Local      To fetch last log & *
+*                                                 database backup in  *
+*                                                 the system          *
+*09-22-2022  V001      Soumya Ray      Local      To pass 'No data    *
+*                                                found' incase no data*
+*                                                in system            *
+*---------------------------------------------------------------------*
+
+REPORT zcm_syb_exp_last_log_db_backup.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                LENGTH 1,
+             lc_null      TYPE c VALUE 'NULL'             LENGTH 4,
+             lc_export    TYPE c VALUE 'EXPORT'           LENGTH 6,
+             lc_database  TYPE c VALUE 'DATABASE'         LENGTH 8,
+             lc_tran      TYPE c VALUE 'TRAN'             LENGTH 4,
+             lc_data      TYPE c VALUE 'Database'         LENGTH 8,
+             lc_type      TYPE c VALUE 'Type'             LENGTH 4,
+             lc_filename  TYPE c VALUE 'Filename'         LENGTH 8,
+             lc_date      TYPE c VALUE
+             'Last Backup Date'                           LENGTH 25,
+             lc_title     TYPE c VALUE
+             'Last Log & Database backup'                 LENGTH 35,
+* Begin of changes in V001
+             lc_noinput   TYPE c VALUE 'No input passed'  LENGTH 20,
+             lc_inc_input TYPE c VALUE 'Incorrect input'  LENGTH 20,
+             lc_err_msg   TYPE c VALUE 'No data found'    LENGTH 20.
+* End of changes in V001
+
+  DATA: ls_input       TYPE tab512,
+        ls_output      TYPE tab512,
+        lv_action      TYPE char10,
+        lv_sql_stmt    TYPE string,
+        lv_con_name    TYPE dbcon_name,
+        lt_dumphistory TYPE sybdmp_history_tab,
+        ls_dumphistory TYPE sybdmp_history,
+        lt_sybdmp      TYPE sybdmp_history_tab,
+        ls_sybdmp      TYPE sybdmp_history,
+        lt_database    TYPE sybdmp_history_tab,
+        ls_database    TYPE sybdmp_history,
+        lt_log         TYPE sybdmp_history_tab,
+        ls_log         TYPE sybdmp_history,
+        lo_result_ref  TYPE REF TO data,
+        lo_sql_excp    TYPE REF TO cx_sql_exception,
+        lo_sql_con     TYPE REF TO cl_sql_connection,
+        lo_sql_stmt    TYPE REF TO cl_sql_statement,
+        lo_sql_res     TYPE REF TO cl_sql_result_set,
+        lv_msg         TYPE string, "+V001
+        lo_parse_error TYPE REF TO cx_dba_parse_error. "+V001
+
+  CLEAR lv_action.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read input from Python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V001
+  IF sy-subrc NE 0.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+* End of changes in V001
+  ENDIF.
+  lv_action = ls_input.       " Action
+
+  CASE lv_action.
+
+    WHEN lc_export.                     " If action is EXPORT
+
+      " Build the SQL statement and execute it.
+      CREATE OBJECT lo_sql_con.
+
+      CREATE OBJECT lo_sql_stmt.
+
+      CLEAR lv_con_name.
+
+      " To get database connection name
+      SELECT SINGLE con_name
+      FROM dbcon
+      INTO lv_con_name.
+
+      IF sy-subrc NE 0.
+        ls_output =  lc_err_msg. "+V001
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+
+      ENDIF.
+
+      TRY.
+
+          lo_sql_con = cl_db6_con=>get_connection( lv_con_name ).
+          lo_sql_stmt = lo_sql_con->create_statement( ).
+
+          " Passing the query
+          CONCATENATE 'exec sp_dump_history list,'
+          '@status='
+          ''''
+          'success'
+          ''''
+          INTO lv_sql_stmt.
+
+          " Executing the query
+          lo_sql_res = lo_sql_stmt->execute_query( lv_sql_stmt ).
+
+          GET REFERENCE OF lt_dumphistory INTO lo_result_ref.
+          lo_sql_res->set_param_table( lo_result_ref ).
+          lo_sql_res->next_package( ).
+          lo_sql_res->close( ).
+
+          IF lt_dumphistory IS NOT INITIAL.
+
+            " Adding heading to the output
+            CONCATENATE lc_data     lc_sep
+            lc_type     lc_sep
+            lc_date     lc_sep
+            lc_filename
+            INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Converting timestamp into SAP formats
+            LOOP AT lt_dumphistory INTO ls_dumphistory.
+
+              TRY.
+                  ls_dumphistory-dump_datetime =
+                  cl_syb_dbms_utils=>cast_fmt_tstamp_to_db6tstamp(
+                  fmt_tstamp = ls_dumphistory-dump_date ).
+
+                  ls_dumphistory-dump_date =
+                  cl_dba_format=>format_db6tstamp(
+                  db6tstamp = ls_dumphistory-dump_datetime ).
+
+                  APPEND ls_dumphistory TO lt_sybdmp.
+                CATCH cx_dba_parse_error INTO lo_parse_error."+V001
+                  lv_msg = lo_sql_excp->get_longtext( ). "+V001
+              ENDTRY.
+            ENDLOOP.
+
+            LOOP AT lt_sybdmp INTO ls_sybdmp.
+
+              " If dump type is database
+              IF ls_sybdmp-dump_type EQ lc_database.
+
+                APPEND ls_sybdmp TO lt_database.
+                CLEAR ls_sybdmp.
+
+                " If dump type is log
+              ELSEIF ls_sybdmp-dump_type EQ lc_tran.
+
+                APPEND ls_sybdmp TO lt_log.
+                CLEAR ls_sybdmp.
+
+              ENDIF.
+
+            ENDLOOP.
+
+            IF lt_database IS NOT INITIAL.
+              " Sorting data by date in descending order
+              SORT lt_database BY dump_date DESCENDING.
+              READ TABLE lt_database INTO ls_database INDEX 1.
+* Begin of changes in V001
+              IF ls_database-file_name IS INITIAL.
+                ls_database-file_name = lc_null.
+              ENDIF.
+* End of changes in V001
+              CONCATENATE ls_database-database_name lc_sep
+              ls_database-dump_type     lc_sep
+              ls_database-dump_date     lc_sep
+              ls_database-file_name
+              INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+
+            ENDIF.
+
+            IF lt_log IS NOT INITIAL.
+              " Sorting data by date in descending order
+              SORT lt_log BY dump_date DESCENDING.
+              READ TABLE lt_log INTO ls_log INDEX 1.
+
+* Begin of changes in V001
+              IF ls_database-file_name IS INITIAL.
+                ls_database-file_name = lc_null.
+              ENDIF.
+* End of changes in V001
+              CONCATENATE ls_log-database_name  lc_sep
+              ls_log-dump_type      lc_sep
+              ls_log-dump_date      lc_sep
+              ls_database-file_name
+              INTO ls_output.
+              APPEND ls_output TO lt_output.
+              CLEAR ls_output.
+            ENDIF.
+
+          ELSE.
+            " No records found
+            ls_output = lc_err_msg.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+          ENDIF.
+
+        CATCH cx_sql_exception INTO lo_sql_excp.
+          lv_msg = lo_sql_excp->get_text( ).
+          ls_output = lv_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+      ENDTRY.
+* Begin of changes in V001
+      "Adding NULL values in between
+      DO.
+        REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+        IN TABLE lt_output WITH '|NULL|'.
+        FIND '||' IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+      ENDDO.
+* End of changes in V001
+
+    WHEN OTHERS.
+* Begin of changes in V001
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+* End of changes in V001
+  ENDCASE.
+
+ENDFORM.

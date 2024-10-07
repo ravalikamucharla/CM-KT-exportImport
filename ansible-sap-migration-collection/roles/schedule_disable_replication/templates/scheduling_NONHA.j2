@@ -1,0 +1,5 @@
+#!/bin/bash
+/usr/bin/at "{{ cut_over.time }}" "{{ cut_over.date }}" <<EOF
+cd {{ ansible_folder_path }}
+ansible-playbook playbooks/05_4_hsr_disable_replication.yml >> ./cut_over.log
+EOF

@@ -1,0 +1,20 @@
+- name: Third Party Tools Backup | Ensure backups exist for SYSTEMDB
+  command: sudo su - {{ sid | lower }}adm -c "hdbsql -i {{ instance_number }} -u SYSTEM -d SYSTEMDB -p '{{ db_password }}' backup data using backint \(\'{{ hana_hsr_path }}\'\)"  
+  register: sys_output
+  async: 20000
+  poll: 10
+  
+- debug:
+    var: sys_output
+
+- name: Third Party Tools Backup | Ensure backups exist for tenant db 
+  command: sudo su - {{ sid | lower }}adm -c "hdbsql -i {{ instance_number }} -u SYSTEM -d SYSTEMDB -p '{{ db_password }}' backup data for {{ item | upper }} using backint \(\'{{ hana_hsr_path_tent }}\'\)"
+  loop: "{{ tenant_db }}"
+  async: 20000
+  poll: 10
+  when: 
+    - tenant_db is defined
+  register: tent_output
+
+- debug:
+    var: tent_output

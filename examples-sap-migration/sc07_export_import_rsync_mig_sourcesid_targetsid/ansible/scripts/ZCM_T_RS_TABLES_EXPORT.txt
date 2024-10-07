@@ -1,0 +1,305 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_T_RS_TABLES_EXPORT                       *
+* Title               :  To capture table entries                     *
+* Purpose             :  This report is to capture RSADMINA,RSBASIDOC *
+*                        RSLOGSYSMAP, RSLOGSYSDEST, RSPOR_T_PORTALL   *
+*                        RSDANLCON entries during cloud migration     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* X                                                                   *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* RSADMINA                  X                                         *
+* RSBASIDOC                 X                                         *
+* RSLOGSYSMAP               X                                         *
+* RSLOGSYSDEST              X                                         *
+* RSPOR_T_PORTALL           X                                         *
+* RSDANLCON                 X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*03-03-2021  Initial  Yasaswini K   Local      To Capture rsadmina,   *
+*                                              rsbasidoc,rslogsysmap, *
+*                                              rslogsysdest,rsdanlcon *
+*                                              rspor_t_portall entries*
+*09-22-2022  V001     Soumya Ray    Local      To pass 'No data found'*
+*                                              in case no data found  *
+*                                              in system              *
+*---------------------------------------------------------------------*
+REPORT zcm_t_rs_tables_export.
+
+LOAD-OF-PROGRAM.
+
+CLASS gcl_verify_tables DEFINITION.
+
+  PUBLIC SECTION.
+    TYPES: ltt_output TYPE STANDARD TABLE OF tab512.
+    METHODS:
+      "Method to get table data
+      get_table_data
+        IMPORTING lv_tabname TYPE string
+        EXPORTING lt_output1 TYPE ltt_output,
+
+      "Method for adding NULL to blank values
+      get_null_check
+        EXPORTING lt_output1 TYPE ltt_output.
+
+ENDCLASS.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_export       TYPE c VALUE 'EXPORT'       LENGTH 6,
+             lc_rsadmina     TYPE c VALUE 'RSADMINA'     LENGTH 8,
+             lc_rslogsysmap  TYPE c VALUE 'RSLOGSYSMAP'  LENGTH 11,
+             lc_rslogsysdest TYPE c VALUE 'RSLOGSYSDEST' LENGTH 12,
+             lc_rsdanlcon    TYPE c VALUE 'RSDANLCON'    LENGTH 9,
+             lc_rspor_portal TYPE c VALUE 'RSPOR_T_PORTAL'
+             LENGTH 14,
+             lc_no_input     TYPE c VALUE 'No input given'
+             LENGTH 20,
+             lc_inc_input    TYPE c VALUE 'Incorrect input'
+             LENGTH 20,
+             lc_rsbasidoc    TYPE c VALUE 'RSBASIDOC'    LENGTH 9.
+
+  DATA: lo_verify_tables TYPE REF TO gcl_verify_tables,
+        lv_table_name    TYPE string,
+        ls_input         TYPE tab512,
+        ls_output        TYPE tab512,
+        lv_action        TYPE char10,
+        lt_output2       TYPE STANDARD TABLE OF tab512.
+
+  CLEAR: ls_input,
+  ls_output,
+  lv_action,
+  lv_table_name.
+
+  FREE: lt_output2[],
+  lt_output[].
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input given
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  "  Instansiate the object
+  CREATE OBJECT lo_verify_tables.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      "rsadmina table
+      lv_table_name = lc_rsadmina.
+
+      "Get rsadmina table data
+      CALL METHOD lo_verify_tables->get_table_data
+        EXPORTING
+          lv_tabname = lv_table_name
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Add blank line after each table
+      CLEAR: ls_output, lv_table_name.
+      APPEND ls_output TO lt_output2.
+
+      "rsbasidoc table
+      lv_table_name = lc_rsbasidoc.
+
+      "Get rsbasidoc table data
+      CALL METHOD lo_verify_tables->get_table_data
+        EXPORTING
+          lv_tabname = lv_table_name
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Add blank line after each table
+      CLEAR: ls_output, lv_table_name.
+      APPEND ls_output TO lt_output2.
+
+      "rslogsysmap table
+      lv_table_name = lc_rslogsysmap.
+
+      "Get rslogsysmap table data
+      CALL METHOD lo_verify_tables->get_table_data
+        EXPORTING
+          lv_tabname = lv_table_name
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Add blank line after each table
+      CLEAR: ls_output, lv_table_name.
+      APPEND ls_output TO lt_output2.
+
+      "rslogsysdest table
+      lv_table_name = lc_rslogsysdest.
+
+      "Get rslogsysdest table data
+      CALL METHOD lo_verify_tables->get_table_data
+        EXPORTING
+          lv_tabname = lv_table_name
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Add blank line after each table
+      CLEAR: ls_output, lv_table_name.
+      APPEND ls_output TO lt_output2.
+
+      "rsdanlcon table
+      lv_table_name = lc_rsdanlcon.
+
+      "Get rsdanlcon table data
+      CALL METHOD lo_verify_tables->get_table_data
+        EXPORTING
+          lv_tabname = lv_table_name
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Add blank line after each table
+      CLEAR: ls_output, lv_table_name.
+      APPEND ls_output TO lt_output2.
+
+      "rspor_t_portal table
+      lv_table_name = lc_rspor_portal.
+
+      "Get rspor_t_portal table data
+      CALL METHOD lo_verify_tables->get_table_data
+        EXPORTING
+          lv_tabname = lv_table_name
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Add blank line after each table
+      CLEAR: ls_output, lv_table_name.
+      APPEND ls_output TO lt_output2.
+
+      "Adding NULL to the blank values
+      CALL METHOD lo_verify_tables->get_null_check
+        IMPORTING
+          lt_output1 = lt_output2.
+
+      "Exporting data to output table
+      lt_output[] = lt_output2[].
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+ENDFORM.
+
+CLASS gcl_verify_tables IMPLEMENTATION.
+  METHOD get_table_data.
+
+    CONSTANTS: lc_list       TYPE c VALUE 'Listof'  LENGTH 6,
+               lc_entries    TYPE c VALUE 'entries' LENGTH 7,
+               lc_msg_nodata TYPE c VALUE 'No data found'
+                               LENGTH 26. "+V001
+
+    FIELD-SYMBOLS : <lft_table>    TYPE ANY TABLE,
+                   <lfs_structure> TYPE any, "+V001
+                   <lfs_comp>      TYPE any. "+V001
+
+    DATA: lt_table         TYPE REF TO data,
+          lt_details       TYPE abap_compdescr_tab,
+          ls_details       TYPE abap_compdescr,
+          lv_comp          TYPE char80,
+          lo_ref_table_des TYPE REF TO cl_abap_structdescr,
+          lv_prefinal      TYPE string,
+          ls_output        TYPE tab512.
+
+
+    CREATE DATA lt_table TYPE TABLE OF (lv_tabname).
+
+
+    ASSIGN lt_table->* TO <lft_table>.
+
+    "Table Name
+    CONCATENATE lc_list lv_tabname lc_entries INTO ls_output.
+    APPEND ls_output TO lt_output1.
+    CLEAR: ls_output.
+
+    "Get entries from table
+    SELECT * FROM (lv_tabname) INTO TABLE <lft_table>.
+    IF sy-subrc <> 0.
+      "no data found
+      ls_output = lc_msg_nodata. "+V001
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+      RETURN.
+    ENDIF.
+
+    "Column headings
+    lo_ref_table_des ?=
+    cl_abap_typedescr=>describe_by_name( lv_tabname ).
+
+    lt_details[] = lo_ref_table_des->components[].
+
+    "Adding column headings to output
+    LOOP AT lt_details INTO ls_details.
+      CONCATENATE lv_prefinal ls_details-name '|' INTO lv_prefinal.
+      CLEAR: ls_details.
+    ENDLOOP.
+
+    "Removing seperator at end
+    lv_prefinal = shift_right( val = lv_prefinal  places = 1 ).
+    ls_output = lv_prefinal.
+    APPEND ls_output TO lt_output1.
+    CLEAR: lv_prefinal, ls_output.
+
+    "Table data
+    LOOP AT <lft_table> ASSIGNING <lfs_structure>.
+      IF <lfs_structure> IS ASSIGNED.
+        DO .
+          ASSIGN COMPONENT sy-index OF STRUCTURE <lfs_structure>
+          TO <lfs_comp>.
+          IF sy-subrc <> 0.
+            EXIT .
+          ENDIF.
+          CLEAR lv_comp.
+          IF <lfs_comp> IS ASSIGNED.
+            lv_comp = <lfs_comp>.
+            CONDENSE lv_comp.
+            CONCATENATE lv_prefinal lv_comp '|' INTO lv_prefinal.
+          ENDIF.
+        ENDDO.
+      ENDIF.
+
+      "Removing seperator at end
+      lv_prefinal = shift_right( val = lv_prefinal  places = 1 ).
+
+      "Adding NULL to end blank values
+      IF lv_comp IS INITIAL.
+        CONCATENATE lv_prefinal 'NULL' INTO lv_prefinal.
+      ENDIF.
+
+      "Appending output
+      ls_output = lv_prefinal.
+      APPEND ls_output TO lt_output1.
+
+      CLEAR: lv_prefinal, ls_output.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD get_null_check.
+    DO .
+      REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+      IN TABLE lt_output1 WITH '|NULL|'.
+      FIND '||' IN TABLE lt_output1.
+      IF sy-subrc <> 0.
+        EXIT .
+      ENDIF.
+    ENDDO.
+  ENDMETHOD.
+
+ENDCLASS.

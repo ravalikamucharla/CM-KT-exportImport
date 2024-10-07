@@ -1,0 +1,21 @@
+- name: hana-hsr
+  hosts: "{{ groups['target_slave_db'][0] }}"
+  vars:
+    hostip: "{{ hostvars[groups['target_slave_db'][0]].ansible_host }}"
+    target_secondary_db: "{{ groups['target_slave_db'][0] }}"
+    hana_db_name: "{{ source.sap.db.hana_db_name }}"
+  vars_files:
+    - ../inventory/group_vars/target_db.yml
+    - ../inventory/host_vars/{{ groups['target_slave_db'][0] }}.yml
+  roles:
+    - { role: sap_db_start_stop, action: start }
+    - { role: sap_db_start_stop, action: status }
+    - port_status_check
+    - create_keys
+    - log_mode
+    - enable_site
+    - copy_files
+    - { role: set_hana_parameters, set_params_on: target_secondary, when: hana_parameters.hana_params_target_secandary.required == 'yes' }
+    - { role: hana_host_resolution, set_on: target_primary, when: host_resolution.target_primary.required == 'yes' }
+    - { role: hana_host_resolution, set_on: target_secondary, when: host_resolution.target_secondary.required == 'yes' }
+    - register_node

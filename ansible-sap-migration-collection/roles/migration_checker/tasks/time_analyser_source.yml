@@ -1,0 +1,84 @@
+---
+
+- name: change permission
+  shell: 
+    cmd: |
+      sudo chmod 777 /tmp/sapinst_instdir/{{ migration_checkers.source.product }}
+      sudo chmod 777 /tmp/sapinst_instdir/{{ migration_checkers.source.product }}/{{ migration_checkers.source.db_type }}
+      sudo chmod 777 /tmp/sapinst_instdir/{{ migration_checkers.source.product }}/{{ migration_checkers.source.db_type }}/COPY
+      sudo chmod 777 /tmp/sapinst_instdir/{{ migration_checkers.source.product }}/{{ migration_checkers.source.db_type }}/COPY/EXP
+      sudo chmod 777 /tmp/sapinst_instdir/{{ migration_checkers.source.product }}/{{ migration_checkers.source.db_type }}/COPY/EXP/AS-ABAP
+      sudo chmod -R 777 /tmp/sapinst_instdir/{{ migration_checkers.source.product }}/{{ migration_checkers.source.db_type }}/COPY/EXP/AS-ABAP/EXP
+
+- name: unchar MIGTIME.sar
+  shell: /usr/sap/sapinst/SWPM/sapcar.exe -xvf /usr/sap/sapinst/SWPM/COMMON/INSTALL/MIGTIME.SAR 
+  args:
+    chdir: "{{ install_dir_path_src }}"
+  register: extracted_files
+
+- debug: 
+    var: extracted_files
+
+- name: Run export_time.sh file 
+  shell: ./export_time.sh
+  args:
+    chdir: "{{ install_dir_path_src }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.source.java_home_path }}"
+  register: export_time
+
+- debug: 
+    var: export_time
+
+- name: create folder
+  file:
+    path: "../Time_analyser_output"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path_src }}/export_time.txt"
+    dest: "../Time_analyser_output/export_time.txt"
+    flat: yes
+
+- name: xml and html format of imort time 
+  shell: ./export_time.sh {{ migration_checkers.source.mig_check_format }}
+  args:
+    chdir: "{{ install_dir_path_src }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.source.java_home_path }}"
+  register: xml_html_output
+  when: migration_checkers.source.mig_check_format is defined
+
+- debug: 
+    var: xml_html_output
+
+- name: create folder
+  file:
+    path: "../Migration_checkers"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: create folder
+  file:
+    path: "../Migration_checkers/Time_analyser/source"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path_src }}/{{ item }}"
+    dest: "../Migration_checkers/Time_analyser/source/{{ item }}"
+    flat: yes
+  loop:
+    - export_time.txt
+    - export_time.xml
+    - export_time.html
+

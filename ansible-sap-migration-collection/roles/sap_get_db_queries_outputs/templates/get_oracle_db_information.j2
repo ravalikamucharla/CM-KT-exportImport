@@ -1,0 +1,7 @@
+[{
+    "NAME": "{{ output.results[index].stdout_lines[5].split(" ")[0] | trim }}",
+    "LOG_MODE": "{{ output.results[index].stdout_lines[5].split(" ")[2] | trim }}",
+    "OPEN_MODE": "{{ output.results[index].stdout_lines[5].split(" ")[3]+output.results[index].stdout_lines[5].split(" ")[4] | trim }}",
+    "DATABASE_ROLE": "{{ output.results[index].stdout_lines[5].split(" ")[-1] }}",
+    "PLATFORM_NAME": "{{ output.results[index].stdout_lines[6] }}"
+}]

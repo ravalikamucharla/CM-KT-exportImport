@@ -1,0 +1,11 @@
+---
+
+- name: Check the status
+  command: sudo su - {{ sid | lower }}adm -c "hdbnsutil -sr_state"
+  async: 12000
+  poll: 3
+  register: status_output
+
+- debug:
+    var: status_output
+    

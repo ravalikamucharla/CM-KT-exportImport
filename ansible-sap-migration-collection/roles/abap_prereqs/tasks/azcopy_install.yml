@@ -1,0 +1,32 @@
+---
+# tasks file for azcopy-install
+- name: Create remote temporary folder
+  file:
+    path: /cm_sap_migration/azcopy
+    state: directory
+
+- name: download azcopy
+  get_url:
+    url: https://aka.ms/downloadazcopy-v10-linux
+    dest: /cm_sap_migration/azcopy
+    mode: 0755
+
+- name: get tar gz name 
+  command: find /cm_sap_migration/azcopy -name "azcopy*.tar.gz"
+  register: azcopy_filename
+
+- name: print name
+  debug:
+    var: azcopy_filename.stdout_lines
+
+- name: Unarchive azcopy package
+  become_method: sudo 
+  become: yes
+  unarchive:
+    remote_src: true
+    src: "{{ azcopy_filename.stdout_lines[0]}}"
+    dest: /usr/bin
+    mode: 0755
+    exclude:
+      - ThirdPartyNotice.txt
+    extra_opts: [--strip-components=1]     

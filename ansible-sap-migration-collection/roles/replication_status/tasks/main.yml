@@ -1,0 +1,15 @@
+---
+- name: replication status
+  command: sudo su - {{ sid | lower }}adm -c "HDBSettings.sh systemReplicationStatus.py --sapcontrol=1 | grep -i overall_replication_status"
+  async: 12000
+  poll: 3
+  register: status
+  until: status.stdout_lines[0].split('=')[-1] == "ACTIVE"
+  retries: 100000
+  delay: 10
+
+- debug:
+    var: status
+
+- meta: end_play
+  when: status.stdout_lines[0].split('=')[-1] != "ACTIVE"

@@ -1,0 +1,4 @@
+sid: "{{ source.sap.sid }}"
+os_export_path: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/os_export/"
+schema_name: "{{ source.sap.db.schema_name }}"
+

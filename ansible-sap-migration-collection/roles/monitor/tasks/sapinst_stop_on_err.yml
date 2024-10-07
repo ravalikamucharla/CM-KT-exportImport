@@ -1,0 +1,21 @@
+- name: grep sapinst.log for keyword "Stop On Error"
+  shell: cat "{{export.sapinst_path}}"| grep -i "Stop On Error"
+  register: process_output_r3load
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: Check if output contains "Active"
+  debug:
+    msg: Stop On Error in  sapinst.log
+  when: process_output_r3load.stdout != 0
+
+- name: grep sapinst.log for keyword "Stop On Error"
+  shell: cat "{{export.sapinst_path}}"| grep -i Stop On Error
+  register: process_output_r3load
+  delegate_to: "{{ groups[target_pas'][0] }}"
+  when: system_type == "target"
+
+- name: Check if output contains "Active"
+  debug:
+    msg: Stop On Error not in sapinst.log
+  when: process_output_r3load.stdout == 0

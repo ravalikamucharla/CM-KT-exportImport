@@ -1,0 +1,284 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_DEL_SPOOL_RQST_INCNSTNCY                *
+* Title               :   Delete Obsolete Spool Request & Inconsitency*
+* Purpose             :   To Delete Obsolete Spool Request and        *
+*                         Inconsitency for Cloud Migration            *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RSPO0041                                                            *
+*---------------------------------------------------------------------*
+*	Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*10-14-2021  Initial  Ruchir Kamble  Local     To delete Spool request*
+*                                              & inconsitency         *
+*---------------------------------------------------------------------*
+
+REPORT zcm_del_spool_rqst_incnstncy.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep           TYPE c VALUE '|'                  LENGTH 1,
+    lc_digits        TYPE c VALUE '0123456789'         LENGTH 10,
+    lc_sign          TYPE c VALUE 'I'                  LENGTH 1,
+    lc_kind          TYPE c VALUE 'S'                  LENGTH 1,
+    lc_eq            TYPE c VALUE 'EQ'                 LENGTH 2,
+    lc_delete        TYPE c VALUE 'DELETE'             LENGTH 6,
+    lc_client        TYPE c VALUE 'CLIENT'             LENGTH 6,
+    lc_sel_oldi      TYPE c VALUE 'SEL_OLDI'           LENGTH 8,
+    lc_min_alt       TYPE c VALUE 'MIN_ALT'            LENGTH 7,
+    lc_sel_prin      TYPE c VALUE 'SEL_PRIN'           LENGTH 8,
+    lc_sel_all       TYPE c VALUE 'SEL_ALL'            LENGTH 7,
+    lc_all_prot      TYPE c VALUE 'ALL_PROT'           LENGTH 8,
+    lc_err_prot      TYPE c VALUE 'ERR_PROT'           LENGTH 8,
+    lc_listonly      TYPE c VALUE 'LISTONLY'           LENGTH 8,
+    lc_commit_a      TYPE c VALUE 'COMMIT_A'           LENGTH 10,
+    lc_msg           TYPE c VALUE 'Message'            LENGTH 7,
+    lc_no_data       TYPE c VALUE 'No data found'      LENGTH 15,
+    lc_empty_list    TYPE c VALUE 'Empty List'         LENGTH 12,
+    lc_invalid_index TYPE c VALUE 'List index invalid' LENGTH 20,
+    lc_inc_input     TYPE c VALUE 'Incorrect input'    LENGTH 20,
+    lc_noinput       TYPE c VALUE 'No input passed'    LENGTH 20,
+    lc_title         TYPE c VALUE
+    'Delete Old Spool Requests'                        LENGTH 30.
+
+  DATA: ls_input             TYPE tab512,
+        ls_output            TYPE tab512,
+        lv_action            TYPE char10,
+        lv_client            TYPE sy-mandt,
+        lv_req_past_exp_date TYPE c LENGTH 1,
+        lv_min_age_days      TYPE c LENGTH 3,
+        lv_comp_req_min_age  TYPE c LENGTH 1,
+        lv_all_req_min_age   TYPE c LENGTH 1,
+        lv_log_evrything     TYPE c LENGTH 1,
+        lv_log_dialog_box    TYPE c LENGTH 1,
+        lv_log_only_deletion TYPE c LENGTH 1,
+        lv_commit_all        TYPE c LENGTH 10,
+        lt_listobject        TYPE STANDARD TABLE OF abaplist,
+        lt_listasci          TYPE STANDARD TABLE OF soli,
+        ls_listasci          TYPE soli,
+        lt_selection         TYPE STANDARD TABLE OF rsparams,
+        ls_selection         LIKE LINE OF lt_selection.
+
+  " Clear variables before use
+  CLEAR: ls_output, ls_input, lv_action, lv_client, lv_min_age_days,
+         lv_req_past_exp_date, lv_comp_req_min_age, lv_commit_all,
+         lv_all_req_min_age, lv_log_evrything, lv_log_dialog_box,
+         lv_log_only_deletion, ls_selection, ls_listasci.
+
+  FREE: lt_output, lt_selection, lt_listasci, lt_listobject.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Reading input from python
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+      lv_action               " Action
+      lv_client               " Client
+      lv_req_past_exp_date    " Requests past expiration date
+      lv_min_age_days         " Minimum age in days
+      lv_comp_req_min_age     " Completed request with min age
+      lv_all_req_min_age      " All requests with min age
+      lv_log_evrything        " Do you want to log everything
+      lv_log_dialog_box       " Log instead of dialog boxes
+      lv_log_only_deletion    " Log only without deletion
+      lv_commit_all.          " COMMIT all Spool requests
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_delete.               " When action is DELETE
+
+      " Adding user input in lt_selection
+
+      " Client
+      ls_selection-selname = lc_client.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_client.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " Requests past expiration date
+      ls_selection-selname = lc_sel_oldi.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_req_past_exp_date.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " Minimum age in days
+      ls_selection-selname = lc_min_alt.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_min_age_days.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " Completed request with min age
+      ls_selection-selname = lc_sel_prin.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_comp_req_min_age.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " All requests with min age
+      ls_selection-selname = lc_sel_all.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_all_req_min_age.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " Do you want to log everything
+      ls_selection-selname = lc_all_prot.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_log_evrything.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " Log instead of dialog boxes
+      ls_selection-selname = lc_err_prot.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_log_dialog_box.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " Log only without deletion
+      ls_selection-selname = lc_listonly.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_log_only_deletion.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " COMMIT all Spool requests
+      ls_selection-selname = lc_commit_a.
+      ls_selection-kind    = lc_kind.
+      ls_selection-sign    = lc_sign.
+      ls_selection-option  = lc_eq.
+      ls_selection-low     = lv_commit_all.
+      APPEND ls_selection TO lt_selection.
+      CLEAR ls_selection.
+
+      " To delete obsolete spool request & inconsitency
+      SUBMIT rspo0041 WITH SELECTION-TABLE lt_selection
+             EXPORTING LIST TO MEMORY AND RETURN.
+
+      " FM to list output from memory
+      CALL FUNCTION 'LIST_FROM_MEMORY'
+        TABLES
+          listobject = lt_listobject
+        EXCEPTIONS
+          not_found  = 1
+          OTHERS     = 2.
+
+      IF sy-subrc EQ 0.
+
+        " FM to convert output in Asci format
+        CALL FUNCTION 'LIST_TO_ASCI'
+          TABLES
+            listasci           = lt_listasci
+            listobject         = lt_listobject
+          EXCEPTIONS
+            empty_list         = 1
+            list_index_invalid = 2
+            OTHERS             = 3.
+
+        IF sy-subrc EQ 0.
+
+          " Adding heading to the output
+          ls_output = lc_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          " To remove special characters
+          DELETE lt_listasci WHERE line NA sy-abcde
+                             AND   line NA lc_digits
+                             AND   line NA '.'.
+
+          LOOP AT lt_listasci INTO ls_listasci.
+
+            IF ls_listasci IS NOT INITIAL.
+
+              CONDENSE ls_listasci.
+
+              ls_output = ls_listasci.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_listasci, ls_output.
+            ENDIF.
+
+          ENDLOOP.
+
+        ELSEIF sy-subrc EQ 1.
+          " Empty list
+          ls_output = lc_empty_list.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSEIF sy-subrc EQ 2.
+          " List invalid index
+          ls_output = lc_invalid_index.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ELSE.
+          " No data found
+          ls_output = lc_no_data.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+        ENDIF.
+
+      ELSE.
+        " No data found
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      " FM to free list memory
+      CALL FUNCTION 'LIST_FREE_MEMORY'.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  FREE: lt_selection, lt_listasci, lt_listobject.
+
+ENDFORM.

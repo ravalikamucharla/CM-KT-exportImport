@@ -1,0 +1,49 @@
+---
+
+- command: sudo chmod -R 777 /tmp/sapinst_instdir/
+
+- name: unchar migcheck.sar
+  shell: /usr/sap/sapinst/SWPM/sapcar.exe -xvf /usr/sap/sapinst/SWPM/COMMON/INSTALL/MIGCHECK.SAR 
+  args:
+    chdir: "{{ install_dir_path }}"
+  register: extracted_files
+
+- debug: 
+    var: extracted_files
+
+- name: Package checker
+  shell: ./mig_checker.sh -checkPackages -installDir {{ install_dir_path }} -packageFile {{ abap_dir_path }}/ABAP/DATA/SAPSTR.LST -trace all
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: package_checker
+
+- debug:
+    var: package_checker
+
+- name: create folder
+  file:
+    path: "../Migration_checkers"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: create folder
+  file:
+    path: "../Migration_checkers/package_checker"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path }}/{{ item }}"
+    dest: "../Migration_checkers/package_checker/{{ item }}"
+    flat: yes
+  loop:
+    - invalid_packages.txt
+    - package_checker.log
+    - MigrationChecker.console.log

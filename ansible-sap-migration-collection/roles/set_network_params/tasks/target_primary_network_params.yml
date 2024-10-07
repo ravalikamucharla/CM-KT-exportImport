@@ -1,0 +1,28 @@
+---
+
+- name: network params ipv4
+  become_method: sudo 
+  become: yes
+  command: sysctl -w net.ipv4.{{ item.file_name }}="{{ item.value }}"
+  args:
+    chdir: /proc/sys/net/ipv4
+  with_items:
+    - "{{ target_primary_network_params.ipv4_values }}"
+
+- name: network params core
+  become_method: sudo 
+  become: yes
+  command: sysctl -w net.core.{{ item.file_name }}="{{ item.value }}"
+  args:
+    chdir: /proc/sys/net/core
+  with_items:
+    - "{{ target_primary_network_params.core_values }}"
+  
+- name: network params ipv6
+  become_method: sudo 
+  become: yes
+  command: sysctl -w net.ipv6.{{ item.file_name }}="{{ item.value }}"
+  args:
+    chdir: /proc/sys/net/ipv6
+  with_items:
+    - "{{ target_primary_network_params.ipv6_values }}"

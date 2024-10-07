@@ -1,0 +1,4 @@
+---
+- name: Add lines to service_ini file
+  include_tasks: "{{ set_params_on }}.yml"
+       

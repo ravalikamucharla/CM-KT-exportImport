@@ -1,0 +1,63 @@
+[{% for data in output.results[index].stdout_lines %}
+    {% if loop.length == 1 %}
+        {   
+            "HARDWARE_KEY": "",
+            "SYSTEM_ID": "",
+            "INSTALL_NO": "",
+            "SYSTEM_NO": "",
+            "PRODUCT_NAME": "",
+            "PRODUCT_LIMIT": "",
+            "PRODUCT_USAGE": "",
+            "START_DATE": "",
+            "EXPIRATION_DATE": "",
+            "LAST_SUCCESSFUL_CHECK": "",
+            "PERMANENT": "",
+            "VALID": "",
+            "ENFORCED": "",
+            "LOCKED_DOWN": "",
+            "IS_DATABASE_LOCAL": "",
+            "USAGE": "",
+            "MEASUREMENT_XML": ""
+        }
+    {% elif loop.index > 1 and loop.index <= loop.length-1 %}
+       {
+            "HARDWARE_KEY": {{ data.split(',')[0] }},
+            "SYSTEM_ID": {{ data.split(',')[1] }},
+            "INSTALL_NO": {{ data.split(',')[2] }},
+            "SYSTEM_NO": {{ data.split(',')[3] }},
+            "PRODUCT_NAME": {{ data.split(',')[4] }},
+            "PRODUCT_LIMIT": "{{ data.split(',')[5] }}",
+            "PRODUCT_USAGE": "{{ data.split(',')[6] }}",
+            "START_DATE": {{ data.split(',')[7] }},
+            "EXPIRATION_DATE": {{ data.split(',')[8] }},
+            "LAST_SUCCESSFUL_CHECK": "{{ data.split(',')[9] }}",
+            "PERMANENT": {{ data.split(',')[10] }},
+            "VALID": {{ data.split(',')[11] }},
+            "ENFORCED": {{ data.split(',')[12] }},
+            "LOCKED_DOWN": {{ data.split(',')[13] }},
+            "IS_DATABASE_LOCAL": {{ data.split(',')[14] }},
+            "USAGE": {{ data.split(',')[15] }},
+            "MEASUREMENT_XML": {{ data.split(',')[16] }}
+        },
+    {% elif loop.index == loop.length %}
+        {
+            "HARDWARE_KEY": {{ data.split(',')[0] }},
+            "SYSTEM_ID": {{ data.split(',')[1] }},
+            "INSTALL_NO": {{ data.split(',')[2] }},
+            "SYSTEM_NO": {{ data.split(',')[3] }},
+            "PRODUCT_NAME": {{ data.split(',')[4] }},
+            "PRODUCT_LIMIT": "{{ data.split(',')[5] }}",
+            "PRODUCT_USAGE": "{{ data.split(',')[6] }}",
+            "START_DATE": {{ data.split(',')[7] }},
+            "EXPIRATION_DATE": {{ data.split(',')[8] }},
+            "LAST_SUCCESSFUL_CHECK": "{{ data.split(',')[9] }}",
+            "PERMANENT": {{ data.split(',')[10] }},
+            "VALID": {{ data.split(',')[11] }},
+            "ENFORCED": {{ data.split(',')[12] }},
+            "LOCKED_DOWN": {{ data.split(',')[13] }},
+            "IS_DATABASE_LOCAL": {{ data.split(',')[14] }},
+            "USAGE": {{ data.split(',')[15] }},
+            "MEASUREMENT_XML": {{ data.split(',')[16] }}
+        }
+    {% endif %}
+{% endfor %}]

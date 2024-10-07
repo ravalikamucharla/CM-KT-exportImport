@@ -1,0 +1,746 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_HDB_ST04_SYSTEM_PERFORMANC              *
+* Title               :   Overview in ST04                            *
+* Purpose             :   This report is used to export Overview in   *
+*                         ST04 in Cloud Migration                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* ST04                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXXX                    X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*07-28-2021  Initial   Ruchir Kamble   Local       To Export System   *
+*                                                 Overview in ST04    *
+*10-13-2022  V001      Soumya Ray      Local      To catch exception  *
+*                                                 and null checks     *
+*---------------------------------------------------------------------*
+
+REPORT zcm_hdb_st04_system_performanc.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_abap_true      TYPE abap_bool VALUE 'X',
+    lc_2              TYPE c VALUE '2'                       LENGTH 1,
+    lc_sep            TYPE c VALUE '|'                       LENGTH 1,
+    lc_open_brac      TYPE c VALUE '('                       LENGTH 1,
+    lc_close_brac     TYPE c VALUE ')'                       LENGTH 1,
+    lc_slash          TYPE c VALUE '/'                       LENGTH 1,
+    lc_per            TYPE c VALUE '%'                       LENGTH 1,
+    lc_no             TYPE c VALUE 'No'                      LENGTH 2,
+    lc_yes            TYPE c VALUE 'Yes'                     LENGTH 3,
+    lc_gb             TYPE c VALUE 'GB'                      LENGTH 2,
+    lc_null           TYPE c VALUE 'NULL'                    LENGTH 4,
+    lc_export         TYPE c VALUE 'EXPORT'                  LENGTH 6,
+    lc_title          TYPE c VALUE
+    'Performance overview details'                           LENGTH 50,
+    lc_general        TYPE c VALUE
+    'General System Information'                             LENGTH 26,
+    lc_state          TYPE c VALUE 'Operational State'       LENGTH 17,
+    lc_first_start    TYPE c VALUE
+    'Start Time Of First Started Service'                    LENGTH 35,
+    lc_last_start     TYPE c VALUE
+    'Start Time Of Last Started Service'                     LENGTH 35,
+    lc_dist_sys       TYPE c VALUE 'Distributed System'      LENGTH 18,
+    lc_sys_usage      TYPE c VALUE 'System Usage'            LENGTH 12,
+    lc_mul_db_con     TYPE c VALUE
+    'Multitenant database container'                         LENGTH 30,
+    lc_version        TYPE c VALUE 'Version'                 LENGTH 7,
+    lc_buildtime      TYPE c VALUE 'Buildtime'               LENGTH 9,
+    lc_platform       TYPE c VALUE 'Platform'                LENGTH 8,
+    lc_hardware       TYPE c VALUE 'Hardware Manufacturer'   LENGTH 21,
+    lc_db_mem_cpu     TYPE c VALUE 'Database Memory and CPU' LENGTH 23,
+    lc_mem_used       TYPE c VALUE
+    'Memory Used/Allocation Limit'                           LENGTH 28,
+    lc_cpu_usage      TYPE c VALUE 'CPU Usage'               LENGTH 9,
+    lc_avail_cpu      TYPE c VALUE 'Available CPUs'          LENGTH 14,
+    lc_db_disk_usage  TYPE c VALUE 'Database Disk Usage'     LENGTH 19,
+    lc_data_vol_size  TYPE c VALUE
+    'Data Volume Size/Disk Size'                             LENGTH 26,
+    lc_log_vol_size   TYPE c VALUE
+    'Log Volume Size/Disk Size'                              LENGTH 25,
+    lc_trace_files    TYPE c VALUE 'Trace Files/Disk Size'   LENGTH 21,
+    lc_host           TYPE c VALUE 'Host'                    LENGTH 4,
+    lc_mem_cpu        TYPE c VALUE 'Memory and CPU'          LENGTH 14,
+    lc_phy_mem_used   TYPE c VALUE
+    'Physical Memory Used/Available'                         LENGTH 30,
+    lc_vir_mem_used   TYPE c VALUE
+    'Virtual Memory Used/Available'                          LENGTH 30,
+    lc_disks          TYPE c VALUE 'Disks'                   LENGTH 5,
+    lc_disk_data_used TYPE c VALUE
+    'Disk Containing Data Used/Total'                        LENGTH 31,
+    lc_log_used       TYPE c VALUE
+    'Disk Containing Log Used/Total'                         LENGTH 30,
+    lc_trace_used     TYPE c VALUE
+    'Disk Containing Trace Used/Total'                       LENGTH 32,
+    lc_all_started    TYPE c VALUE
+    'All services are started'                               LENGTH 24,
+    lc_some_started   TYPE c VALUE
+    'Some services are not started'                          LENGTH 29,
+    lc_allservers     TYPE c VALUE 'ALLSERVERS'              LENGTH 10,
+    lc_production     TYPE c VALUE 'PRODUCTION'              LENGTH 10,
+    lc_test           TYPE c VALUE 'TEST'                    LENGTH 4,
+    lc_custom         TYPE c VALUE 'CUSTOM'                  LENGTH 6,
+    lc_development    TYPE c VALUE 'DEVELOPMENT'             LENGTH 11,
+    lc_prod_sys       TYPE c VALUE 'Production System'       LENGTH 17,
+    lc_test_sys       TYPE c VALUE 'Test System'             LENGTH 11,
+    lc_custom_sys     TYPE c VALUE 'Custom System'           LENGTH 13,
+    lc_dev_sys        TYPE c VALUE 'Development System'      LENGTH 18,
+    lc_sys_id         TYPE c VALUE 'SystemID ='              LENGTH 10,
+    lc_block          TYPE c VALUE 'Blockheading'            LENGTH 12,
+    lc_fldhead        TYPE c VALUE 'Fieldheading'            LENGTH 12,
+    lc_value          TYPE c VALUE 'Value'                   LENGTH 5,
+    lc_inc_input      TYPE c VALUE 'Incorrect input'         LENGTH 20,
+    lc_noinput        TYPE c VALUE 'No input given'          LENGTH 20,
+    lc_object_err     TYPE c VALUE 'Object not created'      LENGTH 18.
+
+  DATA : ls_input                  TYPE tab512,
+         ls_output                 TYPE tab512,
+         lv_action                 TYPE char6,
+         lv_dbcname                TYPE dbcon_name,
+         lv_operational_state      TYPE string,
+         lv_multidb                TYPE string,
+         lv_platform               TYPE string,
+         lv_usage_type             TYPE string,
+         lv_sys_usage              TYPE string,
+         lv_version                TYPE string,
+         lv_modus_hosts            TYPE string,
+         lv_host                   TYPE string,
+         lv_cpu_usage1             TYPE char3,
+         lv_cpu_usage2             TYPE char3,
+         lv_cpu                    TYPE string,
+         lv_buildtime              TYPE string,
+         lv_branch                 TYPE string,
+         lv_hardware               TYPE string,
+         lv_first_service          TYPE db6tstamp_struct,
+         lv_last_service           TYPE db6tstamp_struct,
+         lv_distributed            TYPE i,
+         lv_count_dis              TYPE string,
+         lv_is_online              TYPE c LENGTH 1,
+         lv_stat_server_available  TYPE c LENGTH 1,
+         lv_data_total             TYPE dec20_2,
+         lv_data_used              TYPE dec20_2,
+         lv_log_total              TYPE dec20_2,
+         lv_log_used               TYPE dec20_2,
+         lv_trace_total            TYPE dec20_2,
+         lv_trace_used             TYPE dec20_2,
+         lv_data_total_o           TYPE char20,
+         lv_data_used_o            TYPE char20,
+         lv_log_total_o            TYPE char20,
+         lv_log_used_o             TYPE char20,
+         lv_trace_total_o          TYPE char20,
+         lv_trace_used_o           TYPE char20,
+         lv_data_total_db          TYPE dec20_2,
+         lv_data_used_db           TYPE dec20_2,
+         lv_log_total_db           TYPE dec20_2,
+         lv_log_used_db            TYPE dec20_2,
+         lv_trace_total_db         TYPE dec20_2,
+         lv_trace_used_db          TYPE dec20_2,
+         lv_data_total_db_o        TYPE char20,
+         lv_data_used_db_o         TYPE char20,
+         lv_log_total_db_o         TYPE char20,
+         lv_log_used_db_o          TYPE char20,
+         lv_trace_total_db_o       TYPE char20,
+         lv_trace_used_db_o        TYPE char20,
+         lv_memory_total           TYPE dec20_2,
+         lv_memory_used            TYPE dec20_2,
+         lv_memory_total_virtual   TYPE dec20_2,
+         lv_memory_used_virtual    TYPE dec20_2,
+         lv_memory_used_db         TYPE dec20_2,
+         lv_memory_total_db        TYPE dec20_2,
+         lv_memory_total_o         TYPE char20,
+         lv_memory_used_o          TYPE char20,
+         lv_memory_total_virtual_o TYPE char20,
+         lv_memory_used_virtual_o  TYPE char20,
+         lv_memory_used_db_o       TYPE char20,
+         lv_memory_total_db_o      TYPE char20,
+         lv_cpu_total              TYPE dec20_2,
+         lv_cpu_process            TYPE dec20_2,
+         lv_error                  TYPE string,
+         lv_length                 TYPE i,
+         lv_output                 TYPE string,
+         lv_last_char              TYPE c LENGTH 1,
+         lr_cx_ref                 TYPE REF TO cx_dba_root,
+         lr_sys_excp               TYPE REF TO cx_db6_sys,
+         lr_dba_excp               TYPE REF TO cx_dba_database,
+         lr_sys_ref                TYPE REF TO cl_db6_sys,
+         lr_database               TYPE REF TO cl_hdb_database,
+         lr_adbc                   TYPE REF TO cl_hdb_adbc.
+
+  " Clear variables before use
+  CLEAR: ls_output, ls_input, lv_action, lv_dbcname,
+         lv_operational_state, lv_multidb, lv_platform, lv_usage_type,
+         lv_sys_usage, lv_version, lv_modus_hosts, lv_host, lv_cpu,
+         lv_cpu_usage1, lv_cpu_usage2, lv_buildtime, lv_branch,
+         lv_hardware, lv_first_service, lv_last_service, lv_distributed,
+         lv_count_dis, lv_is_online, lv_stat_server_available,
+         lv_data_total, lv_data_used, lv_log_total, lv_log_used,
+         lv_trace_total, lv_trace_used, lv_data_total_o, lv_data_used_o,
+         lv_log_total_o, lv_log_used_o, lv_trace_total_o, lv_output,
+         lv_trace_used_o, lv_data_total_db, lv_data_used_db, lv_length,
+         lv_log_total_db, lv_log_used_db, lv_trace_total_db,
+         lv_trace_used_db, lv_data_total_db_o, lv_data_used_db_o,
+         lv_log_total_db_o, lv_log_used_db_o, lv_trace_total_db_o,
+         lv_trace_used_db_o, lv_memory_total, lv_memory_used,
+         lv_memory_total_virtual, lv_memory_used_virtual,
+         lv_memory_used_db, lv_memory_total_db, lv_memory_total_o,
+         lv_memory_used_o, lv_memory_total_virtual_o, lv_cpu_total,
+         lv_memory_used_virtual_o, lv_memory_used_db_o, lv_last_char,
+         lv_memory_total_db_o, lv_cpu_process, lv_error.
+
+  FREE: lt_output.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input. " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export. " When action is EXPORT
+
+      " Value passed in standard method IF_DB6_ACTION_CONTROLLER~INIT
+      lv_modus_hosts = lc_allservers.
+
+      " To get default database connection
+      lv_dbcname = cl_sql_connection=>c_default_connection.
+
+      " Creating object of class cl_hdb_adbc
+      CREATE OBJECT lr_adbc
+        EXPORTING
+          dbcname = lv_dbcname.
+
+      TRY.
+          " To get system reference data
+          CALL METHOD cl_db6_sys=>get_sys_ref
+            EXPORTING
+              system_id = sy-sysid
+            RECEIVING
+              sys_ref   = lr_sys_ref.
+
+        CATCH cx_db6_sys INTO lr_sys_excp.
+          lv_error = lr_sys_excp->if_message~get_text( ).
+          ls_output = lv_error.
+          APPEND ls_output TO lt_output.
+          CLEAR: lv_error, ls_output.
+          RETURN.
+      ENDTRY.
+
+      " Creating object of class cl_hdb_database
+      CREATE OBJECT lr_database
+        EXPORTING
+          sys_ref = lr_sys_ref.
+
+      IF lr_database IS BOUND.
+
+        " To get System information
+        CALL METHOD lr_database->get_system_info.
+
+        TRY.
+            " To get initial data
+            CALL METHOD lr_database->if_dba_database~init.
+
+            " To catch exception
+          CATCH cx_dba_database INTO lr_dba_excp.
+            lv_error = lr_dba_excp->if_message~get_text( ).
+* Begin of changes in V001
+            ls_output = lv_error.
+            APPEND ls_output TO lt_output.
+            CLEAR: lv_error, ls_output.
+            RETURN.
+* End of changes in V001
+        ENDTRY.
+
+**********************General System Information****************
+
+        IF lr_database->has_catalog_read_permission IS INITIAL.
+          lr_database->is_new_statserver = lc_abap_true.
+          lv_stat_server_available = lc_abap_true.
+        ENDIF.
+
+      ELSE.
+
+        " Object not created
+        ls_output = lc_object_err.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+
+      ENDIF.
+
+      IF lr_adbc IS BOUND.
+
+        TRY.
+            " To get General System Information
+            CALL METHOD lr_adbc->get_host_information
+              IMPORTING
+                platform        = lv_platform
+                cpus            = lv_cpu
+                buildtime       = lv_buildtime
+                branch          = lv_branch
+                hw_manufacturer = lv_hardware.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->previous->get_text( ).
+        ENDTRY.
+
+        TRY.
+            " To get start time of first & last started service
+            CALL METHOD lr_adbc->get_start_times
+              IMPORTING
+                first_date = lv_first_service
+                last_date  = lv_last_service.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->if_message~get_text( ).
+        ENDTRY.
+
+        TRY.
+            " To get services data
+            CALL METHOD lr_adbc->get_services
+              IMPORTING
+                nr_hosts              = lv_distributed
+                is_online             = lv_is_online
+                stat_server_available = lv_stat_server_available.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->if_message~get_text( ).
+        ENDTRY.
+
+      ELSE.
+        " Object not created
+        ls_output = lc_object_err.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+
+      ENDIF.
+
+      IF lr_database IS BOUND.
+
+        IF lr_database->has_catalog_read_permission IS NOT INITIAL.
+
+          IF lv_is_online = lc_abap_true AND
+             lr_database->stat_server_available = lc_abap_true.
+            lv_operational_state = lc_all_started.
+          ELSE.
+            lv_operational_state = lc_some_started.
+          ENDIF.
+
+        ENDIF.
+
+        " To check if it is distributed system
+        IF lv_distributed GE lc_2.
+          lv_count_dis = lv_distributed.
+        ELSE.
+          lv_count_dis = lc_no.
+        ENDIF.
+
+        " To check if it is multitenant database
+        IF lr_database->is_multidb = abap_true.
+          lv_multidb = lc_yes.
+          IF lr_database->multidb_name IS NOT INITIAL.
+            CONCATENATE lc_yes lc_open_brac lc_sys_id
+                        lr_database->multidb_name lc_close_brac
+                        INTO lv_multidb
+                        SEPARATED BY space.
+          ENDIF.
+        ENDIF.
+
+        lv_usage_type = lr_database->usage_type.
+
+        CASE lv_usage_type.
+          WHEN lc_production.
+            lv_sys_usage = lc_prod_sys.
+          WHEN lc_test.
+            lv_sys_usage = lc_test_sys.
+          WHEN lc_custom.
+            lv_sys_usage = lc_custom_sys.
+          WHEN lc_development.
+            lv_sys_usage = lc_dev_sys.
+          WHEN OTHERS.
+        ENDCASE.
+
+        CONCATENATE lr_database->if_dba_database~db_rel
+                    lc_open_brac lv_branch lc_close_brac
+                    INTO lv_version
+                    SEPARATED BY space.
+
+        " Adding headings to the output
+        CONCATENATE lc_block lc_fldhead lc_value
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Operational State
+        CONCATENATE lc_general lc_state lv_operational_state
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Start time of first started service
+        CONCATENATE lc_general lc_first_start lv_first_service
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Start time of last started service
+        CONCATENATE lc_general lc_last_start lv_last_service
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Distributed system
+        CONCATENATE lc_general lc_dist_sys lv_count_dis
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " System usage
+        CONCATENATE lc_general lc_sys_usage lv_sys_usage
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Multitenant database container
+        CONCATENATE lc_general lc_mul_db_con lv_multidb
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Version
+        CONCATENATE lc_general lc_version lv_version
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Buildtime
+        CONCATENATE lc_general lc_buildtime lv_buildtime
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Platform
+        CONCATENATE lc_general lc_platform lv_platform
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Hardware
+        CONCATENATE lc_general lc_hardware lv_hardware
+                    INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+**********************Database Memory and CPU********************
+      IF lr_adbc IS BOUND.
+
+        IF lv_modus_hosts = lc_allservers.
+          TRY.
+              " To get Database Memory and Cpu data
+              CALL METHOD lr_adbc->get_total_memory_db
+                IMPORTING
+                  used        = lv_memory_used_db
+                  alloc_limit = lv_memory_total_db.
+
+              " To catch exception
+            CATCH cx_dba_adbc INTO lr_cx_ref.
+              lv_error = lr_cx_ref->if_message~get_text( ).
+          ENDTRY.
+        ELSE.
+
+          TRY.
+              " To get Database Memory and Cpu data
+              CALL METHOD lr_adbc->get_total_memory_db
+                IMPORTING
+                  host_used        = lv_memory_used_db
+                  host_alloc_limit = lv_memory_total_db.
+
+              " To catch exception
+            CATCH cx_dba_adbc INTO lr_cx_ref.
+              lv_error = lr_cx_ref->if_message~get_text( ).
+          ENDTRY.
+
+        ENDIF.
+
+        lv_memory_used_db_o = lv_memory_used_db.
+        lv_memory_total_db_o = lv_memory_total_db.
+
+        CONDENSE: lv_memory_total_db_o, lv_memory_used_db_o.
+
+        TRY.
+            " To get CPU Usage
+            CALL METHOD lr_adbc->get_cpu
+              IMPORTING
+                total_cpu   = lv_cpu_total
+                process_cpu = lv_cpu_process.
+
+            lv_cpu_usage1 = ceil( lv_cpu_total * 100 / 100 ).
+
+            lv_cpu_usage2 = ceil( lv_cpu_process * 100 / 100 ).
+
+            CONCATENATE lv_cpu_usage1 lc_per
+                        INTO lv_cpu_usage1.
+
+            CONCATENATE lv_cpu_usage2 lc_per
+                        INTO lv_cpu_usage2.
+
+            CONDENSE: lv_cpu_usage1, lv_cpu_usage2.
+
+            " Memory Used/Allocation Limit
+            CONCATENATE lc_db_mem_cpu lc_sep lc_mem_used lc_sep
+                        lv_memory_used_db_o lc_gb lc_slash
+                        lv_memory_total_db_o lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Cpu Usage
+            CONCATENATE lc_db_mem_cpu lc_cpu_usage lv_cpu_usage1
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Available Cpu
+            CONCATENATE lc_db_mem_cpu lc_avail_cpu lv_cpu
+                        INTO ls_output
+                        SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->if_message~get_text( ).
+        ENDTRY.
+
+***********************Database Disk Usage**********************
+
+        TRY.
+            " To get Database Disk Usage data
+            CALL METHOD lr_adbc->get_used_disk_size_db
+              IMPORTING
+                total_data  = lv_data_total_db
+                used_data   = lv_data_used_db
+                total_log   = lv_log_total_db
+                used_log    = lv_log_used_db
+                total_trace = lv_trace_total_db
+                used_trace  = lv_trace_used_db.
+
+            lv_data_total_db_o  = lv_data_total_db.
+            lv_data_used_db_o   = lv_data_used_db.
+            lv_log_total_db_o   = lv_log_total_db.
+            lv_log_used_db_o    = lv_log_used_db.
+            lv_trace_total_db_o = lv_trace_total_db.
+            lv_trace_used_db_o  = lv_trace_used_db.
+
+            CONDENSE: lv_data_total_db_o, lv_data_used_db_o,
+                      lv_log_total_db_o, lv_log_used_db_o,
+                      lv_trace_total_db_o, lv_trace_used_db_o.
+
+            " Data Volume Size/Disk Size
+            CONCATENATE lc_db_disk_usage lc_sep lc_data_vol_size lc_sep
+                        lv_data_used_db_o lc_gb lc_slash
+                        lv_data_total_db_o lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Log Volume Size/Disk Size
+            CONCATENATE lc_db_disk_usage lc_sep lc_log_vol_size lc_sep
+                        lv_log_used_db_o lc_gb lc_slash
+                        lv_log_total_db_o lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Trace Files/Disk Size
+            CONCATENATE lc_db_disk_usage lc_sep lc_trace_files lc_sep
+                        lv_trace_used_db_o lc_gb lc_slash
+                        lv_trace_total_db_o lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->if_message~get_text( ).
+        ENDTRY.
+
+**************************Memory and CPU************************
+
+        TRY.
+            " To get Memory and Cpu data
+            CALL METHOD lr_adbc->get_total_memory
+              IMPORTING
+                total_physical = lv_memory_total
+                used_physical  = lv_memory_used
+                total_virtual  = lv_memory_total_virtual
+                used_virtual   = lv_memory_used_virtual.
+
+            lv_memory_total_o          = lv_memory_total.
+            lv_memory_used_o           = lv_memory_used.
+            lv_memory_total_virtual_o  = lv_memory_total_virtual.
+            lv_memory_used_virtual_o   = lv_memory_used_virtual.
+
+            CONDENSE: lv_memory_used_o, lv_memory_total_o,
+                      lv_memory_used_virtual_o,
+                      lv_memory_total_virtual_o.
+
+            CONCATENATE lc_host lr_database->host
+                        INTO lv_host
+                        SEPARATED BY space.
+
+            " Physical Memory Used/Available
+            CONCATENATE lv_host lc_mem_cpu lc_sep lc_phy_mem_used
+                        lc_sep lv_memory_used_o lc_gb lc_slash
+                        lv_memory_total_o lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Virtual Memory Used/Available
+            CONCATENATE lv_host lc_mem_cpu lc_sep lc_vir_mem_used lc_sep
+                        lv_memory_used_virtual_o lc_gb lc_slash
+                        lv_memory_total_virtual_o lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Cpu usage
+            CONCATENATE lv_host lc_mem_cpu lc_sep lc_cpu_usage lc_sep
+                        lv_cpu_usage2
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Available Cpu
+            CONCATENATE lv_host lc_mem_cpu lc_sep lc_avail_cpu lc_sep
+                        lv_cpu
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->if_message~get_text( ).
+        ENDTRY.
+
+******************************Disks*******************************
+
+        TRY.
+            " To get Disk data
+            CALL METHOD lr_adbc->get_used_disk_size
+              IMPORTING
+                total_data  = lv_data_total
+                used_data   = lv_data_used
+                total_log   = lv_log_total
+                used_log    = lv_log_used
+                total_trace = lv_trace_total
+                used_trace  = lv_trace_used.
+
+            lv_data_total_o  = lv_data_total.
+            lv_data_used_o   = lv_data_used.
+            lv_log_total_o   = lv_log_total.
+            lv_log_used_o    = lv_log_used.
+            lv_trace_total_o = lv_trace_total.
+            lv_trace_used_o  = lv_trace_used.
+
+            CONDENSE: lv_data_total_o, lv_data_used_o, lv_log_total_o,
+                      lv_log_used_o, lv_trace_total_o, lv_trace_used_o.
+
+            " Disk Containing Data Used/Total
+            CONCATENATE lv_host lc_disks lc_sep lc_disk_data_used lc_sep
+                        lv_data_used_o lc_gb lc_slash lv_data_total_o
+                        lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Disk Containing Log Used/Total
+            CONCATENATE lv_host lc_disks lc_sep lc_log_used lc_sep
+                        lv_log_used_o lc_gb lc_slash lv_log_total_o
+                        lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " Disk Containing Trace Used/Total
+            CONCATENATE lv_host lc_disks lc_sep lc_trace_used lc_sep
+                        lv_trace_used_o lc_gb lc_slash lv_trace_total_o
+                        lc_gb
+                        INTO ls_output.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            " To catch exception
+          CATCH cx_dba_adbc INTO lr_cx_ref.
+            lv_error = lr_cx_ref->if_message~get_text( ).
+        ENDTRY.
+
+      ENDIF.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "To replace blank value in end field with NULL
+  LOOP AT lt_output INTO ls_output.
+
+    lv_output = ls_output.
+    lv_length = strlen( lv_output ).
+
+    IF lv_length > 0.
+      lv_last_char = substring( val = lv_output
+      off = strlen( lv_output ) - 1 len = 1 ).
+      IF lv_last_char = '|'.
+        CONCATENATE lv_output lc_null
+        INTO ls_output.
+        MODIFY lt_output FROM ls_output.
+      ENDIF.
+    ENDIF.
+    CLEAR lv_output.
+
+  ENDLOOP.
+
+ENDFORM.

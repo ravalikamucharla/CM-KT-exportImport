@@ -1,0 +1,288 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SMIGR_EXE_LIST_DBVERS                   *
+* Title               :   Target DB versions                          *
+* Purpose             :   This report to obtain the DB versions as    *
+*                         input for report SMIGR_CREATE_DDL           *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SMIGR_CREATE_DDL                                                    *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* RSADMIN                   X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author          TR#/Local     Description      *
+*---------------------------------------------------------------------*
+*09-11-2020  Initial   Fathima Hussain Local    To obtain the DB      *
+*                                               versions              *
+*09-12-2022   V001     Yasaswini K    Local   To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sytem     *
+*---------------------------------------------------------------------*
+REPORT zcm_smigr_exe_list_dbvers.
+
+LOAD-OF-PROGRAM.
+
+  CONSTANTS:
+    l_c_true     TYPE char1 VALUE 'X'.
+
+  DATA : l_t_db_info TYPE mgr_t_db_info,
+         obj_bc_impl TYPE REF TO cl_smigration_ddl,
+         lv_db_type  TYPE string.
+
+  DATA:
+    p_db2 TYPE boolean,
+    p_db4 TYPE boolean,
+    p_db6 TYPE boolean,
+    p_ora TYPE boolean,
+    p_msq TYPE boolean,
+    p_mdb TYPE boolean,
+    p_syb TYPE boolean,
+    p_hdb TYPE boolean.
+
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  DATA : ls_input  TYPE tab512,
+         ls_output TYPE tab512.                    "+V001
+
+* Begin of changes in V001
+  CONSTANTS:
+    lc_nodata    TYPE c VALUE 'No data found'   LENGTH 20,
+    lc_noinput   TYPE c VALUE 'No input given'  LENGTH 20,
+    lc_title     TYPE c VALUE 'DBSERVERS'       LENGTH 15.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    FREE: lt_output[].                         "+V001
+    lv_db_type = ls_input.                     " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V001
+
+  CASE lv_db_type.
+    WHEN 'DB2'.
+      p_db2 = l_c_true.
+    WHEN 'DB4'.
+      p_db4 = l_c_true.
+    WHEN 'DB6'.
+      p_db6 = l_c_true.
+    WHEN 'ORACLE'.
+      p_ora = l_c_true.
+    WHEN 'MSSQL'.
+      p_msq = l_c_true.
+    WHEN 'MaxDB'.
+      p_mdb = l_c_true.
+    WHEN 'Sybase ASE'.
+      p_syb = l_c_true.
+    WHEN 'SAP HANA Database'.
+      p_hdb = l_c_true.
+*   Begin of changes in V001
+    WHEN OTHERS.
+
+      " Adding title to the output
+      ls_output = lc_title.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " No data found
+      ls_output = lc_nodata.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+*   End of changes in V001
+  ENDCASE.
+
+  PERFORM get_dbvers_options TABLES lt_output .
+
+ENDFORM.
+
+
+FORM get_dbvers_options TABLES lt_output  STRUCTURE tab512.
+
+  DATA : ls_output TYPE tab512.
+
+  TYPES:
+    BEGIN OF _s_val,
+      dbsys TYPE sydbsys,
+      icon  TYPE icon_d,
+      txt   TYPE smigrdbvers,
+    END OF _s_val,
+
+    _t_val TYPE STANDARD TABLE OF _s_val.
+
+  DATA:
+    l_t_val       TYPE _t_val,
+    l_s_val       TYPE _s_val,
+    l_s_retval    TYPE ddshretval,
+    l_t_retval    TYPE TABLE OF ddshretval,
+    l_ora_rel(10) TYPE c,
+    l_db6_mdctext TYPE smigrdbvers.
+
+*DB version for destination platform DB2
+  IF p_db2 = l_c_true.
+
+    ls_output   = 'DB2 settings'.
+    APPEND ls_output TO lt_output.
+
+    ls_output   = 'BI settings'.
+    APPEND ls_output TO lt_output.
+
+*DB version for destination platform DB4
+  ELSEIF p_db4 = l_c_true.
+
+    IF sy-dbsys(3) <> 'DB6' AND
+    sy-dbsys(3) <> 'ADA' AND
+    sy-dbsys(3) <> 'INF'.
+      ls_output   = 'DB Version with Partitioning'.
+      APPEND ls_output TO lt_output.
+    ENDIF.
+
+    ls_output   = 'DB Version without Partitioning'.
+    APPEND ls_output TO lt_output.
+
+*DB version for destination platform DB6
+  ELSEIF p_db6 = l_c_true.
+    DATA:
+      l_subrc TYPE sy-subrc,
+      l_file  TYPE string.
+
+
+    IF sy-dbsys(3) = 'DB6'.
+      ls_output =  cl_smigr_ddl_db6=>p_vers_as_is.
+      APPEND ls_output TO lt_output.
+    ENDIF.
+    ls_output = cl_smigr_ddl_db6=>p_vers_none.
+    APPEND ls_output TO lt_output.
+    ls_output =  cl_smigr_ddl_db6=>p_vers_mdc.
+    APPEND ls_output TO lt_output.
+    ls_output =  cl_smigr_ddl_db6=>p_vers_cde_ic.
+    APPEND ls_output TO lt_output.
+    ls_output =  cl_smigr_ddl_db6=>p_vers_cde_ic_iobj.
+    APPEND ls_output TO lt_output.
+    ls_output =  cl_smigr_ddl_db6=>p_vers_cde_all.
+    APPEND ls_output TO lt_output.
+
+    SELECT SINGLE value INTO l_file
+    FROM  rsadmin
+    WHERE object = 'DB6_MIGRATE_TO_CDE_FILE'.
+    IF sy-subrc <> 0.
+      CLEAR l_file.
+    ENDIF.
+    IF l_file IS NOT INITIAL.
+      OPEN DATASET l_file FOR INPUT IN TEXT MODE ENCODING UTF-8.
+      IF sy-subrc = 0.
+        ls_output =  cl_smigr_ddl_db6=>p_vers_cde_sel.
+        APPEND ls_output TO lt_output.
+        ls_output =  cl_smigr_ddl_db6=>p_vers_cde_sel_iobj.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLOSE DATASET l_file.
+    ENDIF.
+
+*DB version for destination platform ORACLE
+  ELSEIF p_ora = l_c_true.
+
+    IF sy-dbsys(3) = 'ORA'.
+      CALL 'DB_GET_REL' ID 'DBRELEASE' FIELD l_ora_rel.
+      IF l_ora_rel(1) <> '9' AND l_ora_rel(2) <> '10'.
+
+        ls_output   = 'NULL'. "space.
+        APPEND ls_output TO lt_output.
+
+        ls_output   = 'Special Option: Generate DDLs with COMPRESSION'.
+        APPEND ls_output TO lt_output.
+
+        ls_output   = 'Special Option: generate DDLs for ALL tables'.
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+
+      IF l_ora_rel(1) <> '9' AND l_ora_rel(2) <> '10'
+      AND l_ora_rel(2) <> '11'.
+
+        ls_output   =
+        'Special Option: Gen. Indexes without COMPRESSION'.
+        APPEND ls_output TO lt_output.
+
+        ls_output   =
+        'Special Option: Tables with COMPR/Indexes no COMPR'.
+        APPEND ls_output TO lt_output.
+
+        ls_output   = 'Special Option: Generate DDLs without HCC'.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+    ENDIF.
+
+
+*DB version for destination platform MSSQL
+  ELSEIF p_msq = l_c_true.
+
+    DATA: l_mss_answer       TYPE c,
+          l_popup_question_1 TYPE string
+          VALUE 'Details on SQL Server compression',
+          l_popup_question_2 TYPE string
+          VALUE 'can be found in SAP Note 1488135.',
+          l_popup_title      TYPE string
+          VALUE 'SQL Server compression'.
+
+* use the new version for the MSS implementation
+    FIELD-SYMBOLS: <l_s_db_info> TYPE mgr_s_db_info.
+    DATA: l_target_db TYPE mgr_s_db_info.
+    TRY.
+        l_target_db-dbsys = 'MSS'.
+* get the DB releases from the platforms' implementation
+        CALL METHOD cl_smigration_ddl_mss=>get_instance
+          EXPORTING
+            i_target_db = l_target_db
+          IMPORTING
+            r_instance  = obj_bc_impl.
+
+        REFRESH l_t_db_info.
+
+        obj_bc_impl->get_dbversions_for_migration(
+        IMPORTING
+          e_t_dbversion_display = l_t_db_info
+          ).
+
+        REFRESH lt_output.
+
+        LOOP AT l_t_db_info ASSIGNING <l_s_db_info>.
+
+          ls_output   = <l_s_db_info>-description.
+          APPEND ls_output TO lt_output.
+
+        ENDLOOP.
+
+      CATCH cx_root.
+
+    ENDTRY.
+
+*DB version for destination platform MAXDB
+  ELSEIF p_mdb = l_c_true.
+
+*DB version for destination platform SYB
+  ELSEIF p_syb = l_c_true.
+    ls_output   = 'Default: no special options'.
+    APPEND ls_output TO lt_output.
+    ls_output   = 'Special Option: use parallel index creation'.
+    APPEND ls_output TO lt_output.
+
+  ENDIF.
+
+
+ENDFORM.                    "get_dbvers_options

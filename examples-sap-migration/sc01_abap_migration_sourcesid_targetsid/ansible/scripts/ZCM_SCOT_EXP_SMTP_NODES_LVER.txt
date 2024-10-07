@@ -1,0 +1,681 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_SCOT_EXP_SMTP_NODES_LVER                *
+* Title               :   Capture SMTP Nodes in SCOT                  *
+* Purpose             :   This report is for capturing SMTP nodes in  *
+*                     :   SCOT data during Cloud Migration            *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SCOT                                                                *
+*---------------------------------------------------------------------*
+*	Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* SXNODES             :     X                                         *
+* SXSERV              :     X                                         *
+* SXROUTE             :     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*01-13-2023  Initial  Ashwini K P    Local    To capture SMTP nodes   *
+*---------------------------------------------------------------------*
+
+REPORT zcm_scot_exp_smtp_nodes_lver.
+
+FORM get_config TABLES lt_input  STRUCTURE tab512
+                       lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+lc_sep        TYPE c VALUE '|'                           LENGTH 1,
+lc_x          TYPE c VALUE 'X'                           LENGTH 1,
+lc_e          TYPE c VALUE 'E'                           LENGTH 1,
+lc_smtp       TYPE c VALUE 'S'                           LENGTH 1,
+lc_http       TYPE c VALUE 'H'                           LENGTH 1,
+lc_null       TYPE c VALUE 'NULL'                        LENGTH 4,
+lc_export     TYPE c VALUE 'EXPORT'                      LENGTH 6,
+lc_node       TYPE c VALUE 'Node Name'                   LENGTH 9,
+lc_descrip    TYPE c VALUE 'Comment'                     LENGTH 8,
+lc_active     TYPE c VALUE 'Node Is Ready For Use'       LENGTH 25,
+lc_retry_min  TYPE c VALUE 'Maximum Repetition Time '    LENGTH 60,
+lc_mail_host  TYPE c VALUE 'Host Name of Mail MTA'       LENGTH 40,
+lc_mail_port  TYPE c VALUE 'Port Number of Mail MTA'     LENGTH 40,
+lc_addr_type  TYPE c VALUE 'Address Type'                LENGTH 12,
+lc_convert_s  TYPE c VALUE 'Format S'                    LENGTH 10,
+lc_convert_l  TYPE c VALUE 'Format L'                    LENGTH 10,
+lc_convert_o  TYPE c VALUE 'Format O'                    LENGTH 10,
+lc_convert_t  TYPE c VALUE 'Format T'                    LENGTH 10,
+lc_mandt      TYPE c VALUE 'MANDT'                       LENGTH 5,
+lc_snd_system TYPE c VALUE 'Name Of SAP System'          LENGTH 20,
+lc_snd_client TYPE c VALUE 'Client Part Of SAP System'   LENGTH 32,
+lc_snd_group  TYPE c VALUE 'Sender Group'                LENGTH 12,
+lc_rec_type   TYPE c VALUE 'Address Type'                LENGTH 12,
+lc_rec_addr   TYPE c VALUE 'Address Area Routing'        LENGTH 20,
+lc_generic    TYPE c VALUE 'Generic'                     LENGTH 10,
+lc_length     TYPE c VALUE
+'Address Length In Routing Table'                        LENGTH 60,
+lc_sxnodes    TYPE c VALUE 'Communication Nodes'         LENGTH 30,
+lc_sxserv     TYPE c VALUE 'Node Capabilities'           LENGTH 20,
+lc_sxroute    TYPE c VALUE 'Routing Details'             LENGTH 15,
+lc_title      TYPE c VALUE 'SMTP Nodes'                  LENGTH 10,
+lc_inc_input  TYPE c VALUE 'Incorrect input'             LENGTH 20,
+lc_noinput    TYPE c VALUE 'No input given'              LENGTH 20,
+lc_inb_msg    TYPE c VALUE 'Inbound Message'             LENGTH 15,
+lc_force_ver  TYPE c VALUE
+'Prefer Following Version of an Inbound E-Mail'          LENGTH 60,
+lc_force_dsn  TYPE c VALUE 'Send Notificaition'          LENGTH 18,
+lc_no_mdn     TYPE c VALUE
+'Do not send read confirmations generally'               LENGTH 50,
+lc_inb_status TYPE c VALUE 'Inbound Status'              LENGTH 15,
+lc_notify     TYPE c VALUE 'Notify Sender by E-Mail'     LENGTH 23,
+lc_statuscode TYPE c VALUE
+'Include status code of mail server in notification'     LENGTH 70,
+lc_entirestat TYPE c VALUE
+'Include entire status notification in notification attachment'
+LENGTH 70,
+lc_sendall    TYPE c VALUE
+'Send all notifications to the following user'           LENGTH 50,
+lc_anlys      TYPE c VALUE 'Anlys'                       LENGTH 5,
+lc_inbound    TYPE c VALUE 'Inbound'                     LENGTH 7,
+lc_deactivate TYPE c VALUE 'Deactivated'                 LENGTH 12,
+lc_alwayssave TYPE c VALUE 'Always Save'                 LENGTH 11,
+lc_header     TYPE c VALUE 'MIME Message Header'         LENGTH 19,
+lc_neversave  TYPE c VALUE 'Never Save'                  LENGTH 10,
+lc_desc       TYPE c VALUE 'Description'                 LENGTH 11,
+lc_dest       TYPE c VALUE 'Destination'                 LENGTH 11,
+lc_httpnodes  TYPE c VALUE 'HTTP Nodes'                  LENGTH 10,
+lc_add_area   TYPE c VALUE 'Address Area'                LENGTH 13,
+lc_inf_sender TYPE c VALUE 'Inform Sender'               LENGTH 13,
+lc_settings   TYPE c VALUE
+'The following settings override the default and application settings'
+LENGTH 80,
+lc_bcsforce   TYPE dd07l-domname    VALUE 'BCS_FORCEVERSION',
+lc_forcedsn   TYPE dd07l-domname    VALUE 'BCS_FORCE_DSN',
+lc_bcsstml    TYPE dd07l-domname    VALUE 'BCS_STML',
+lc_state      TYPE dd07l-domname    VALUE 'SXTRCSTATE',
+lc_text       TYPE ddrefstruc-bool  VALUE 'X',
+lc_lang       TYPE dd07t-ddlanguage VALUE 'E',
+lc_no_data    TYPE c VALUE 'No data found'                LENGTH 20,
+lc_default    TYPE c VALUE 'DEFAULT'                      LENGTH 7,
+lc_httpin     TYPE c VALUE 'HTTP_IN_'                     LENGTH 8,
+lc_query      TYPE c VALUE '_QUERY'                       LENGTH 6.
+
+  TYPES: BEGIN OF lty_nodes,
+           node      TYPE char6,
+           descrip   TYPE char50,
+           active    TYPE char1,
+           retry_min TYPE char3,
+           rfcdest   TYPE char32,
+           node_type TYPE char1,
+           mail_host TYPE char100,
+           mail_port TYPE char32,
+         END OF lty_nodes,
+
+         BEGIN OF lty_sxserv,
+           node      TYPE char6,
+           addr_type TYPE char3,
+           convert_s TYPE char3,
+           convert_l TYPE char3,
+           convert_o TYPE char3,
+           convert_t TYPE char3,
+         END OF lty_sxserv,
+
+         BEGIN OF lty_sxroute,
+           mandt      TYPE char3,
+           snd_system TYPE char8,
+           snd_client TYPE char3,
+           snd_group  TYPE char18,
+           rec_type   TYPE char3,
+           rec_addr   TYPE char80,
+           generic    TYPE char1,
+           length     TYPE int1,
+           node       TYPE char6,
+         END OF lty_sxroute.
+
+  DATA: ls_input         TYPE tab512,
+        ls_output        TYPE tab512,
+        lv_action        TYPE char20,
+        lv_length        TYPE char3,
+        lt_nodes         TYPE STANDARD TABLE OF lty_nodes,
+        ls_nodes         TYPE lty_nodes,
+        lt_sxserv        TYPE STANDARD TABLE OF lty_sxserv,
+        ls_sxserv        TYPE lty_sxserv,
+        lt_sxroute       TYPE STANDARD TABLE OF lty_sxroute,
+        ls_sxroute       TYPE lty_sxroute,
+        ls_para_in       TYPE bcss_para_in,
+        ls_status        TYPE bcss_para_status,
+        lt_stml          TYPE STANDARD TABLE OF bcsd_stml,
+        ls_stml          TYPE bcsd_stml,
+        lv_force_version TYPE string,
+        lv_force_dsn     TYPE string,
+        lv_no_mdn        TYPE string,
+        lv_sender        TYPE string,
+        lv_trace_in      TYPE string,
+        lv_cnt_stml      TYPE i,
+        lt_values        TYPE STANDARD TABLE OF dd07v,
+        ls_values        TYPE dd07v,
+        lv_stat_result   TYPE c,
+        lv_service       TYPE string,
+        lv_service1      TYPE string,
+        lv_query_templ   TYPE string,
+        lt_template      TYPE tihttpnvp,
+        lr_template      TYPE REF TO ihttpnvp.
+
+  " Clear variables before use
+  CLEAR: ls_output, ls_input, lv_action, lv_length, lv_force_dsn,
+         lv_force_version, ls_sxroute, ls_sxserv, ls_stml,
+         ls_para_in, ls_status, lv_sender, lv_trace_in,
+         lv_cnt_stml, ls_values, lv_stat_result.
+
+  FREE: lt_output, lt_nodes, ls_sxserv, lt_sxroute, lt_stml,
+        lt_values.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      " To get smtp and http nodes
+      SELECT node descrip active retry_min rfcdest node_type
+      mail_host mail_port
+      FROM sxnodes
+      INTO TABLE lt_nodes.
+
+      IF lt_nodes IS NOT INITIAL.
+        " Adding table name
+        ls_output = lc_sxnodes.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        " Adding headings to the output for sxnodes
+        CONCATENATE lc_node         lc_sep
+                    lc_descrip      lc_sep
+                    lc_active       lc_sep
+                    lc_retry_min    lc_sep
+                    lc_mail_host    lc_sep
+                    lc_mail_port INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_nodes INTO ls_nodes WHERE node_type = lc_smtp.
+
+          IF ls_nodes-mail_port IS INITIAL.
+            ls_nodes-mail_port = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_nodes-node      lc_sep
+                      ls_nodes-descrip   lc_sep
+                      ls_nodes-active    lc_sep
+                      ls_nodes-retry_min lc_sep
+                      ls_nodes-mail_host lc_sep
+                      ls_nodes-mail_port INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_nodes, ls_output.
+
+        ENDLOOP.
+
+      ELSE.
+
+        " No data found
+        ls_output =  lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      " Adding empty line
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+      " To get smtp and http node data
+      SELECT node addr_type convert_s convert_l convert_o convert_t
+      FROM sxserv
+      INTO TABLE lt_sxserv.
+
+      " Adding table name
+      ls_output = lc_sxserv.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      IF lt_sxserv IS NOT INITIAL.
+
+        " Adding headings to the output for sxserv
+        CONCATENATE lc_node      lc_sep
+                    lc_addr_type lc_sep
+                    lc_convert_s lc_sep
+                    lc_convert_l lc_sep
+                    lc_convert_o lc_sep
+                    lc_convert_t INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_sxserv INTO ls_sxserv.
+
+          IF ls_sxserv-convert_t IS INITIAL.
+            ls_sxserv-convert_t = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_sxserv-node      lc_sep
+                      ls_sxserv-addr_type lc_sep
+                      ls_sxserv-convert_s lc_sep
+                      ls_sxserv-convert_l lc_sep
+                      ls_sxserv-convert_o lc_sep
+                      ls_sxserv-convert_t INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_sxserv, ls_output.
+
+        ENDLOOP.
+
+      ELSE.
+
+        " No data found
+        ls_output =  lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      " Adding empty line
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+      " To get smtp node data
+      SELECT mandt snd_system snd_client snd_group
+      rec_type rec_addr generic length node
+      FROM sxroute
+      INTO TABLE lt_sxroute.
+
+      " Adding table name
+      ls_output = lc_sxroute.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      IF lt_sxroute IS NOT INITIAL.
+
+        " Adding headings to the output for sxroute
+        CONCATENATE lc_mandt        lc_sep
+                    lc_snd_system   lc_sep
+                    lc_snd_client   lc_sep
+                    lc_snd_group    lc_sep
+                    lc_rec_type     lc_sep
+                    lc_rec_addr     lc_sep
+                    lc_generic      lc_sep
+                    lc_length INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_sxroute INTO ls_sxroute.
+
+          " FM to reverse address area
+          CALL FUNCTION 'STRING_REVERSE'
+            EXPORTING
+              string  = ls_sxroute-rec_addr
+              lang    = 'E'
+            IMPORTING
+              rstring = ls_sxroute-rec_addr.
+
+          lv_length = ls_sxroute-length.
+
+          IF ls_sxroute-node IS INITIAL.
+            ls_sxroute-node = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_sxroute-mandt      lc_sep
+                      ls_sxroute-snd_system lc_sep
+                      ls_sxroute-snd_client lc_sep
+                      ls_sxroute-snd_group  lc_sep
+                      ls_sxroute-rec_type   lc_sep
+                      ls_sxroute-rec_addr   lc_sep
+                      ls_sxroute-generic    lc_sep
+                      lv_length             lc_sep
+                      ls_sxroute-node INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_sxroute, ls_output.
+
+        ENDLOOP.
+
+      ELSE.
+
+        " No data found
+        ls_output =  lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      " Adding empty line
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+**************************SCOT Settings***************************
+
+      "  To get SCOT settings
+      CALL METHOD cl_bcs_adm_settings=>get_data
+        IMPORTING
+          es_para_in     = ls_para_in
+          es_para_status = ls_status
+          et_stml        = lt_stml.
+
+**************************Inbound Message***************************
+
+      " Adding sub title to the output
+      ls_output = lc_inb_msg.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Adding headings to the output
+      CONCATENATE lc_force_ver
+                  lc_force_dsn
+                  lc_no_mdn INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      IF ls_para_in-force_version IS INITIAL.
+
+        lv_force_version = lc_null.
+
+      ELSE.
+
+        " To read domain values for BCS_FORCEVERSION
+        CALL FUNCTION 'DD_DOMVALUES_GET'
+          EXPORTING
+            domname        = lc_bcsforce
+            text           = lc_text
+            langu          = lc_lang
+          TABLES
+            dd07v_tab      = lt_values
+          EXCEPTIONS
+            wrong_textflag = 1
+            OTHERS         = 2.
+
+        IF sy-subrc EQ 0.
+
+          SORT lt_values BY domvalue_l ASCENDING.
+
+          READ TABLE lt_values INTO ls_values
+          WITH KEY domvalue_l = ls_para_in-force_version
+          BINARY SEARCH.
+
+          IF sy-subrc EQ 0.
+            lv_force_version = ls_values-ddtext.
+          ELSE.
+            lv_force_version = ls_para_in-force_version.
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+      IF ls_status-force_dsn IS INITIAL.
+
+        lv_force_dsn = lc_null.
+
+      ELSE.
+
+        FREE: lt_values.
+
+        " To read domain values for BCS_FORCE_DSN
+        CALL FUNCTION 'DD_DOMVALUES_GET'
+          EXPORTING
+            domname        = lc_forcedsn
+            text           = lc_text
+            langu          = lc_lang
+          TABLES
+            dd07v_tab      = lt_values
+          EXCEPTIONS
+            wrong_textflag = 1
+            OTHERS         = 2.
+
+        IF sy-subrc EQ 0.
+
+          SORT lt_values BY domvalue_l ASCENDING.
+
+          READ TABLE lt_values INTO ls_values
+          WITH KEY domvalue_l = ls_status-force_dsn
+          BINARY SEARCH.
+
+          IF sy-subrc EQ 0.
+            lv_force_dsn = ls_values-ddtext.
+          ELSE.
+            lv_force_dsn = ls_status-force_dsn.
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+      IF ls_status-no_mdn IS INITIAL.
+        lv_no_mdn = lc_null.
+      ELSE.
+        lv_no_mdn = ls_status-no_mdn.
+      ENDIF.
+
+      CONCATENATE lv_force_version
+                  lv_force_dsn
+                  lv_no_mdn INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+**************************Inbound Status***************************
+
+      " Adding empty line
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+      " Adding sub title to the output
+      ls_output = lc_inb_status.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Adding headings to the output
+      CONCATENATE lc_notify
+                  lc_statuscode
+                  lc_entirestat
+                  lc_sendall INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      READ TABLE lt_stml INTO ls_stml WITH KEY is_default = lc_x.
+      IF sy-subrc EQ 0.
+
+        FREE: lt_values.
+
+        " To read domain values for BCS_STML
+        CALL FUNCTION 'DD_DOMVALUES_GET'
+          EXPORTING
+            domname        = lc_bcsstml
+            text           = lc_text
+            langu          = lc_lang
+          TABLES
+            dd07v_tab      = lt_values
+          EXCEPTIONS
+            wrong_textflag = 1
+            OTHERS         = 2.
+
+        IF sy-subrc EQ 0.
+
+          SORT lt_values BY domvalue_l ASCENDING.
+
+          READ TABLE lt_values INTO ls_values
+          WITH KEY domvalue_l = ls_stml-setting
+          BINARY SEARCH.
+
+          IF sy-subrc EQ 0.
+            lv_sender = ls_values-ddtext.
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+      IF ls_status-mail_route_to IS INITIAL.
+        ls_status-mail_route_to = lc_null.
+      ENDIF.
+
+      CONCATENATE lv_sender
+                  ls_status-mail_with_node
+                  ls_status-mail_with_original
+                  ls_status-mail_route_to INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR:lv_sender, ls_output.
+
+      " Adding empty line
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+      " Adding sub title to the output
+      ls_output = lc_settings.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      DESCRIBE TABLE lt_stml LINES lv_cnt_stml.
+
+      IF lv_cnt_stml > 1.
+
+        " Adding headings to the output
+        CONCATENATE lc_add_area
+                    lc_inf_sender INTO ls_output
+        SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        SORT lt_values BY domvalue_l ASCENDING.
+
+        LOOP AT lt_stml INTO ls_stml WHERE is_default NE lc_x.
+
+          READ TABLE lt_values INTO ls_values
+          WITH KEY domvalue_l = ls_stml-setting
+          BINARY SEARCH.
+
+          IF sy-subrc EQ 0.
+            lv_sender = ls_values-ddtext.
+          ELSE.
+            lv_sender = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_stml-address
+                      lv_sender INTO ls_output
+          SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR:lv_sender, ls_output.
+
+        ENDLOOP.
+
+      ELSE.
+
+        " No data
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      " Adding empty line
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+**************************Anlys***************************
+
+      " Adding sub title to the output
+      ls_output = lc_anlys.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Adding headings to the output
+      CONCATENATE lc_inbound
+                  lc_alwayssave
+                  lc_header
+                  lc_neversave INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      IF ls_para_in-trace_in IS INITIAL.
+
+        ls_para_in-trace_in = lc_deactivate.
+
+      ELSE.
+
+        FREE: lt_values.
+
+        " To read domain values for SXTRCSTATE
+        CALL FUNCTION 'DD_DOMVALUES_GET'
+          EXPORTING
+            domname        = lc_state
+            text           = lc_text
+            langu          = lc_lang
+          TABLES
+            dd07v_tab      = lt_values
+          EXCEPTIONS
+            wrong_textflag = 1
+            OTHERS         = 2.
+
+        IF sy-subrc EQ 0.
+
+          SORT lt_values BY domvalue_l ASCENDING.
+
+          READ TABLE lt_values INTO ls_values
+          WITH KEY domvalue_l = ls_para_in-trace_in
+          BINARY SEARCH.
+
+          IF sy-subrc EQ 0.
+            lv_trace_in = ls_values-ddtext.
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+      IF ls_para_in-mime_nosave IS INITIAL.
+        ls_para_in-mime_nosave = lc_null.
+      ENDIF.
+
+      IF lv_trace_in IS INITIAL.
+        lv_trace_in = lc_null.
+      ENDIF.
+
+      CONCATENATE lv_trace_in
+                  ls_para_in-mime_always
+                  ls_para_in-mime_header
+                  ls_para_in-mime_nosave INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+    WHEN OTHERS.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.                    "get_config

@@ -1,0 +1,6 @@
+{"OUTPUT": 
+    [
+    {"TITLE": "NWBC Configuration:Overview(Customer)", "DATA": [{"RESULT": "This script is not valid for oracle database"}]}, 
+    {"TITLE": "NWBC Configuration:Parameter Names(Customer)", "DATA": [{"RESULT": "This script is not valid for oracle database"}]},
+    {"TITLE": "NWBC Configuration:Overview(SAP)", "DATA": [{"RESULT": "This script is not valid for oracle database"}]},
+    {"TITLE": "NWBC Configuration:Parameter Names(SAP)", "DATA": [{"RESULT": "This script is not valid for oracle database"}]}]}

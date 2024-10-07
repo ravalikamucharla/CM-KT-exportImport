@@ -1,0 +1,175 @@
+---
+- wait_for:
+    path: /proc/3466/status
+    state: absent
+
+- name: Import db | setting path
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    file_path:
+      - hana_db_action.py
+  set_fact:
+    path_start_stop: "{{ lookup('first_found', file_path) }}"
+  delegate_to: localhost
+  tags: db_imp
+
+- debug:
+    var: path_start_stop
+  delegate_to: localhost
+  tags: db_imp
+
+- name: Import db | start and stop hana system
+  command: python3 {{path_start_stop}} --sid="{{ app_sid|upper }}" --hostname="{{ hostvars[groups['target_db'][0]].ansible_host }}" --username="{{ os_user }}" --password="{{ passwords.os.target.db }}" --instance="{{ ascs_instance_number }}" --loginMechanism="password" --pemFile="_NULL" --isSudoUser="True" --dbSid="{{ sid|upper }}" --dbInstance="{{ instance_number }}" --action="START" --osType="{{ params.import.os_type }}" --tenantUname="{{ params.import.tenant_user }}" --tenantPwd="{{ passwords.tenant.target }}" --dbTenantId="{{ sid|upper }}" --ascsInstance="{{ ascs_instance_number }}"
+  register: result
+  become_user: "{{ sid|lower }}adm"
+  become_method: su
+  become: yes
+  delegate_to: localhost
+  tags: db_imp
+
+- debug: var=result
+  delegate_to: localhost
+  tags: db_imp
+
+- name: Import db | nfs mounting
+  block:
+    - name: nfs | start
+      systemd:
+        name: nfs
+        enabled: yes
+        state: restarted
+      tags: db_imp
+
+    - name: nfs | mounting
+      lineinfile: 
+        dest: /etc/exports
+        line: "{{ params.import.mainExportDir }} *(rw,no_root_squash)"
+      delegate_to: "{{ groups['source_db'][0] }}"
+      tags: db_imp
+
+    - name: nfs | run exportfs command
+      command: exportfs -arv
+      delegate_to: "{{ groups['source_db'][0] }}"
+      tags: db_imp
+
+    - name: nfs | nfs service restarted
+      systemd:
+        name: nfs
+        enabled: yes
+        state: "{{ item }}"
+      delegate_to: "{{ groups['source_db'][0] }}"
+      loop:
+        - stopped
+        - daemon_reload
+        - started
+      tags: db_imp
+
+    - name: nfs | Create a directory if it does not exist
+      file:
+        path: "{{ params.dump_directory }}"
+        state: directory
+        mode: '0755'
+      tags: db_imp
+
+    - name: nfs | Mount up device  
+      mount:
+        path: "{{ params.import.mainExportDir }}"
+        src: "{{ hostvars[groups['source_db'][0]].ansible_host }}:{{ params.import.mainExportDir }}"
+        fstype: nfs
+        state: mounted
+      tags: db_imp
+  
+  when: params.export.data_transfer_type == 'NET'
+
+- name: Import db | Set installation directory facts
+  set_fact:
+    install_dir_imp: "{{ params.import.sapinst_path }}"
+  tags: db_imp
+
+- name: Import db | Create LOGS & backup directories
+  file:
+    path: "{{install_dir_imp}}/{{item}}"
+    mode: '0755'
+    state: directory
+  with_items:
+    - LOGS
+    - backup
+  tags: db_imp
+
+- name: Import db | Backing up sapinst_instdir
+  command: cp -r /tmp/sapinst_instdir "{{install_dir_imp}}/backup/sapinst_instdir_imp_{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+  tags: db_imp
+
+- name: Import db | Deleting old log files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+   - /tmp/sapinst_instdir
+   - /root/.sapinst
+  tags: db_imp
+
+- name: Import db | Get running processes
+  shell: ps -ef | grep -v grep | grep -w 'sapinst\|sapinst_exe' | awk '{print $2}'
+  register: running_processes_imp
+  tags: db_imp
+
+- name: Import db | Kill running processes
+  shell: "kill {{ item }}"
+  with_items: "{{ running_processes_imp.stdout_lines }}"
+  tags: db_imp
+
+- wait_for:
+    path: "/proc/{{ item }}/status"
+    state: absent
+  with_items: "{{ running_processes_imp.stdout_lines }}"
+  register: killed_processes_imp
+  tags: db_imp
+
+- name: Import db | Force kill stuck processes
+  shell: "kill -9 {{ item }}"
+  with_items: "{{ killed_processes_imp.results | select('failed') | map(attribute='item') | list }}"
+  tags: db_imp
+
+- name: Import db | Migration Monitor jobs
+  shell: "lscpu | grep 'CPU(s):'"
+  register: monitor_jobs
+  tags: db_imp
+
+- set_fact: 
+    monitor_cpu_job: "{{ ((monitor_jobs.stdout_lines[0].split(':              ')[-1])|int * 2.5)|int }}"
+  tags: db_imp
+
+- name: Import db | Creating params file
+  template:
+    src: "imp_dbinst.j2"
+    dest: "{{install_dir_imp}}/{{ansible_hostname}}_import.params"
+    mode: '0755'
+  tags: db_imp
+
+- name: Import db | Make sure sapinst is executable
+  file:
+   path: "{{install_dir_imp}}/sapinst"
+   mode: '0755'
+  tags: db_imp
+
+- name: Import db | Importing
+  command:
+    cmd: "./sapinst SAPINST_INPUT_PARAMETERS_URL={{install_dir_imp}}/{{ansible_hostname}}_import.params SAPINST_EXECUTE_PRODUCT_ID={{ params.product_ids.import_db }} SAPINST_SKIP_DIALOGS=true SAPINST_START_GUI=true SAPINST_START_GUISERVER=true SAPINST_GUI_HOSTNAME={{ansible_hostname}}"
+    creates: "{{install_dir_imp}}/LOGS/import_database_instance_{{ansible_hostname}}_{{ansible_date_time}}.log"
+  args:
+    chdir: "{{install_dir_imp}}"
+  async: 3600
+  poll: 0
+  register: db_import
+  tags: db_imp
+
+- name: Import db | import status checking
+  async_status:
+     jid: "{{ db_import.ansible_job_id }}"
+  register: job_result_import
+  until: job_result_import.finished
+  retries: 2000
+  delay: 10
+  tags: db_imp
+

@@ -1,0 +1,9 @@
+---
+
+- name: Execute DB queries for windows
+  include_tasks: "{{ db_type | lower}}_windows.yml"
+  when: os_type == "windows"
+
+- name: Execute DB queries for linux
+  include_tasks: "{{ db_type | lower}}_linux.yml"
+  when: os_type == "linux"

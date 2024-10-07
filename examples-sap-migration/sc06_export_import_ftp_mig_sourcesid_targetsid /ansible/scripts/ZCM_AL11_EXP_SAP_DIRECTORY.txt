@@ -1,0 +1,380 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_AL11_EXP_SAP_DIRECTORY                  *
+* Title               :   Export SAP Directories in AL11              *
+* Purpose             :   This report is used to capture SAP          *
+*                         Directories in AL11 during Cloud Migration  *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* AL11                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* USER_DIR                  X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-18-2020  Initial   Ruchir Kamble  Local      To capture SAP       *
+*                                                Directories in AL11  *
+*05-18-2021   V001     Ruchir Kamble  Local     To Validate path      *
+*                                               exists or not & added *
+*                                               application server    *
+*07-25-2022   V002     Soumya Ray     Local   To pass message "No data*
+*                                             found" in case of no    *
+*                                             data found in sysytem   *
+*09-26-2022   V003     Ashwini K P    Local   Added flag to differen -*
+*                                            -tiate between standard &*
+*                                            user defined directories *
+*---------------------------------------------------------------------*
+
+REPORT zcm_al11_exp_sap_directory.
+
+*   Begin of changes in V001
+
+TYPES: BEGIN OF lty_dir,
+         sap_dir TYPE dirprofilenames,
+         dirname TYPE dirname_al11,
+         server  TYPE msname2,
+         user_defined TYPE char4,  " +V003
+       END OF lty_dir.
+
+*   End of changes in V001
+
+CONSTANTS: lc_sep        TYPE c VALUE '|'                  LENGTH 1,
+           lc_all_server TYPE string VALUE 'all',
+           lc_export     TYPE c VALUE 'EXPORT'             LENGTH 6,
+           lc_dir_param  TYPE c VALUE
+           'NameofDirectoryParameter'                      LENGTH 35,
+           lc_title      TYPE c VALUE 'SAP Directories'    LENGTH 20,
+           lc_directory  TYPE c VALUE 'Directory'          LENGTH 12,
+*   Begin of changes in V001
+           lc_path       TYPE c VALUE 'PathExist'          LENGTH 10,
+           lc_server     TYPE c VALUE 'Server'             LENGTH 6,
+           lc_exist      TYPE c VALUE 'Exist'              LENGTH 5,
+           lc_not_exist  TYPE c VALUE 'Does not exist'     LENGTH 15,
+           lc_error      TYPE c VALUE
+           'Error while checking'                          LENGTH 25,
+           lc_inc_input  TYPE c VALUE 'Incorrect input'    LENGTH 20,
+           lc_noinput    TYPE c VALUE 'No input given'     LENGTH 20,
+* Begin of changes V003
+           lc_null       TYPE c VALUE 'NULL'               LENGTH 4,
+           lc_set        TYPE c VALUE 'X'                  LENGTH 1,
+           lc_user_defined TYPE c VALUE 'UserDefined'      LENGTH 20,
+* End of changes V003
+*   End of changes in V001
+*   Begin of changes in V002
+           lc_err_msg    TYPE c VALUE
+           'No data found'                                  LENGTH 20.
+*   End of changes in V002
+
+DATA: ls_input            TYPE tab512,
+      ls_output           TYPE tab512,
+      lv_action           TYPE char20,
+      lv_timezone_sec(5)  TYPE p,
+      lv_timezone_name(7) TYPE c,
+      lv_globaldirectory  TYPE dirname_al11,
+      lv_my_name(20),
+*   Begin of changes in V001
+      lt_outtab           TYPE STANDARD TABLE OF lty_dir,
+      ls_outtab           TYPE lty_dir,
+      lt_file_tbl         TYPE STANDARD TABLE OF salfldir,
+      lv_path             TYPE salfile-longname,
+      lv_exist            TYPE string,
+      ls_entry            TYPE lty_dir.
+*   End of changes in V001
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+*   Begin of changes in V001
+
+  " Clear variables before use
+  CLEAR: ls_input, ls_output, lv_action, ls_entry,
+         ls_outtab, lv_exist,lv_path, lv_my_name.
+
+  FREE: lt_outtab, lt_output, lt_file_tbl.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+*   End of changes in V001
+  CASE lv_action.
+
+    WHEN lc_export.      " If action is Export
+
+      " To fetch directory parameters from the system
+      PERFORM main.
+
+      IF lt_outtab IS NOT INITIAL.
+
+        " Adding headings to the output
+        CONCATENATE lc_dir_param  lc_sep
+                    lc_directory  lc_sep
+                    lc_path       lc_sep
+* Begin of changes V003
+*                    lc_server
+                    lc_server lc_sep
+                    lc_user_defined
+*End of changes V003
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT lt_outtab INTO ls_outtab.
+
+*   Begin of changes in V001
+
+          lv_path = ls_outtab-dirname.
+
+          " To validate path exists or not
+          CALL FUNCTION 'RZL_READ_DIR_LOCAL'
+            EXPORTING
+              name               = lv_path
+            TABLES
+              file_tbl           = lt_file_tbl
+            EXCEPTIONS
+              argument_error     = 1
+              not_found          = 2
+              no_admin_authority = 3
+              OTHERS             = 4.
+
+          IF sy-subrc EQ 0.
+
+            lv_exist = lc_exist.
+
+          ELSEIF sy-subrc EQ 2.
+
+            lv_exist = lc_not_exist.
+
+          ELSE.
+
+            lv_exist = lc_error.
+
+          ENDIF.
+
+          CONCATENATE ls_outtab-sap_dir lc_sep
+                      ls_outtab-dirname lc_sep
+                      lv_exist          lc_sep
+* Begin of changes V003
+*                      ls_outtab-server
+                      ls_outtab-server lc_sep
+                      ls_outtab-user_defined
+* End of changes V003
+                  INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_outtab, lv_exist, lv_path.
+          FREE lt_file_tbl.
+
+*   End of changes in V001
+        ENDLOOP.
+
+      ELSE.
+
+        " No data found
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+*   Begin of changes in V001
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*   End of changes in V001
+
+  ENDCASE.
+
+ENDFORM.
+
+FORM main.
+* prepare time zone correction.
+  CALL 'C_GET_TIMEZONE' ID 'NAME' FIELD lv_timezone_name
+                        ID 'SEC'  FIELD lv_timezone_sec.
+
+  lv_timezone_sec = 0 - sy-tzone.
+  IF sy-dayst = 'X'.
+    SUBTRACT 3600 FROM lv_timezone_sec.
+  ENDIF.
+
+* add all predefined SAP directories
+  PERFORM:
+  append_db_home,
+  append_dir_from_profile_param USING 'DIR_ATRA',
+  append_dir_from_profile_param USING 'DIR_BINARY',
+  append_dir_from_profile_param USING 'DIR_CCMS',
+  append_dir_from_profile_param USING 'DIR_CT_LOGGING',
+  append_dir_from_profile_param USING 'DIR_CT_RUN',
+  append_dir_from_profile_param USING 'DIR_DATA',
+  append_dir_from_profile_param USING 'DIR_DBMS',
+  append_dir_from_profile_param USING 'DIR_EXECUTABLE',
+  append_dir_from_profile_param USING 'DIR_EXE_ROOT',
+  append_dir_from_profile_param USING 'DIR_GEN',
+  append_dir_from_profile_param USING 'DIR_GEN_ROOT',
+  append_dir_from_profile_param USING 'DIR_GLOBAL',
+  append_dir_from_profile_param USING 'DIR_GRAPH_EXE',
+  append_dir_from_profile_param USING 'DIR_GRAPH_LIB',
+  append_dir_from_profile_param USING 'DIR_HOME',
+  append_dir_from_profile_param USING 'DIR_INSTALL',
+  append_dir_from_profile_param USING 'DIR_INSTANCE',
+  append_dir_from_profile_param USING 'DIR_LIBRARY',
+  append_dir_from_profile_param USING 'DIR_LOGGING',
+  append_dir_from_profile_param USING 'DIR_MEMORY_INSPECTOR',
+  append_dir_from_profile_param USING 'DIR_PAGING',
+  append_dir_from_profile_param USING 'DIR_PUT',
+  append_dir_from_profile_param USING 'DIR_PERF',
+  append_dir_from_profile_param USING 'DIR_PROFILE',
+  append_dir_from_profile_param USING 'DIR_REORG',
+  append_dir_from_profile_param USING 'DIR_ROLL',
+  append_dir_from_profile_param USING 'DIR_RSYN',
+  append_dir_from_profile_param USING 'DIR_SAPUSERS',
+  append_dir_from_profile_param USING 'DIR_SETUPS',
+  append_dir_from_profile_param USING 'DIR_SORTTMP',
+  append_dir_from_profile_param USING 'DIR_SOURCE',
+  append_dir_from_profile_param USING 'DIR_TEMP',
+  append_dir_from_profile_param USING 'DIR_TRANS',
+  append_dir_from_profile_param USING 'DIR_TRFILES',
+  append_dir_from_profile_param USING 'DIR_TRSUB',
+  append_dir_saphostagent.
+
+  SORT lt_outtab BY sap_dir.
+
+  PERFORM append_user_dirs.
+
+ENDFORM.
+
+FORM append_dir_from_profile_param USING p_param TYPE text60.
+
+*   Begin of changes in V001
+*  get the name of the current server.
+  CALL 'C_SAPGPARAM' ID 'NAME' FIELD 'rdisp/myname'
+                     ID 'VALUE' FIELD lv_my_name.
+
+*   End of changes in V001
+
+  CALL 'C_SAPGPARAM' ID 'NAME'  FIELD p_param
+                     ID 'VALUE' FIELD ls_entry-dirname.
+
+  IF ls_entry-dirname IS INITIAL.
+    RETURN.
+  ENDIF.
+
+  IF p_param = 'DIR_GLOBAL'.
+    lv_globaldirectory = ls_entry-dirname.
+  ENDIF.
+
+  ls_entry-sap_dir = p_param.
+*   Begin of changes in V001
+  ls_entry-server = lv_my_name.
+  ls_entry-user_defined = lc_null.    " +V003
+  APPEND ls_entry TO lt_outtab.
+  CLEAR ls_entry.
+*   End of changes in V001
+
+ENDFORM.
+
+FORM append_user_dirs.
+
+  DATA: lt_user_dir TYPE STANDARD TABLE OF user_dir,
+        ls_user_dir TYPE user_dir.
+
+*   Begin of changes in V001
+* get the name and aliases of ALL userdefined directories
+  SELECT * FROM user_dir
+           INTO TABLE lt_user_dir
+           ORDER BY aliass.
+
+  IF lt_user_dir IS NOT INITIAL.
+
+    LOOP AT lt_user_dir INTO ls_user_dir.
+      ls_entry-sap_dir = ls_user_dir-aliass.
+      ls_entry-dirname = ls_user_dir-dirname.
+      ls_entry-server = ls_user_dir-svrname.
+      ls_entry-user_defined = lc_set.     " +V003
+      APPEND ls_entry TO lt_outtab.
+      CLEAR: ls_user_dir, ls_entry.
+    ENDLOOP.
+
+  ENDIF.
+
+*   End of changes in V001
+ENDFORM.
+
+FORM append_dir_saphostagent.
+
+  DATA: windir_path(64),
+        programfiles_path(64).
+
+* calculate directory for saphostagent (no sapparam available...)
+  IF ( sy-opsys(3) = 'WIN' ) OR ( sy-opsys(3) = 'Win' ).
+
+*   hoping that ProgramFiles is set in service user environment
+    CALL 'C_GETENV' ID 'NAME'  FIELD 'ProgramFiles'
+                    ID 'VALUE' FIELD programfiles_path.
+
+    IF programfiles_path IS INITIAL.
+*     %ProgramFiles% not available. guess from windir
+      CALL 'C_GETENV' ID 'NAME'  FIELD 'windir'
+                      ID 'VALUE' FIELD windir_path.
+*     e.g. S:\WINDOWS ==> S:\Program Files
+      CONCATENATE windir_path(3) 'Program Files'
+      INTO programfiles_path.
+    ENDIF.
+
+    CONCATENATE programfiles_path '\SAP\hostctrl'
+      INTO ls_entry-dirname.
+  ELSE.
+*   on UNIX, the path is hard coded
+    ls_entry-dirname = '/usr/sap/hostctrl'.
+  ENDIF.
+
+  ls_entry-sap_dir = 'DIR_SAPHOSTAGENT'.
+  APPEND ls_entry TO lt_outtab.
+  CLEAR ls_entry.
+ENDFORM.
+
+FORM append_db_home.
+  CASE sy-dbsys(3).
+    WHEN 'ORA'.
+      PERFORM append_dir_from_profile_param USING 'DIR_ORAHOME'.
+    WHEN 'ADA'.
+      PERFORM append_dir_from_env USING 'DBROOT' 'DIR_ADA_DBROOT'.
+    WHEN 'DB6'.
+      PERFORM append_dir_from_env USING 'INSTHOME' 'DIR_DB2_HOME'.
+    WHEN OTHERS.
+      RETURN.
+  ENDCASE.
+ENDFORM.
+
+FORM append_dir_from_env USING p_env   TYPE text60
+                               p_alias TYPE text60.
+
+  CALL 'C_GETENV' ID 'NAME'  FIELD p_env
+                  ID 'VALUE' FIELD ls_entry-dirname.
+
+  IF ls_entry-dirname IS INITIAL.
+    RETURN.
+  ENDIF.
+
+  ls_entry-sap_dir = p_alias.
+  APPEND ls_entry TO lt_outtab.
+  CLEAR ls_entry.
+
+ENDFORM.

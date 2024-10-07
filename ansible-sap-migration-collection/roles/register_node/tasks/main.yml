@@ -1,0 +1,13 @@
+---
+- name: Register Node
+  include_tasks: register_node.yml
+
+- name: Full sync
+  include_tasks: full_sync.yml
+  when: full_sync == 'yes'
+
+- name: Time travel
+  include_tasks: full_sync.yml
+  when: time_travel == 'yes'
+
+  

@@ -1,0 +1,415 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_ST06_EXP_SYSTEM_INFO                    *
+* Title               :   Capture ST06 System information             *
+* Purpose             :   To get the CPU, Memory, Disk and LAN details*
+*                         from ST06                                   *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* ST06                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*03-18-2021  Initial   Soumya Ray   Local   To get system information *
+*                                           in ST06                   *
+*12-22-2021  V001      Soumya Ray   Local   Heading corrected in disk *
+*09-09-2022  V002      Yasaswini K  Local   To add no data found      *
+*                                           changes                   *
+*---------------------------------------------------------------------*
+
+REPORT zcm_st06_exp_system_info.
+
+INCLUDE rshost1n_typ.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep      TYPE c VALUE '|'                  LENGTH 1,
+    lc_msg_head TYPE c VALUE 'System information' LENGTH 20,
+    lc_ninput   TYPE c VALUE 'No input passed'    LENGTH 20,  "+V002
+    lc_export   TYPE c VALUE 'EXPORT'             LENGTH 6,
+    lc_naction  TYPE c VALUE 'Incorrect input'    LENGTH 20,  "+V002
+    lc_cpu      TYPE c VALUE 'CPU'                LENGTH 3,
+    lc_mem      TYPE c VALUE 'MEM'                LENGTH 3,
+    lc_memory   TYPE c VALUE 'Memory'             LENGTH 6,
+    lc_info     TYPE c VALUE 'Info'               LENGTH 4,
+    lc_server   TYPE c VALUE 'Server'             LENGTH 6,
+    lc_category TYPE c VALUE 'Category'           LENGTH 8,
+    lc_desc     TYPE c VALUE 'Description'        LENGTH 12,
+    lc_value    TYPE c VALUE 'Value'              LENGTH 5,
+    lc_unit     TYPE c VALUE 'Unit'               LENGTH 4,
+    lc_no_data  TYPE c VALUE 'No data found'      LENGTH 20,    "+V002
+    lc_snapshot TYPE c VALUE 'Snapshot'           LENGTH 8,
+    lc_util     TYPE c VALUE 'Util.%'             LENGTH 6,
+    lc_queue    TYPE c VALUE 'Queue'              LENGTH 5,
+    lc_waittm   TYPE c VALUE 'Waittime(ms)'       LENGTH 12,
+    lc_servtm   TYPE c VALUE 'Serv.time'          LENGTH 9,
+    lc_transf   TYPE c VALUE 'TransfKB/s'         LENGTH 10,
+    lc_operan   TYPE c VALUE 'Operations(per s)'  LENGTH 17,
+    lc_restm    TYPE c VALUE 'Resp.time'          LENGTH 9,
+    lc_disk     TYPE c VALUE 'Disk'               LENGTH 4,
+    lc_lan      TYPE c VALUE 'Lan'                LENGTH 3,
+    lc_lanin    TYPE c VALUE 'Lanin/s'            LENGTH 7,
+    lc_lanout   TYPE c VALUE 'Lanout/s'           LENGTH 8,
+    lc_errin    TYPE c VALUE 'Errorin'            LENGTH 7,
+    lc_errout   TYPE c VALUE 'Errorout'           LENGTH 8,
+    lc_collison TYPE c VALUE 'Collision'          LENGTH 9,
+    lc_packet   TYPE c VALUE 'Packets/s'          LENGTH 9,
+    lc_null     TYPE c VALUE 'NULL'               LENGTH 4,
+    lc_diskname TYPE c VALUE 'Diskname'           LENGTH 8. "+V001
+
+  DATA: ls_output      TYPE tab512,
+        lv_server      TYPE rfcdest,
+        lv_local       TYPE def_par_fu-loc_remote,
+        lv_util        TYPE char10,
+        lv_avgqueuel   TYPE char10,
+        lv_avgwait     TYPE char10,
+        lv_avgservic   TYPE char10,
+        lv_kbsec       TYPE char10,
+        lv_opsec       TYPE char10,
+        lv_response    TYPE char10,
+        lv_inpackets   TYPE char10,
+        lv_outpacket   TYPE char10,
+        lv_inerrors    TYPE char10,
+        lv_outerrors   TYPE char10,
+        lv_collisions  TYPE char10,
+        lv_packets     TYPE char10,
+        lt_outcpu      TYPE STANDARD TABLE OF tab512,
+        lt_outmem      TYPE STANDARD TABLE OF tab512,
+        lt_outdsk      TYPE STANDARD TABLE OF tab512,
+        lt_outlan      TYPE STANDARD TABLE OF tab512,
+        ls_dest        TYPE ccm_os_dest,
+        lt_serverlist  TYPE STANDARD TABLE OF logdsthtbl,
+        lt_lan_single  TYPE STANDARD TABLE OF lan_single,
+        lt_disk_single TYPE STANDARD TABLE OF dsk_single,
+        lt_snap        TYPE STANDARD TABLE OF ccm_os_snap,
+* Begin of changes V001
+        ls_snap        TYPE ccm_os_snap,
+        ls_disk        TYPE dsk_single,
+        ls_lan         TYPE lan_single,
+        lv_action      TYPE string,
+        ls_input       TYPE tab512.
+* End of changes V001
+
+  FIELD-SYMBOLS: <lfs_serverlist> TYPE logdsthtbl.          "+V001
+
+
+  "Read input
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.
+  ELSE.
+*   Heading of the script
+    ls_output = lc_msg_head. "System information
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    ls_output = lc_ninput. "No input
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+    WHEN lc_export. "EXPORT
+      FREE: lt_outcpu, lt_outlan, lt_outdsk, lt_snap, lt_lan_single,
+      lt_disk_single, lt_serverlist, lt_outmem.
+      CLEAR: ls_output, lv_server, lv_local, lv_util, lv_avgqueuel,
+      lv_avgwait, lv_avgservic, lv_kbsec, lv_opsec, lv_response,
+      lv_inpackets, lv_outpacket, lv_inerrors, lv_outerrors,
+      lv_collisions, lv_packets, ls_dest.
+
+      " FM to get logical destination & server type
+      CALL FUNCTION 'SMON_GET_LOGICAL_DESTINATIONS'
+        TABLES
+          destinations                  = lt_serverlist
+        EXCEPTIONS
+          cant_get_logical_destinations = 1
+          OTHERS                        = 2.
+      IF sy-subrc NE 0.
+*      Heading of the script
+        ls_output = lc_msg_head. "System information
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        ls_output = lc_no_data. "No server in system
+        APPEND ls_output TO lt_output.
+        RETURN.
+      ENDIF.
+
+      "Looping Instance
+      LOOP AT lt_serverlist ASSIGNING <lfs_serverlist>.
+
+        ls_dest-dest_logical = <lfs_serverlist>-logdest.
+        ls_dest-server_type =  <lfs_serverlist>-locality.
+        "// CPU
+        "Subrountine to get CPU data of the system
+        PERFORM snapshot_get_data IN PROGRAM  rshost1n
+        IF FOUND
+        USING    lc_cpu "CPU
+        CHANGING ls_dest
+          lt_snap.
+        IF sy-subrc EQ 0.
+          SORT lt_snap BY section ASCENDING.
+          DELETE lt_snap WHERE section EQ lc_info. " Delete Info data
+          IF lt_snap IS NOT INITIAL.
+            IF lt_outcpu IS INITIAL.
+              CONCATENATE lc_server       lc_sep
+              lc_category     lc_sep
+              lc_desc         lc_sep
+              lc_value        lc_sep
+              lc_unit
+              INTO ls_output. " Field heading
+              APPEND ls_output TO lt_outcpu.
+              CLEAR ls_output.
+            ENDIF.
+            LOOP AT lt_snap INTO ls_snap.
+              " To reduce the length of the value
+              CONDENSE ls_snap-_value1.
+
+              " If unit is initial
+              IF ls_snap-_unit_1 IS INITIAL.
+                ls_snap-_unit_1 = lc_null.
+              ENDIF.
+              CONCATENATE <lfs_serverlist>-logdest lc_sep
+              ls_snap-section         lc_sep
+              ls_snap-_descr1         lc_sep
+              ls_snap-_value1         lc_sep
+              ls_snap-_unit_1
+              INTO ls_output. " Data
+              APPEND ls_output TO lt_outcpu.
+              CLEAR: ls_output, ls_snap.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+        "// Memory
+        FREE lt_snap.
+        "Subrountine to get Memory data of the system
+        PERFORM snapshot_get_data IN PROGRAM  rshost1n
+        IF FOUND
+        USING    lc_mem "MEM
+        CHANGING ls_dest
+          lt_snap.
+        IF sy-subrc EQ 0.
+          SORT lt_snap BY section ASCENDING.
+          DELETE lt_snap WHERE section EQ lc_info. " Delete Info data
+          IF lt_snap IS NOT INITIAL.
+            IF lt_outmem IS INITIAL.
+              CONCATENATE lc_server       lc_sep
+              lc_category     lc_sep
+              lc_desc         lc_sep
+              lc_value        lc_sep
+              lc_unit
+              INTO ls_output. " Field heading
+              APPEND ls_output TO lt_outmem.
+              CLEAR ls_output.
+            ENDIF.
+            CLEAR ls_snap.
+            LOOP AT lt_snap INTO ls_snap.
+              " To reduce the length of the value
+              CONDENSE ls_snap-_value1.
+
+              " If unit is initial
+              IF ls_snap-_unit_1 IS INITIAL.
+                ls_snap-_unit_1 = lc_null.
+              ENDIF.
+              CONCATENATE <lfs_serverlist>-logdest lc_sep
+              ls_snap-section          lc_sep
+              ls_snap-_descr1          lc_sep
+              ls_snap-_value1          lc_sep
+              ls_snap-_unit_1
+              INTO ls_output. "Data
+              APPEND ls_output TO lt_outmem.
+              CLEAR: ls_output, ls_snap.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+        lv_server = <lfs_serverlist>-logdest.
+        lv_local = <lfs_serverlist>-locality.
+        "// Disk details
+        CALL FUNCTION 'GET_DISK_SINGLE'
+          EXPORTING
+            local_remote                   = lv_local
+            logical_destination            = lv_server
+          TABLES
+            tf_disk_single                 = lt_disk_single
+          EXCEPTIONS
+            internal_error_adress_failed   = 1
+            internal_error_different_field = 2
+            internal_error_no_new_line     = 3
+            collector_not_running          = 4
+            shared_memory_not_available    = 5
+            collector_busy                 = 6
+            version_conflict               = 7
+            no_network_collector_running   = 8
+            system_failure                 = 9
+            communication_failure          = 10
+            OTHERS                         = 11.
+        IF sy-subrc EQ 0.
+          IF lt_outdsk IS INITIAL.
+            CONCATENATE lc_server lc_sep
+            lc_diskname lc_sep "+V001
+            lc_util   lc_sep
+            lc_queue  lc_sep
+            lc_waittm lc_sep
+            lc_servtm lc_sep
+            lc_transf lc_sep
+            lc_operan lc_sep
+            lc_restm INTO ls_output. "Field heading
+            APPEND ls_output TO lt_outdsk.
+          ENDIF.
+          LOOP AT lt_disk_single INTO ls_disk.
+            "// To convert the numerical value to character
+            lv_util = ls_disk-util.
+            lv_avgqueuel = ls_disk-avg_queuel.
+            lv_avgwait   = ls_disk-avg_wait.
+            lv_avgservic = ls_disk-avg_servic.
+            lv_kbsec     = ls_disk-kb_sec.
+            lv_opsec     = ls_disk-op_sec.
+            lv_response  = ls_disk-response.
+            CONCATENATE <lfs_serverlist>-logdest lc_sep
+            ls_disk-diskname   lc_sep
+            lv_util            lc_sep
+            lv_avgqueuel       lc_sep
+            lv_avgwait         lc_sep
+            lv_avgservic       lc_sep
+            lv_kbsec           lc_sep
+            lv_opsec           lc_sep
+            lv_response   INTO ls_output. "Data
+            CONDENSE ls_output.
+            APPEND ls_output TO lt_outdsk.
+            CLEAR: ls_output, lv_util, lv_avgqueuel, ls_disk,
+            lv_avgwait, lv_avgservic, lv_kbsec, lv_opsec, lv_response.
+          ENDLOOP.
+
+        ENDIF.
+
+        "// LAN details
+        CALL FUNCTION 'GET_LAN_SINGLE'
+          EXPORTING
+            local_remote                   = lv_local
+            logical_destination            = lv_server
+          TABLES
+            tf_lan_single                  = lt_lan_single
+          EXCEPTIONS
+            internal_error_adress_failed   = 1
+            internal_error_different_field = 2
+            internal_error_no_new_line     = 3
+            collector_not_running          = 4
+            shared_memory_not_available    = 5
+            collector_busy                 = 6
+            version_conflict               = 7
+            no_network_collector_running   = 8
+            system_failure                 = 9
+            communication_failure          = 10
+            OTHERS                         = 11.
+        IF sy-subrc EQ 0.
+          IF lt_outlan IS INITIAL.
+            CONCATENATE lc_server   lc_sep
+            lc_lanin    lc_sep
+            lc_lanout   lc_sep
+            lc_errin    lc_sep
+            lc_errout   lc_sep
+            lc_collison lc_sep
+            lc_packet   INTO ls_output. "Field heading
+            APPEND ls_output TO lt_outlan.
+            CLEAR ls_output.
+          ENDIF.
+          LOOP AT lt_lan_single INTO ls_lan.
+            "// To convert the numerical value to character
+            lv_inpackets = ls_lan-in_packets.
+            lv_outpacket = ls_lan-out_packet.
+            lv_inerrors = ls_lan-in_errors.
+            lv_outerrors = ls_lan-out_errors.
+            lv_collisions = ls_lan-collisions.
+            lv_packets = ls_lan-packets.
+            CONCATENATE <lfs_serverlist>-logdest lc_sep
+            ls_lan-lanname           lc_sep
+            lv_inpackets             lc_sep
+            lv_outpacket             lc_sep
+            lv_inerrors              lc_sep
+            lv_outerrors             lc_sep
+            lv_collisions            lc_sep
+            lv_packets INTO ls_output. "Data
+            CONDENSE ls_output.
+            APPEND ls_output TO lt_outlan.
+            CLEAR : ls_lan, lv_inpackets, lv_outpacket, lv_inerrors,
+            lv_outerrors, lv_collisions, lv_packets.
+          ENDLOOP.
+        ENDIF.
+
+        CLEAR: lv_server, <lfs_serverlist>, lv_local, ls_snap,
+        ls_disk, ls_dest.
+        FREE: lt_lan_single, lt_disk_single, lt_snap .
+      ENDLOOP.
+
+      "// CPU data passed to output
+      CONCATENATE lc_snapshot lc_cpu
+      INTO ls_output SEPARATED BY space. " Heading
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      IF lt_outcpu IS NOT INITIAL.
+        APPEND LINES OF lt_outcpu TO lt_output. " Pass to output
+      ELSE.
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR ls_output.
+      APPEND ls_output TO lt_output. " blank line
+
+      "// Memory data passed to output
+      CONCATENATE lc_snapshot lc_memory
+      INTO ls_output SEPARATED BY space. "Heading
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      IF lt_outmem IS NOT INITIAL.
+        APPEND LINES OF lt_outmem TO lt_output. "Pass to output
+      ELSE.
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR ls_output.
+      APPEND ls_output TO lt_output. " blank line
+
+      "// Disk details to output
+      CONCATENATE lc_snapshot lc_disk
+      INTO ls_output SEPARATED BY space. "Heading
+      APPEND ls_output TO lt_output.
+      IF lt_outdsk IS NOT INITIAL.
+        APPEND LINES OF lt_outdsk TO lt_output. " Pass to output
+      ELSE.
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+      CLEAR ls_output.
+      APPEND ls_output TO lt_output. " blank line
+
+      "// Lan details to output
+      CONCATENATE lc_snapshot lc_lan
+      INTO ls_output SEPARATED BY space. "Heading
+      APPEND ls_output TO lt_output.
+      IF lt_outlan IS NOT INITIAL.
+        APPEND LINES OF lt_outlan TO lt_output. "Pass to output
+      ELSE.
+        ls_output = lc_no_data.
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+    WHEN OTHERS.
+*   Heading of the script
+      ls_output = lc_msg_head. "System information
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      ls_output = lc_naction. "Incorrect action
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+  FREE: lt_outcpu, lt_outlan, lt_outdsk, lt_snap, lt_lan_single,
+  lt_disk_single, lt_serverlist, lt_outmem.
+ENDFORM.

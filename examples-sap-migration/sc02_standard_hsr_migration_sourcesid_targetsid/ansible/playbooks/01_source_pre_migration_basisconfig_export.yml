@@ -1,0 +1,54 @@
+---
+
+- hosts: localhost
+  tags: abap
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    stage: premigration
+    hostname: "{{ groups['source_ascs'][0] }}"
+    hostip: "{{ hostvars[groups['source_ascs'][0]].ansible_host }}"
+  vars_files:
+    - ../inventory/group_vars/source_ascs.yml
+    - ../inventory/host_vars/{{ groups['source_ascs'][0] }}.yml
+  roles:
+    - folder_creation
+    - sap_abap_execute_queries
+
+- hosts: source_pas #source_ascs,source_pas,source_aas,source_db
+  tags: os
+  remote_user: "{{ os_user }}"
+  ignore_errors: true
+  vars:
+    hostip: "{{ hostvars[groups['source_pas'][0]].ansible_host }}"
+    ansible_become: false
+  vars_files:
+    - ../inventory/group_vars/source_pas.yml
+    - ../inventory/host_vars/{{ groups['source_pas'][0] }}.yml
+  roles:
+    - sap_get_os_command_outputs
+
+- hosts: source_db
+  tags: db
+  remote_user: "{{ os_user }}"
+  ignore_errors: true
+  vars:
+    ansible_become: false
+    hostip: "{{ hostvars[groups['source_db'][0]].ansible_host }}"
+    sql_db_username: "{{ hostvars[groups['source_db'][0]].ansible_user }}"
+    # oracle_user: "{{ source.sap.db.oracle_user }}" # this is the default user for oracle user
+    # hana_db_name: "{{ source.sap.db.hana_db_name }}" # this is the default hana_db name 
+  vars_files:
+    - ../inventory/group_vars/source_db.yml
+  roles:
+    - sap_get_db_queries_outputs
+
+- name: Hana mini checks # if database type is hana
+  hosts: source_db
+  gather_facts: yes
+  become: true
+  tags: hanamini
+  vars_files:
+    - ../inventory/group_vars/source_db.yml
+  roles:
+      - hana_mini_checks

@@ -1,0 +1,106 @@
+#############################################################################################################################################################################
+#                                                                                                                                                                           #
+# Installation service 'SAP NetWeaver 7.5 > Oracle > System Copy > Source System > Based on AS ABAP > Table Splitting Preparation', product id 'TableSplitter:NW750.ORA.CP' #
+#                                                                                                                                                                           #
+#############################################################################################################################################################################
+# IMPORTANT DO NOT DELETE!!! SAPInstDes25Hash=$Mz+Gji+uUP8K$ABi1wZXSifu9wDSKSGt/EbT+QlwM5R8UDuiwbk5+wS5K1ljJjlfFOKdt70jJq+OVaakPkiQn1+Erihm/sNp5haQnXpw87BPa
+
+# Password for the Diagnostics Agent specific <dasid>adm user. Provided value may be encoded.
+# DiagnosticsAgent.dasidAdmPassword = 
+
+# Windows domain in which the Diagnostics Agent users must be created. This is an optional property (Windows only).
+# DiagnosticsAgent.domain = 
+
+# Windows only: Password for the Diagnostics Agent specific 'SAPService<DASID>' user.
+# DiagnosticsAgent.sapServiceDASIDPassword = 
+
+# Specify whether you want to decluster during the export.
+InitDeclusteringForExport.decluster = false
+
+# Target database type, possible values are: 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB'
+NW_ABAP_Export_Dialog.targetDbType = {{ params.import.target_db_type }}
+
+# UNIX only: If this parameter is set to 'RESTRICTED' the export subdirectories will belong to '<sapsid>adm:sapsys' with permission 700. Leave empty for default.
+# NW_Export.accessLevel4ExportDir = default
+
+# Main export directory with ABAP and JAVA subdirectories
+NW_Export.mainExportDir = {{ params.export.mainExportDir }}
+
+# File with predefined tables to be split
+NW_Export.tableFile = {{ params.export.tableFile }}
+
+# The database host
+NW_getDBInfoGeneric.dbhost = {{ ansible_hostname | default() }}
+
+# The database ID (DBSID)
+NW_getDBInfoGeneric.dbsid = {{ sid|upper }}
+
+# Only use this parameter if recommended by SAP.
+# NW_getDBInfoGeneric.strictDbSidCheck = true
+
+# The FQDN of the system
+# NW_getFQDN.FQDN = 
+
+# Specify whether you want to set FQDN for the system.
+# NW_getFQDN.setFQDN = true
+
+# The load type chosen by the user. Valid values are: 'SAP', 'STD', 'OBR', 'HCP', 'FLASHCOPY', 'MDA', 'HBR', 'SBR'
+NW_getLoadType.loadType = STD
+
+# ABAP system is Unicode (true|false), only needed if it cannot be determined from the system.
+# NW_getUnicode.isUnicode = 
+
+# Provide  'profile' directory of SAP Netweaver-based system.
+NW_readProfileDir.profileDir = /usr/sap/{{ sid|upper }}/SYS/profile
+
+# Windows only: The drive to use
+# NW_readProfileDir.sapdrive = 
+
+# Number of parallel 'R3ta' processes
+TableSplitter.jobNum = 40
+
+# Oracle only: Select type of splitter. Possible values are: 'R3TA', 'PLSQL'
+# TableSplitter_ora.splitter = PLSQL
+
+# Windows only: The domain of the SAP Host Agent user
+# hostAgent.domain = 
+
+# Password for the 'sapadm' user of the SAP Host Agent
+# hostAgent.sapAdmPassword = 
+
+# Windows only: The domain of all users of this SAP system. Leave empty for default.
+# nwUsers.sapDomain = 
+
+# Windows only: The password of the 'SAPServiceSID' user
+# nwUsers.sapServiceSIDPassword = 
+
+# UNIX only: The user ID of the 'sapadm' user, leave empty for default. The ID is ignored if the user already exists.
+# nwUsers.sapadmUID = 
+
+# UNIX only: The group id of the 'sapsys' group, leave empty for default. The ID is ignored if the group already exists.
+nwUsers.sapsysGID = {{ params.sapsys.gid }}
+
+# UNIX only: The user id of the <sapsid>adm user, leave empty for default. The ID is ignored if the user already exists.
+nwUsers.sidAdmUID = {{ params.sidadm.uid }}
+
+# The password of the '<sapsid>adm' user
+# nwUsers.sidadmPassword = 
+
+# possible values are
+#         isSingle:  Database on filesystem exist.
+#         isSHOH:    Database installation with SHared Oracle Home.
+#         isASM:     Database on ASM.
+#         isRAC:     Database on RAC.
+#         isRacAsm:  Database on RAC and ASM.
+ora.whatInstallation = false
+
+# possible values are
+#         true:  Database Software installed as oracle user.
+#         false: Database Software installed as orasid user.
+# ora.whatIsOracleUser = true
+
+# ABAP schema
+# storageBasedCopy.ora.ABAPSchema = SAPSR3
+
+# ABAP schema password
+storageBasedCopy.ora.ABAPSchemaPassword = Cloudcoe123#

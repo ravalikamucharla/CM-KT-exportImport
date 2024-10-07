@@ -1,0 +1,558 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_DB13_UPD_JOB_SCHEDULING                  *
+* Title               :  DB13 Job Scheduling                          *
+* Purpose             :  To schedule jobs in DB13                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DB13                                                                *
+*---------------------------------------------------------------------*
+*	Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXX                                                                *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*10-14-2020  Initial   Yasaswini K   Local     To schedule jobs in    *
+*                                              DB13                   *
+*09-30-2022  V001      Yasaswini K   Local     To remove dead code and*
+*                                              inline declarations    *
+*---------------------------------------------------------------------*
+
+REPORT zbasis_r_db13_jobsched_restore.
+
+FORM get_config
+             TABLES lt_input  STRUCTURE tab512
+                    lt_output STRUCTURE tab512.
+  CONSTANTS:
+    lc_schedule TYPE char80 VALUE 'has been added to calender at',
+    lc_action   TYPE char8  VALUE 'Action',
+    lc_once     TYPE char20 VALUE 'Once only',
+    lc_error   TYPE char80 VALUE 'has not been added to calender at',
+    lc_pasttime    TYPE char80 VALUE
+   'as the planned starting date is too early',
+    lc_delete   TYPE char80 VALUE
+    'have been deleted which is scheduled at',
+    lc_dele     TYPE char20 VALUE 'not deleted for',
+    lc_as       TYPE char8  VALUE 'as',
+    lc_job      TYPE char8  VALUE 'job',
+    lc_hour     TYPE char20 VALUE 'Hourly',
+    lc_daily    TYPE char20 VALUE 'Daily',
+    lc_week     TYPE char20 VALUE 'Weekly',
+    lc_abaptrue TYPE c      VALUE 'X',
+    lc_d        TYPE c      VALUE 'D',
+    lc_w        TYPE c      VALUE 'W',
+    lc_h        TYPE c      VALUE 'H',
+    lc_sep      TYPE c      VALUE '|'.
+
+  TYPES: BEGIN OF ty_recurrence,
+           daye       TYPE sdba_day,
+           timee      TYPE sdba_time,
+           cretstmp   TYPE sdba_crts,
+           sysid      TYPE sysysid,
+           btype      TYPE sdba_btype,
+           period     TYPE btcpday,
+           deltstmp   TYPE sdba_delts,
+           starttstmp TYPE sdba_frsts,
+           status     TYPE string,
+           type       TYPE string,
+         END OF ty_recurrence.
+
+  DATA:
+    ls_input          TYPE tab512,
+    ls_output         TYPE tab512,
+    lt_sub_input2     TYPE TABLE OF tab512,
+    lt_sub_input3     TYPE TABLE OF tab512,
+    lt_sdbap          TYPE STANDARD TABLE OF sdbap,
+    lt_sdbap_del      TYPE STANDARD TABLE OF sdbap,
+    ls_sdbap          TYPE sdbap,
+    lt_messages_char  TYPE dba_msg_list_char,
+    lo_sys            TYPE REF TO cl_db6_sys,
+    lv_time           TYPE db6tstamp_struct,
+    lt_parameters     TYPE db6jo_param_table,
+    lt_sdbar          TYPE STANDARD TABLE OF sdbar,
+    ls_sdbar          TYPE sdbar,
+    lt_recurr         TYPE STANDARD TABLE OF sdba_recur,
+    ls_recurr         TYPE sdba_recur,
+    lt_recurrence     TYPE STANDARD TABLE OF ty_recurrence,
+    lt_recurrence_del TYPE STANDARD TABLE OF ty_recurrence,
+    ls_recurrence     TYPE ty_recurrence,
+    lo_exec           TYPE REF TO cx_db6_sys,
+    lv_cretstmp       TYPE sdbap-cretstmp,
+    lv_tabix          TYPE sy-tabix,
+    lv_status         TYPE string,
+    lv_type           TYPE string,
+    lv_action         TYPE string,
+* Begin of changes V001
+    ls_temp           TYPE sdbar,
+    lv_sys_id         TYPE sy-sysid,
+    lv_index          TYPE sy-tabix,
+    lv_dbname         TYPE dbcon_dbms,
+    lv_error          TYPE string.
+* End of changes V001
+
+  CLEAR: ls_input,
+         ls_sdbap,
+         ls_recurrence,
+         ls_sdbar,
+         lv_time,
+         ls_sdbar,
+         ls_recurr,
+         ls_recurrence,
+         lo_exec,
+         lv_cretstmp,
+         lv_tabix,
+         lv_status,
+         lv_type.
+
+  FREE: lt_recurrence,
+        lt_parameters,
+        lt_sdbar,
+        lt_sdbap,
+        lt_recurr,
+        lt_recurrence.
+
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input3
+                           CHANGING lv_tabix. "Data for parameters
+
+  lv_tabix = lv_tabix + 1.
+  PERFORM table_separate TABLES lt_input
+                                lt_sub_input2
+                           CHANGING lv_tabix. "Data for planned jobs
+
+  "Delete heading and column names from each table
+  DELETE lt_sub_input2 INDEX 1.
+  DELETE lt_sub_input3 INDEX 1.
+
+  IF lt_sub_input3[] IS INITIAL.
+  ls_output = 'No data found for Scheduling jobs'.
+  APPEND ls_output TO lt_output.
+  CLEAR: ls_output.
+  RETURN.
+  ENDIF.
+
+  "Building sdbap and recurrence tables
+  LOOP AT lt_sub_input3 INTO ls_input.
+
+    REPLACE ALL OCCURRENCES OF 'NULL' IN ls_input WITH space.
+
+    SPLIT ls_input AT lc_sep INTO ls_sdbap-daye
+                                  ls_sdbap-timee
+                                  ls_sdbap-cretstmp
+                                  ls_sdbap-sysid
+                                  ls_sdbap-btype
+                                  ls_sdbap-period
+                                  ls_sdbap-deltstmp
+                                  ls_sdbap-starttstmp
+                                  lv_status
+                                  lv_type
+                                  lv_action.
+    IF lv_type NE lc_once.
+      ls_recurrence-daye       = ls_sdbap-daye.
+      ls_recurrence-timee      = ls_sdbap-timee.
+      ls_recurrence-cretstmp   = ls_sdbap-cretstmp.
+      ls_recurrence-sysid      = ls_sdbap-sysid.
+      ls_recurrence-btype      = ls_sdbap-btype.
+      ls_recurrence-period     = ls_sdbap-period.
+      ls_recurrence-deltstmp   = ls_sdbap-deltstmp.
+      ls_recurrence-starttstmp = ls_sdbap-starttstmp.
+      ls_recurrence-status     = lv_status.
+      ls_recurrence-type       = lv_type.
+    ENDIF.
+
+    IF lv_action EQ 'D'.
+      APPEND ls_sdbap TO lt_sdbap_del.
+      IF lv_type NE lc_once.
+        APPEND ls_recurrence TO lt_recurrence_del.
+      ENDIF.
+    ELSE.
+      APPEND ls_sdbap TO lt_sdbap.
+      APPEND ls_recurrence TO lt_recurrence.
+    ENDIF.
+
+    CLEAR: ls_sdbap,
+           ls_recurrence,
+           lv_action,
+           lv_status,
+           lv_type,
+           ls_input.
+  ENDLOOP.
+
+  "Building parameters for each action
+  CLEAR: ls_input.
+
+  LOOP AT lt_sub_input2 INTO ls_input.
+
+    REPLACE ALL OCCURRENCES OF 'NULL' IN ls_input WITH space.
+
+    SPLIT ls_input AT lc_sep INTO ls_sdbar-daye
+                                  ls_sdbar-timee
+                                  ls_sdbar-cretstmp
+                                  ls_sdbar-sysid
+                                  ls_sdbar-pos
+                                  ls_sdbar-restype
+                                  ls_sdbar-resname
+                                  ls_sdbar-resname2
+                                  lv_action.
+    IF ls_sdbar-timee = '00'.
+      CLEAR: ls_sdbar-timee.
+    ENDIF.
+
+    APPEND ls_sdbar TO lt_sdbar.
+
+    CLEAR: ls_input,
+           lv_action,
+           ls_sdbar.
+  ENDLOOP.
+
+  SORT lt_sdbap      BY cretstmp btype.
+  SORT lt_recurrence BY cretstmp btype.
+  SORT lt_sdbar      BY cretstmp.
+
+  CLEAR: ls_sdbap.
+
+  lv_sys_id = sy-sysid. "System ID                       "+V001
+
+  TRY .
+      cl_db6_sys=>get_sys_ref(
+  EXPORTING
+    system_id     = lv_sys_id
+  RECEIVING
+    sys_ref       = lo_sys ).
+
+    CATCH cx_db6_sys INTO lo_exec.
+      lv_error = lo_exec->get_text( ).
+
+  ENDTRY.
+
+***Read the database name
+  IF lo_sys IS BOUND.
+    IF lo_sys->con_ref IS NOT INITIAL.
+      lv_dbname = lo_sys->con_ref->con_data-dbms.          "+V001
+    ELSE.
+*        Check for current s/m being SQL
+      IF lo_sys->sys_data IS NOT INITIAL.
+        lv_dbname = lo_sys->sys_data-dbsys.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  SORT lt_sdbap BY timee cretstmp.
+  SORT lt_recurrence BY timee cretstmp.
+
+***Schedule Job
+  LOOP AT lt_sdbap INTO ls_sdbap.
+
+    IF lv_cretstmp NE ls_sdbap-cretstmp.
+      CLEAR: ls_recurrence,
+             ls_recurr,
+             lv_cretstmp.
+
+      LOOP AT lt_recurrence INTO ls_recurrence WHERE
+                                        cretstmp = ls_sdbap-cretstmp
+                                    AND btype = ls_sdbap-btype.
+
+        lv_cretstmp = ls_sdbap-cretstmp.
+        IF ls_recurrence-type = lc_hour.
+          ls_recurr-period = '1'.
+          ls_recurr-unit   = lc_h.
+        ELSEIF ls_recurrence-type = lc_daily.
+          ls_recurr-period = '1'.
+          ls_recurr-unit   = lc_d.
+          IF ls_recurrence-timee+0(2) = '00'.
+            ls_recurr-hourofday+0(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '01'.
+            ls_recurr-hourofday+1(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '02'.
+            ls_recurr-hourofday+2(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '03'.
+            ls_recurr-hourofday+3(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '04'.
+            ls_recurr-hourofday+4(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '05'.
+            ls_recurr-hourofday+5(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '06'.
+            ls_recurr-hourofday+6(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '07'.
+            ls_recurr-hourofday+7(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '08'.
+            ls_recurr-hourofday+8(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '09'.
+            ls_recurr-hourofday+9(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '10'.
+            ls_recurr-hourofday+10(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '11'.
+            ls_recurr-hourofday+11(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '12'.
+            ls_recurr-hourofday+12(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '13'.
+            ls_recurr-hourofday+13(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '14'.
+            ls_recurr-hourofday+14(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '15'.
+            ls_recurr-hourofday+15(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '16'.
+            ls_recurr-hourofday+16(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '17'.
+            ls_recurr-hourofday+17(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '18'.
+            ls_recurr-hourofday+18(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '19'.
+            ls_recurr-hourofday+19(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '20'.
+            ls_recurr-hourofday+20(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '21'.
+            ls_recurr-hourofday+21(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '22'.
+            ls_recurr-hourofday+22(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-timee+0(2) = '23'.
+            ls_recurr-hourofday+23(1) = lc_abaptrue.
+          ENDIF.
+        ELSEIF  ls_recurrence-type = lc_week.
+          ls_recurr-period = '1'.
+          ls_recurr-unit   = lc_w.
+          IF ls_recurrence-daye = '0'.
+            ls_recurr-dayofweek+0(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-daye = '1'.
+            ls_recurr-dayofweek+1(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-daye = '2'.
+            ls_recurr-dayofweek+2(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-daye = '3'.
+            ls_recurr-dayofweek+3(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-daye = '4'.
+            ls_recurr-dayofweek+4(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-daye = '5'.
+            ls_recurr-dayofweek+5(1) = lc_abaptrue.
+          ELSEIF ls_recurrence-daye = '6'.
+            ls_recurr-dayofweek+6(1) = lc_abaptrue.
+          ENDIF.
+        ENDIF.
+*        ENDIF.
+        APPEND ls_recurr TO lt_recurr.
+      ENDLOOP.
+    ENDIF.
+
+    READ TABLE lt_sdbar INTO ls_temp WITH KEY
+                                  timee    = ls_sdbap-timee   "+V001
+            cretstmp = ls_sdbap-cretstmp.
+    IF sy-subrc = 0.
+      lv_index = sy-tabix.                                    "+V001
+      LOOP AT lt_sdbar INTO ls_sdbar FROM lv_index.
+        IF ls_sdbap-cretstmp NE ls_sdbar-cretstmp.
+          EXIT.
+        ENDIF.
+        APPEND ls_sdbar TO lt_parameters.
+        CLEAR ls_sdbar.
+      ENDLOOP.
+    ENDIF.
+
+    SORT lt_parameters BY timee cretstmp pos.
+
+    CONCATENATE sy-datum sy-uzeit INTO lv_time.
+    ls_sdbap-cretstmp = lv_time.
+
+"when trying to schedule non recurring job in past date
+IF ls_recurrence IS INITIAL AND
+              ls_sdbap-starttstmp LT lv_time.
+  CONCATENATE lc_action ls_sdbap-btype
+              lc_error  ls_sdbap-starttstmp+0(8)
+              ls_sdbap-timee lc_pasttime
+              INTO ls_output SEPARATED BY space.
+  APPEND ls_output TO lt_output.
+  EXIT.
+ENDIF.
+
+    IF ls_sdbap-starttstmp LT lv_time.
+      ls_sdbap-starttstmp = lv_time.
+    ENDIF.
+
+    CALL FUNCTION 'DB6_PLAN_ADD_BATCH'
+      EXPORTING
+        action                = ls_sdbap
+        recurrence            = ls_recurr
+        connection            = lo_sys->sys_data-dbcname
+      TABLES
+        parameters            = lt_parameters
+      EXCEPTIONS
+        permission_denied     =
+                                cl_db6_rc=>x_permission_denied
+        job_error             = cl_db6_rc=>x_job_error
+        db_error              = cl_db6_rc=>x_db_error
+        no_configuration_data =
+                                cl_db6_rc=>x_no_configuration_data
+        OTHERS                = cl_db6_rc=>x_others.
+    IF sy-subrc = 0.
+      CONCATENATE lc_action ls_sdbap-btype lc_schedule
+                  ls_sdbap-timee lc_as
+                  ls_recurrence-type lc_job
+      INTO ls_output
+      SEPARATED BY space.
+      APPEND ls_output TO lt_output.
+    ELSE.
+      CONCATENATE lc_action ls_sdbap-btype lc_error
+      ls_sdbap-timee
+      INTO ls_output
+      SEPARATED BY space.
+      APPEND ls_output TO lt_output.
+    ENDIF.
+
+    CLEAR: ls_sdbap,
+           ls_output.
+
+    FREE: lt_parameters.
+  ENDLOOP.
+
+  CLEAR: ls_sdbap,
+         ls_recurr.
+
+  SORT lt_sdbap_del BY daye timee cretstmp btype.
+  SORT lt_recurrence_del BY daye timee cretstmp btype.
+
+  "Deleting Job
+  LOOP AT lt_sdbap_del INTO ls_sdbap.
+
+    CLEAR: ls_recurrence,
+           ls_recurr,
+           lv_cretstmp.
+
+    READ TABLE lt_recurrence_del INTO ls_recurrence WITH KEY
+                                   daye = ls_sdbap-daye
+                                   timee = ls_sdbap-timee
+                                   cretstmp = ls_sdbap-cretstmp
+                                   btype = ls_sdbap-btype.
+    IF sy-subrc = 0.
+      lv_cretstmp = ls_sdbap-cretstmp.
+      IF ls_recurrence-type = lc_hour.
+        ls_recurr-period = '1'.
+        ls_recurr-unit   = lc_h.
+      ELSEIF ls_recurrence-type = lc_daily.
+        ls_recurr-period = '1'.
+        ls_recurr-unit   = lc_d.
+        IF ls_recurrence-timee+0(2) = '00'.
+          ls_recurr-hourofday+0(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '01'.
+          ls_recurr-hourofday+1(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '02'.
+          ls_recurr-hourofday+2(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '03'.
+          ls_recurr-hourofday+3(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '04'.
+          ls_recurr-hourofday+4(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '05'.
+          ls_recurr-hourofday+5(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '06'.
+          ls_recurr-hourofday+6(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '07'.
+          ls_recurr-hourofday+7(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '08'.
+          ls_recurr-hourofday+8(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '09'.
+          ls_recurr-hourofday+9(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '10'.
+          ls_recurr-hourofday+10(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '11'.
+          ls_recurr-hourofday+11(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '12'.
+          ls_recurr-hourofday+12(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '13'.
+          ls_recurr-hourofday+13(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '14'.
+          ls_recurr-hourofday+14(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '15'.
+          ls_recurr-hourofday+15(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '16'.
+          ls_recurr-hourofday+16(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '17'.
+          ls_recurr-hourofday+17(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '18'.
+          ls_recurr-hourofday+18(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '19'.
+          ls_recurr-hourofday+19(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '20'.
+          ls_recurr-hourofday+20(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '21'.
+          ls_recurr-hourofday+21(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '22'.
+          ls_recurr-hourofday+22(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-timee+0(2) = '23'.
+          ls_recurr-hourofday+23(1) = lc_abaptrue.
+        ENDIF.
+      ELSEIF  ls_recurrence-type = lc_week.
+        ls_recurr-period = '1'.
+        ls_recurr-unit   = lc_w.
+        IF ls_recurrence-daye = '0'.
+          ls_recurr-dayofweek+0(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-daye = '1'.
+          ls_recurr-dayofweek+1(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-daye = '2'.
+          ls_recurr-dayofweek+2(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-daye = '3'.
+          ls_recurr-dayofweek+3(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-daye = '4'.
+          ls_recurr-dayofweek+4(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-daye = '5'.
+          ls_recurr-dayofweek+5(1) = lc_abaptrue.
+        ELSEIF ls_recurrence-daye = '6'.
+          ls_recurr-dayofweek+6(1) = lc_abaptrue.
+        ENDIF.
+      ENDIF.
+      APPEND ls_recurr TO lt_recurr.
+    ENDIF.
+
+**Delete Batch
+    CALL FUNCTION 'DB6_PLAN_DELETE_BATCH'
+      EXPORTING
+        action                = ls_sdbap
+        connection            = lo_sys->sys_data-dbcname
+        recurrence            = ls_recurr
+      TABLES
+        messages              = lt_messages_char
+      EXCEPTIONS
+        permission_denied     = cl_db6_rc=>x_permission_denied
+        job_error             = cl_db6_rc=>x_job_error
+        db_error              = cl_db6_rc=>x_db_error
+        no_configuration_data = cl_db6_rc=>x_no_configuration_data
+        OTHERS                = cl_db6_rc=>x_others.
+    IF sy-subrc NE 0.
+      CONCATENATE lc_action ls_sdbap-btype
+                  lc_dele   ls_sdbap-timee lc_as
+                  ls_recurrence-type lc_job
+                  INTO ls_output
+                  SEPARATED BY space.
+      APPEND ls_output TO lt_output.
+    ELSE.
+      CONCATENATE lc_action ls_sdbap-btype
+                  lc_delete ls_sdbap-starttstmp
+                  INTO ls_output
+      SEPARATED BY space.
+      APPEND ls_output TO lt_output.
+    ENDIF.
+
+    CLEAR: ls_output, ls_sdbap.
+  ENDLOOP.
+ENDFORM.
+*// FM to separate the data into tables from the input data
+FORM table_separate  TABLES   lt_input STRUCTURE tab512
+                              lt_sub_input STRUCTURE tab512
+                     CHANGING lv_tabix.
+
+* Begin of changes V001
+  DATA: ls_sub_input TYPE tab512,
+        ls_input     TYPE tab512.
+* End of changes V001
+
+  LOOP AT lt_input INTO ls_input FROM lv_tabix.
+
+    IF ls_input IS NOT INITIAL.
+      ls_sub_input = ls_input.
+      APPEND ls_sub_input TO lt_sub_input.
+    ELSE.
+      lv_tabix = sy-tabix.
+      EXIT.
+    ENDIF.
+
+  ENDLOOP.
+
+
+ENDFORM.

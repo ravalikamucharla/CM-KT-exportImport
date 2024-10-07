@@ -1,0 +1,1 @@
+{"OUTPUT": [{"TITLE": "Top 100 Large Tables", "DATA": [{"SchemaName": "SAPABAP1", "TableName": "BALDAT", "Size": "1384.78", "NumberofRows": "341819"}, {"SchemaName": "SAPABAP1", "TableName": "BALHDR", "Size": "2325.25", "NumberofRows": "93089"}]}]}

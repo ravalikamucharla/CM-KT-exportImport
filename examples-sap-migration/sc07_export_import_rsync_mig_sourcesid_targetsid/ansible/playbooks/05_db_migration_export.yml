@@ -1,0 +1,20 @@
+#tags: tab_split_order_by, exp_prep, table_split ,db_exp, db_imp
+---
+- name: Export
+  hosts: source_db
+  ignore_errors: true
+  vars:
+    ansible_python_interpreter: "{{ python_interpreter }}"
+    ansible_become: true
+    mode: export
+  vars_files:
+    - ../inventory/group_vars/source_db.yml
+  roles:
+    - table_splitting
+    - sap_export_preparation
+    - rsync
+    - sap_export_tablesplit
+    - rsync
+    - sap_export_database
+
+  

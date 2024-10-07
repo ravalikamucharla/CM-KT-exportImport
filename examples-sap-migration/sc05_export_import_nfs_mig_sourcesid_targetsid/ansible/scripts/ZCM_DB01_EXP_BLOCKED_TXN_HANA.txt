@@ -1,0 +1,227 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_DB01_EXP_BLOCKED_TXN_HANA               *
+* Title               :   Blocked Transactions in DB01                *
+* Purpose             :   This report is used to export blocked       *
+*                     :   transactions in DB01 during Cloud Migration *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* DB01                                                                *
+*---------------------------------------------------------------------*
+*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-10-2021  Initial  Ruchir Kamble  Local   To export Blocked        *
+*                                            Transactions in DB01     *
+*07-25-2022  V001     Soumya Ray     Local   To pass message "No data *
+*                                            found" in case of no data*
+*                                            found in sytem           *
+*---------------------------------------------------------------------*
+
+REPORT zcm_db01_exp_blocked_txn_hana.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep          TYPE c VALUE '|'                        LENGTH 1,
+    lc_export       TYPE c VALUE 'EXPORT'                   LENGTH 6,
+    lc_host         TYPE c VALUE 'Host'                     LENGTH 4,
+    lc_port         TYPE c VALUE 'Port'                     LENGTH 4,
+    lc_trans_id     TYPE c VALUE 'Blocked Transaction ID'   LENGTH 25,
+    lc_upd_trans_id TYPE c VALUE
+    'Blocked Update Transaction ID'                         LENGTH 30,
+    lc_own_con_id   TYPE c VALUE
+    'Lock Owner Connection ID'                              LENGTH 35,
+    lc_own_trans_id TYPE c VALUE
+    'Lock Owner Update Transaction ID'                      LENGTH 40,
+    lc_own_upd_id   TYPE c VALUE
+    'Lock Owner Update Transaction ID'                      LENGTH 40,
+    lc_time         TYPE c VALUE 'Blocked Time'             LENGTH 15,
+    lc_waiting_id   TYPE c VALUE 'Waiting Record ID'        LENGTH 25,
+    lc_waiting_name TYPE c VALUE 'Waiting Schema Name'      LENGTH 25,
+    lc_obj_name     TYPE c VALUE 'Waiting Object Name'      LENGTH 25,
+    lc_lock_type    TYPE c VALUE 'Lock Type'                LENGTH 10,
+    lc_lock_mode    TYPE c VALUE 'Lock Mode'                LENGTH 10,
+    lc_own_host     TYPE c VALUE 'Lock Owner Host'          LENGTH 20,
+    lc_own_pid      TYPE c VALUE 'Lock Owner PID'           LENGTH 20,
+    lc_user_name    TYPE c VALUE 'User Name'                LENGTH 12,
+    lc_action       TYPE c VALUE
+    'Last Action of Lock Owner'                             LENGTH 30,
+    lc_statement    TYPE c VALUE 'Blocked Statement'        LENGTH 20,
+    lc_title        TYPE c VALUE 'Blocked Transactions'     LENGTH 25,
+    lc_inc_input    TYPE c VALUE 'Incorrect input'          LENGTH 20,
+    lc_noinput      TYPE c VALUE 'No input given'           LENGTH 20,
+    lc_default      TYPE dbcon_name VALUE 'DEFAULT',
+*  Begin of changes in V001
+    lc_null         TYPE c VALUE 'NULL'                     LENGTH 4,
+    lc_err_msg      TYPE c VALUE
+    'No data found'                                         LENGTH 20.
+*  End of changes in V001
+
+  DATA: ls_input        TYPE tab512,
+        ls_output       TYPE tab512,
+        lv_action       TYPE char10,
+        lv_port         TYPE char10,
+        lv_trans_id     TYPE char10,
+        lv_update_trans TYPE char20,
+        lv_con_id       TYPE char10,
+        lv_own_trans    TYPE char10,
+        lv_own_upd      TYPE char20,
+        lv_own_pid      TYPE char22,
+        lv_excpmsg      TYPE string,
+        lr_adbc         TYPE REF TO cl_hdb_adbc,
+        lr_exception    TYPE REF TO cx_dba_root,
+        lt_trans        TYPE hdb_m_blocked_trans_tab.
+
+  FIELD-SYMBOLS: <fs_trans> TYPE hdb_m_blocked_transactions.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, lv_action, lv_port, lv_trans_id,
+         lv_update_trans, lv_con_id, lv_own_trans, lv_own_upd,
+         lv_own_pid.
+
+  FREE: lt_output, lt_trans.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.              " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.                      " When action is EXPORT
+
+      " Creating object of CL_HDB_ADBC
+      CREATE OBJECT lr_adbc
+        EXPORTING
+          dbcname = lc_default.
+
+      IF lr_adbc IS BOUND.
+
+        TRY.
+            " Calling method to get blocked transactions
+            CALL METHOD lr_adbc->get_blocked_transactions
+              IMPORTING
+                itab = lt_trans.
+
+          CATCH cx_dba_adbc INTO lr_exception.
+            lv_excpmsg = lr_exception->if_message~get_longtext( ).
+            ls_output = lv_excpmsg.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_output, lv_excpmsg.
+
+        ENDTRY.
+      ENDIF.
+
+      IF lt_trans IS NOT INITIAL.
+
+        " Adding headings to the output
+        CONCATENATE lc_host
+                    lc_port
+                    lc_trans_id
+                    lc_upd_trans_id
+                    lc_own_con_id
+                    lc_own_trans_id
+                    lc_own_upd_id
+                    lc_time
+                    lc_waiting_id
+                    lc_waiting_name
+                    lc_obj_name
+                    lc_lock_type
+                    lc_lock_mode
+                    lc_own_host
+                    lc_own_pid
+                    lc_user_name
+                    lc_action
+                    lc_statement
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_trans ASSIGNING <fs_trans>.
+
+          lv_port         = <fs_trans>-port.
+          lv_trans_id     = <fs_trans>-blocked_transaction_id.
+          lv_update_trans = <fs_trans>-blocked_update_transaction_id.
+          lv_con_id       = <fs_trans>-lock_owner_connection_id.
+          lv_own_trans    = <fs_trans>-lock_owner_transaction_id.
+          lv_own_upd      = <fs_trans>-lock_owner_update_transaction_.
+          lv_own_pid      = <fs_trans>-lock_owner_pid.
+
+* Begin of changes in V001
+          IF <fs_trans>-blocked_statement_string IS INITIAL.
+            <fs_trans>-blocked_statement_string = lc_null.
+          ENDIF.
+* End of changes in V001
+
+          CONCATENATE <fs_trans>-host
+                      lv_port
+                      lv_trans_id
+                      lv_update_trans
+                      lv_con_id
+                      lv_own_trans
+                      lv_own_upd
+                      <fs_trans>-blocked_time
+                      <fs_trans>-waiting_record_id
+                      <fs_trans>-waiting_schema_name
+                      <fs_trans>-waiting_table_name
+                      <fs_trans>-lock_type
+                      <fs_trans>-lock_mode
+                      <fs_trans>-lock_owner_host
+                      lv_own_pid
+                      <fs_trans>-lock_owner_user_name
+                      <fs_trans>-lock_owner_last_action
+                      <fs_trans>-blocked_statement_string
+                      INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, lv_port, lv_trans_id, lv_update_trans,
+                 lv_con_id, lv_own_trans, lv_own_upd, lv_own_pid.
+
+        ENDLOOP.
+
+      ELSE.
+        " No data found
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+* Begin of changes in V001
+      "Adding NULL values in between
+      DO.
+        REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+        IN TABLE lt_output WITH '|NULL|'.
+        FIND '||' IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+      ENDDO.
+* End of changes in V001
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.

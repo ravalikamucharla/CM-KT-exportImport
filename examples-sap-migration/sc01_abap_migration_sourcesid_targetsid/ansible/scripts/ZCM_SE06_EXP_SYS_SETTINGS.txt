@@ -1,0 +1,335 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SE06_EXP_SYSTEM_SETTINGS                 *
+* Title               :  Export SE06 Settings                         *
+* Purpose             :  This report is for exporting SE06 settings   *
+*                        during Cloud Migration                       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SE06                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TADIR                     X                                         *
+* TRNSPACE                  X                                         *
+* TRNSPACETT                X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-19-2020  Initial   Ruchir       Local     To export SE06 settings *
+*12-01-2021  V001      Yasaswini    Local     Exporting all transpace *
+*                                             table details           *
+*05-17-2022   V002  Soumya Ray     Local      To pass "No data found  *
+*                                             in case no data present *
+*---------------------------------------------------------------------*
+REPORT zcm_se06_exp_sys_settings.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  TYPES:
+    BEGIN OF lty_namespace,
+      namespace  TYPE trnspace-namespace,
+      text       TYPE trnspacett-descriptn,
+      prefix     TYPE trnspace-namespace,
+      changeable TYPE trchange,
+*Begin of changes V001
+      role       TYPE trnrole,
+      license    TYPE trnlicense,
+      editflag   TYPE editflag,
+      sscrflag   TYPE sscrflag,
+      sapflag    TYPE sapstandrd,
+      gen_only   TYPE string,
+*End of changes V001
+    END OF lty_namespace.
+
+  CONSTANTS: lc_x                TYPE c VALUE 'X'        LENGTH 1,
+             lc_n                TYPE c VALUE 'N'        LENGTH 1,
+             lc_sep              TYPE c VALUE '|'        LENGTH 1,
+             lc_null             TYPE c VALUE 'NULL'     LENGTH 4,
+             lc_export           TYPE c VALUE 'EXPORT'   LENGTH 6,
+             lc_value            TYPE c VALUE 'Value'    LENGTH 5,
+             lc_global           TYPE c VALUE 'Global'   LENGTH 6,
+             lc_title            TYPE c VALUE 'SE06 Settings'
+                                                         LENGTH 20,
+             lc_global_setting   TYPE c VALUE 'GlobalSetting'
+                                                         LENGTH 20,
+             lc_modifiable       TYPE c VALUE 'Modifiable'
+                                                         LENGTH 20,
+             lc_not_modifiable   TYPE c VALUE 'Notmodifiable'
+                                                         LENGTH 20,
+             lc_only_extendable  TYPE dlv_change  VALUE 'E',
+             lc_no_changeability TYPE dlv_change  VALUE 'N',
+             lc_extendable       TYPE dlv_extendable VALUE 'X',
+             lc_head             TYPE pgmid       VALUE 'HEAD',
+             lc_ninput           TYPE c VALUE
+             'No input passed'                            LENGTH 20,
+             lc_syst             TYPE trobjtype   VALUE 'SYST',
+             lc_soft_comp        TYPE c VALUE
+             'SoftwareComponent'                           LENGTH 30,
+             lc_technical_name   TYPE c VALUE
+             'TechnicalName'                               LENGTH 25,
+             lc_namespace        TYPE c VALUE
+             'Namespace'                                   LENGTH 25,
+             lc_name_range       TYPE c VALUE
+             'NameRange'                                   LENGTH 15,
+             lc_prefix           TYPE c VALUE 'Prefix'     LENGTH 6,
+             lc_tech_id          TYPE c VALUE 'TechID'     LENGTH 10,
+*Begin of changes V001
+             lc_role             TYPE c VALUE 'Role'       LENGTH 4,
+             lc_license          TYPE c VALUE 'License'    LENGTH 8,
+             lc_editflag         TYPE c VALUE 'Editflag'   LENGTH 10,
+             lc_sscrflag         TYPE c VALUE 'SSCRdialogbox'
+                                                           LENGTH 15,
+             lc_sapflag          TYPE c VALUE 'BelongstoSAP'
+                                                           LENGTH 15,
+             lc_gen_only         TYPE c VALUE
+             'GeneratedObjectsAllowed'                     LENGTH 40,
+*End of changes V001
+* Begin of changes in V002
+               lc_nodata          TYPE c VALUE
+               'No data found'                              LENGTH 30,
+               lc_naction          TYPE c VALUE
+              'Incorrect input'                             LENGTH 30.
+* End of changes in V002
+
+  DATA: ls_output     TYPE tab512,
+        ls_input      TYPE tab512,
+        lt_dlvunits   TYPE trdlvunits,
+        lt_namespaces TYPE STANDARD TABLE OF lty_namespace,
+        ls_namespace  TYPE lty_namespace,
+        lt_trnspace   TYPE STANDARD TABLE OF trnspace,
+        lt_trnspacett TYPE STANDARD TABLE OF trnspacett,
+        ls_trnspacett TYPE trnspacett,
+        ls_trnspace   TYPE trnspace,
+        lv_action     TYPE char20,
+        lv_client     TYPE mandt,
+        lv_edtflg     TYPE edtflag.
+
+  FIELD-SYMBOLS: <ls_dlvunit> TYPE trdlvunit.
+
+* Begin of changes in V002
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+* End of changes in V002
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+    lv_action     " Action
+    lv_client.    " Client
+*Begin of changes V001
+  ELSE.
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+*End of changes V001
+
+  CASE lv_action.
+
+    WHEN lc_export.      " If action is Export
+
+      SELECT SINGLE edtflag
+           INTO lv_edtflg
+      FROM tadir BYPASSING BUFFER
+      WHERE pgmid = lc_head
+        AND object = lc_syst
+        AND obj_name = ' '.
+
+      IF sy-subrc EQ 0.
+
+        " Adding global setting title to the output
+        CONCATENATE lc_global_setting lc_sep lc_value
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        IF lv_edtflg = lc_n.
+          CONCATENATE lc_global lc_sep lc_not_modifiable
+                      INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ELSE.
+          CONCATENATE lc_global lc_sep lc_modifiable
+                      INTO ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+      ELSE.
+        ls_output = lc_nodata. "+V002
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+
+      " Reading software components
+
+      " FM to get software components
+      CALL FUNCTION 'TR_GET_DLVUNITS'
+        EXPORTING
+          iv_with_changeability = lc_x
+          iv_with_description   = lc_x
+        IMPORTING
+          et_dlvunits           = lt_dlvunits[].
+
+      " Adding blank space between records
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+      " Adding Software component title
+      ls_output = lc_soft_comp.
+      APPEND ls_output TO lt_output.
+
+      IF lt_dlvunits IS NOT INITIAL.
+
+        " Constructing headings for Software components
+
+        CONCATENATE lc_soft_comp      lc_sep
+                    lc_technical_name lc_sep
+                    lc_modifiable
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+
+        LOOP AT lt_dlvunits ASSIGNING <ls_dlvunit>.
+          IF    <ls_dlvunit>-changeable EQ lc_no_changeability
+            AND <ls_dlvunit>-extendable EQ lc_extendable.
+            <ls_dlvunit>-changeable = lc_only_extendable.
+          ENDIF.
+
+          CONCATENATE <ls_dlvunit>-desc_text    lc_sep
+                      <ls_dlvunit>-dlvunit      lc_sep
+                      <ls_dlvunit>-changeable
+                      INTO ls_output.
+          APPEND ls_output TO lt_output.
+
+        ENDLOOP.
+      ELSE.
+        " Unable to read Software components data
+        ls_output = lc_nodata. "+V002
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+      " Reading namespaces
+
+      SELECT * FROM trnspace
+               INTO TABLE lt_trnspace
+               ORDER BY namespace.
+
+      SELECT * FROM trnspacett
+               INTO TABLE lt_trnspacett
+               WHERE spras = sy-langu
+               ORDER BY namespace.
+
+      CLEAR: lt_namespaces[].
+
+      LOOP AT lt_trnspace INTO ls_trnspace.
+        CLEAR ls_namespace.
+        ls_namespace-namespace  = ls_trnspace-namespace.
+
+        IF ls_trnspace-editflag = lc_x.
+          ls_namespace-changeable = ls_trnspace-editflag.
+        ELSE.
+          ls_namespace-changeable = lc_n.
+        ENDIF.
+
+        READ TABLE lt_trnspacett INTO ls_trnspacett
+                   WITH KEY namespace = ls_trnspace-namespace.
+        IF sy-subrc = 0.
+          ls_namespace-text = ls_trnspacett-descriptn.
+        ENDIF.
+*Begin of changes V001
+        ls_namespace-role = ls_trnspace-role.
+        ls_namespace-license  = ls_trnspace-license.
+        ls_namespace-editflag = ls_trnspace-editflag.
+        ls_namespace-sscrflag = ls_trnspace-sscrflag.
+        ls_namespace-sapflag  = ls_trnspace-sapflag.
+        ls_namespace-gen_only = ls_trnspace-gen_only.
+*End of changes V001
+        APPEND ls_namespace TO lt_namespaces.
+      ENDLOOP.
+
+
+      " Adding blank space between records
+      ls_output = space.
+      APPEND ls_output TO lt_output.
+
+      " Adding Namespace title
+      ls_output = lc_namespace.
+      APPEND ls_output TO lt_output.
+
+      IF lt_namespaces[] IS NOT INITIAL.
+
+        " Constructing headings for Namespaces
+
+        CONCATENATE lc_name_range    lc_sep
+                    lc_prefix        lc_sep
+                    lc_modifiable    lc_sep
+                    lc_tech_id       lc_sep
+*Begin of changes V001
+                    lc_role          lc_sep
+                    lc_license       lc_sep
+                    lc_editflag      lc_sep
+                    lc_sscrflag      lc_sep
+                    lc_sapflag       lc_sep
+                    lc_gen_only
+*End of changes V001
+                    INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT lt_namespaces INTO ls_namespace.
+
+          IF ls_namespace-text IS INITIAL.
+            ls_namespace-text = lc_null.
+          ENDIF.
+
+          IF ls_namespace-prefix IS INITIAL.
+            ls_namespace-prefix = lc_null.
+          ENDIF.
+*Begin of changes V001
+          IF ls_namespace-gen_only IS INITIAL.
+            ls_namespace-gen_only = lc_null.
+          ENDIF.
+*End of changes V001
+
+          CONCATENATE ls_namespace-text       lc_sep
+                      ls_namespace-prefix     lc_sep
+                      ls_namespace-changeable lc_sep
+                      ls_namespace-namespace  lc_sep
+*Begin of changes V001
+                      ls_namespace-role       lc_sep
+                      ls_namespace-license    lc_sep
+                      ls_namespace-editflag   lc_sep
+                      ls_namespace-sscrflag   lc_sep
+                      ls_namespace-sapflag    lc_sep
+                      ls_namespace-gen_only
+*End of changes V001
+                    INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+        ENDLOOP.
+      ELSE.
+        " Unable to read Namespace data
+        ls_output = lc_nodata. "+V002
+        APPEND ls_output TO lt_output.
+      ENDIF.
+
+    WHEN OTHERS.
+      ls_output = lc_naction."Action not supported
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+  "Null check in middle fields
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+ENDFORM.

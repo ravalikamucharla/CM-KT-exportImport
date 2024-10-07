@@ -1,0 +1,25 @@
+Result of OS command : disp+work
+--------------------
+disp+work information
+--------------------
+kernel release                753
+kernel make variant           753_REL
+compiled on                   Linux GNU SLES-11 x86_64 cc4.8.5 use-pr200901 for linuxx86_64
+compiled for                  64 BIT
+compilation mode              UNICODE
+compile time                  Sep  1 2020 21:43:19
+update level                  0
+patch number                  700
+source id                     0.700
+RKS compatibility level       0
+DW_GUI compatibility level    700
+---------------------
+supported environment
+---------------------
+database (SAP, table SVERS)   740
+                              750
+                              751
+                              752
+                              769
+operating system
+Linux

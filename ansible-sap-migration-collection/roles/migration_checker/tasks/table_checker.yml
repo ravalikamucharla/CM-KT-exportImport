@@ -1,0 +1,83 @@
+---
+- name: table check | change permission
+  command: sudo chmod -R 777 /tmp/sapinst_instdir/
+
+- name: table check | unchar migcheck.sar
+  shell: /usr/sap/sapinst/SWPM/sapcar.exe -xvf /usr/sap/sapinst/SWPM/COMMON/INSTALL/MIGCHECK.SAR 
+  args:
+    chdir: "{{ install_dir_path }}"
+  register: extracted_files
+
+- debug: 
+    var: extracted_files
+
+- name: table check | start hana
+  command: "{{ item }}"
+  loop:
+    - sudo su - {{ sid }}adm -c "sapcontrol -nr 02 -function StartWait 600 10"
+    - sleep 30
+
+- name: table checker
+  shell: ./table_checker.sh -unicode -tocDirs {{ tab_check_path }} -user {{ target.sap.db.schema_name }} -password {{ db_password }} -driver com.sap.db.jdbc.Driver -url jdbc:sap://{{ physical_hostname }}.{{ migration_checkers.target.fqdn }}:3{{ instance_number }}15 -strDirs {{ tab_check_path }} -importR3loadLogDir {{ install_dir_path }} 
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JDBC_JAR: "{{ migration_checkers.target.jdbc_jar_path }}"
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: table_check
+  when: migration_checkers.target.table_chk == 'yes'
+
+- debug:
+    var: table_check
+
+- name: table checker background mode
+  shell: ./table_checker.sh -unicode -tocDirs {{ tab_check_path }} -user {{ target.sap.db.schema_name }} -password {{ db_password }} -driver com.sap.db.jdbc.Driver -url jdbc:sap://{{ physical_hostname }}.{{ migration_checkers.target.fqdn }}:3{{ instance_number }}15 -strDirs {{ tab_check_path }} -checkDeclusterTables "tablename" -bg
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JDBC_JAR: "{{ migration_checkers.target.jdbc_jar_path }}"
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: table_check_bg
+  when: migration_checkers.target.table_bg_mode == 'yes'
+
+- debug:
+    var: table_check_bg
+
+- name: table checker declustered tables
+  shell: ./table_checker.sh -unicode -tocDirs {{ tab_check_path }} -user {{ target.sap.db.schema_name }} -password {{ db_password }} -driver com.sap.db.jdbc.Driver -url jdbc:sap://{{ physical_hostname }}.{{ migration_checkers.target.fqdn }}:3{{ instance_number }}15 -strDirs {{ tab_check_path }} -checkDeclusterTables "tablename"
+  args:
+    chdir: "{{ install_dir_path }}"
+  environment:
+    JDBC_JAR: "{{ migration_checkers.target.jdbc_jar_path }}"
+    JAVA_HOME: "{{ migration_checkers.target.java_home_path }}"
+  register: table_check_dt
+  when: migration_checkers.target.table_declustered == 'yes'
+
+- debug:
+    var: table_check_dt
+
+- name: create folder
+  file:
+    path: "../Migration_checkers"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: create folder
+  file:
+    path: "../Migration_checkers/table_checker1"
+    mode: "777"
+    recurse: yes
+    state: directory
+  delegate_to: localhost
+
+- name: fetching the txt file 
+  fetch: 
+    src: "{{ install_dir_path }}/{{ item }}"
+    dest: "../Migration_checkers/table_checker1/{{ item }}"
+    flat: yes
+  loop:
+    - invalid_tables.txt
+    - table_checker.log
+    - TableChecker.console.log

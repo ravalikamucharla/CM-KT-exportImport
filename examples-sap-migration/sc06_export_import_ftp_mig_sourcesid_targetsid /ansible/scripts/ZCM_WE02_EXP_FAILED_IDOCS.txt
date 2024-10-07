@@ -1,0 +1,238 @@
+*---------------------------------------------------------------------*
+* Program Name        : ZCM_WE02_EXP_FAILED_IDOCS                     *
+* Title               : Capture Failed Idocs                          *
+* Purpose             : This report is used to capture failed Idocs   *
+*                       during Cloud Migration                        *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* WE02                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+*                           X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-16-2020  Initial  Ruchir Kamble     Local     This report is used *
+*                                                 to capture failed   *
+*                                                 Idocs               *
+*11-05-2021  V001    Soumya Ray         Local     To get 1 month old  *
+*                                                 idoc records        *
+*05-25-2022  V002   Soumya Ray          Local     To pass "No data    *
+*                                                 found" in case no   *
+*                                                 data present        *
+*---------------------------------------------------------------------*
+
+REPORT zcm_we02_exp_failed_idocs.
+
+LOAD-OF-PROGRAM.
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                LENGTH 1,
+             lc_export    TYPE c VALUE 'EXPORT'           LENGTH 6,
+             lc_idocno    TYPE c VALUE 'IDocNo'           LENGTH 7,
+             lc_null      TYPE c VALUE 'Null'             LENGTH 4,
+             lc_status    TYPE c VALUE 'IDocStatus'       LENGTH 11,
+             lc_msgtyp    TYPE c VALUE 'MessageType'      LENGTH 12,
+             lc_statustxt TYPE c VALUE 'StatusText'       LENGTH 11,
+             lc_createdon TYPE c VALUE 'CreatedOn'        LENGTH 10,
+             lc_createdat TYPE c VALUE 'CreatedAt'        LENGTH 10,
+             lc_basictyp  TYPE c VALUE 'BasicType'        LENGTH 10,
+             lc_records   TYPE c VALUE 'NoOfRecords'      LENGTH 11,
+             lc_partner   TYPE c VALUE 'PartnerNo'        LENGTH 14,
+             lc_title     TYPE c VALUE 'Idocs'            LENGTH 5,
+* Begin of changes in V001
+             lc_between   TYPE c VALUE 'BT'               LENGTH 2,
+             lc_equal     TYPE c VALUE 'EQ'               LENGTH 2,
+             lc_include   TYPE c VALUE 'I'                LENGTH 2,
+             lc_exclude   TYPE c VALUE 'E'                LENGTH 2,
+             lc_s_status  TYPE c VALUE '53'               LENGTH 2,
+             lc_starttime TYPE sy-uzeit VALUE '000000',
+             lc_endtime   TYPE sy-uzeit VALUE '235959',
+             lc_days      TYPE i VALUE '30',
+* End of changes in V001
+* Begin of changes in V002
+             lc_noinput   TYPE c VALUE
+             'No input passed'                            LENGTH 15,
+             lc_inc_input TYPE c VALUE
+             'Incorrect Input'                            LENGTH 20,
+             lc_err_msg   TYPE c VALUE
+             'No data found'                              LENGTH 50.
+* End of changes in V002
+  DATA: lt_idoc        TYPE bdmon_disp1,
+        ls_idoc        TYPE bdmod1tp,
+        ls_input       TYPE tab512,
+        ls_output      TYPE tab512,
+        lv_action      TYPE char10,
+        lt_istat       TYPE bdmon_stat,
+        filter_docnum  TYPE bdrg_doc_tab,
+        filter_credat  TYPE bdrg_dat_tab,
+        filter_status  TYPE bdrg_sta_tab,
+        filter_cretim  TYPE bdrg_tim_tab,
+        filter_mestyp  TYPE bdrg_mes_tab,
+        filter_partner TYPE bdrg_par_tab,
+        filter_objtyp  TYPE bdrg_obj_tab,
+        filter_upddat  TYPE bdrg_dat_tab,
+        filter_updtim  TYPE bdrg_tim_tab,
+        filter_objkey  TYPE bdrg_oky_tab,
+        lr_bd_ls_mon   TYPE REF TO bd_ls_mon,
+*  Begin of changes in V001
+        lv_date        TYPE sy-datum,
+        lv_predate     TYPE sy-datum,
+        ls_credat      TYPE bdrg_dat,
+        ls_cretim      TYPE bdrg_tim,
+        ls_status      TYPE bdrg_sta.
+
+
+  CLEAR: lv_date, lv_predate, lv_action, ls_idoc, ls_input,
+         filter_docnum, filter_credat, filter_status, filter_cretim,
+         filter_mestyp, filter_partner, filter_objtyp, filter_objkey,
+         filter_updtim, filter_upddat, ls_cretim, ls_status, ls_credat.
+  FREE: lt_idoc, lt_istat.
+*  End of changes in V001
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output. "+V001
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+* Begin of changes in V002
+  IF sy-subrc NE 0.
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+* End of changes in V002
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.                 " When action is EXPORT
+
+      ls_status-low = lc_s_status. "53
+      ls_status-option = lc_equal. "EQ
+      ls_status-sign = lc_exclude. "E
+
+*  Begin of changes in V001
+      lv_date = sy-datum.
+      lv_predate = lv_date - lc_days.
+
+      "Created date
+      ls_credat-sign   = lc_include.
+      ls_credat-option = lc_between.
+      ls_credat-low    = lv_predate.
+      ls_credat-high   = lv_date.
+
+      "Created time
+      ls_cretim-sign   = lc_include.
+      ls_cretim-option = lc_between.
+      ls_cretim-low    = lc_starttime.
+      ls_cretim-high   = lc_endtime.
+
+      " Appending data from ranges to filter
+      APPEND ls_credat  TO filter_credat.
+      APPEND ls_cretim  TO filter_cretim.
+      APPEND ls_status  TO filter_status.
+*  End of changes in V001
+
+      CREATE OBJECT lr_bd_ls_mon
+        EXCEPTIONS
+          failed = 1.
+      IF sy-subrc NE 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO ls_output.
+        APPEND ls_output TO lt_output.
+        RETURN. "+V001
+      ENDIF.
+
+      IF lr_bd_ls_mon IS BOUND. "+V001
+
+        " Calling filter method
+        CALL METHOD lr_bd_ls_mon->set_filter
+          EXPORTING
+            filter_docnum  = filter_docnum
+            filter_credat  = filter_credat
+            filter_cretim  = filter_cretim
+            filter_mestyp  = filter_mestyp
+            filter_upddat  = filter_upddat
+            filter_updtim  = filter_updtim
+            filter_objtyp  = filter_objtyp
+            filter_partner = filter_partner
+            filter_objkey  = filter_objkey
+            filter_status  = filter_status.
+        " Calling method to fetch Idoc data
+        CALL METHOD lr_bd_ls_mon->get_doc_info
+          IMPORTING
+            display_info = lt_idoc
+          CHANGING
+            idoc_stat    = lt_istat.
+      ENDIF. "+V001
+
+      IF lt_idoc IS NOT INITIAL.
+
+        " Adding headings to the output
+
+        CONCATENATE lc_idocno    lc_sep
+        lc_status    lc_sep
+        lc_msgtyp    lc_sep
+        lc_statustxt lc_sep
+        lc_partner   lc_sep
+        lc_createdon lc_sep
+        lc_createdat lc_sep
+        lc_basictyp  lc_sep
+        lc_records
+        INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT lt_idoc INTO ls_idoc.
+
+*  Begin of changes in V001
+          IF ls_idoc-maxsegnum IS INITIAL.
+            ls_idoc-maxsegnum = lc_null.
+          ENDIF.
+*  End of changes in V001
+
+          CONCATENATE ls_idoc-docnum    lc_sep
+          ls_idoc-status    lc_sep
+          ls_idoc-mestyp    lc_sep
+          ls_idoc-statxt    lc_sep
+          ls_idoc-partner   lc_sep
+          ls_idoc-credat    lc_sep
+          ls_idoc-cretim    lc_sep
+          ls_idoc-idoctp    lc_sep
+          ls_idoc-maxsegnum
+          INTO ls_output.
+          APPEND ls_output TO lt_output.
+
+        ENDLOOP.
+
+      ELSE.
+        " No Idocs found in the system
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+
+      ENDIF.
+* Begin of changes in V002
+    WHEN OTHERS.
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+*  End of changes in V002
+  ENDCASE.
+
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

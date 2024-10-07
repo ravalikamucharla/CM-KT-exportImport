@@ -1,0 +1,147 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_EXP_INSTALL_PROD_VERS_LVER              *
+* Title               :   Capture Installed Product Versions          *
+* Purpose             :   This report is used to capture installed    *
+*                         product versions during Cloud Migration     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXX                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*06-14-2021  Initial   Ruchir Kamble  Local      To Capture Installed *
+*                                                Product Versions     *
+*09-27-2022  V001      Soumya Ray     Local    To pass 'No data found'*
+*                                            in case no data in system*
+*---------------------------------------------------------------------*
+
+REPORT zcm_exp_install_prod_vers_lver.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS:
+    lc_sep       TYPE c VALUE '|'                         LENGTH 1,
+    lc_export    TYPE c VALUE 'EXPORT'                    LENGTH 6,
+    lc_product   TYPE c VALUE 'Product'                   LENGTH 7,
+    lc_release   TYPE c VALUE 'Release'                   LENGTH 7,
+    lc_vendor    TYPE c VALUE 'Vendor'                    LENGTH 7,
+    lc_desc      TYPE c VALUE
+    'ShortDescriptionofProductVersion'                    LENGTH 40,
+    lc_title     TYPE c VALUE 'Installed Product Version' LENGTH 25,
+    lc_inc_input TYPE c VALUE 'Incorrect input'           LENGTH 20,
+    lc_noinput   TYPE c VALUE 'No input given'            LENGTH 20,
+    lc_err_msg   TYPE c VALUE 'Internal Error'            LENGTH 20,
+* Begin of changes in V001
+    lc_null      TYPE c VALUE 'NULL'                      LENGTH 4,
+    lc_nodata    TYPE c VALUE 'No data found'             LENGTH 30.
+* End of changes in V001
+
+  DATA: ls_output  TYPE tab512,
+        ls_input   TYPE tab512,
+        lv_action  TYPE char6,
+        lt_product TYPE tt_instswprod.
+
+  FIELD-SYMBOLS: <fs_product> TYPE instswprod.
+
+  " Clearing variables before use
+  CLEAR: ls_output, ls_input, lv_action.
+
+  FREE: lt_output, lt_product.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.             " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      " FM to Read Installed Product Versions
+      CALL FUNCTION 'OCS_GET_INSTALLED_SWPRODUCTS'
+        IMPORTING
+          et_swproducts  = lt_product
+        EXCEPTIONS
+          internal_error = 1
+          OTHERS         = 2.
+
+      IF sy-subrc EQ 0.
+* Begin of changes in V001
+        IF lt_product[] IS INITIAL.
+          ls_output = lc_nodata.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+        ENDIF.
+* End of changes in V001
+        " Adding heading to the output
+        CONCATENATE lc_product lc_release lc_vendor lc_desc
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        LOOP AT lt_product ASSIGNING <fs_product>.
+* Begin of changes on V001
+          IF <fs_product>-descript IS INITIAL.
+            <fs_product>-descript = lc_null.
+          ENDIF.
+* End of changes in V001
+
+          CONCATENATE <fs_product>-name
+          <fs_product>-version
+          <fs_product>-vendor
+          <fs_product>-descript
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+        ENDLOOP.
+
+      ELSE.
+        " Internal Error
+        ls_output = lc_err_msg.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+* Begin of changes in V001
+      "Adding NULL values in between
+      DO.
+        REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+        IN TABLE lt_output WITH '|NULL|'.
+        FIND '||' IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+      ENDDO.
+* End of changes in V001
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  FREE: lt_product.
+ENDFORM.                    "get_config

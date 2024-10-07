@@ -1,0 +1,26 @@
+- name: target_master_db
+  hosts: "{{ groups['target_master_db'][0] }}"
+  tags: target
+  vars:  
+    hostip: "{{ hostvars[groups['target_master_db'][0]].ansible_host }}"
+    target_primary_db: "{{ groups['target_master_db'][0] }}"
+    hana_db_name: "{{ source.sap.db.hana_db_name }}" 
+  vars_files:
+    - ../inventory/group_vars/target_db.yml
+    - ../inventory/host_vars/{{ groups['target_master_db'][0] }}.yml
+  roles:
+    - port_status_check
+    - create_keys
+    - cleanup_resource
+    - { role: sap_db_start_stop, action: start }
+    - { role: sap_db_start_stop, action: status }
+    - log_mode
+    - enable_site
+    - folder_creation
+    - backups
+    - copy_files
+    - { role: set_hana_parameters, set_params_on: source, when: hana_parameters.hana_params_change_source.required == 'yes' }
+    - { role: set_hana_parameters, set_params_on: target, when: hana_parameters.hana_params_change_target.required == 'yes' }
+    - { role: hana_host_resolution, set_on: source, when: host_resolution.source_host.required == 'yes' }
+    - { role: hana_host_resolution, set_on: target, when: host_resolution.target_host.required == 'yes' }
+    - register_node

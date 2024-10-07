@@ -1,0 +1,15 @@
+[{
+    "COMP_NAME": "Oracle XML Database",
+    "VERSION": "12.1.0.2.0",
+    "STATUS": "VALID"
+},
+{
+    "COMP_NAME": "Oracle Database Catalog Views",
+    "VERSION": "12.1.0.2.0",
+    "STATUS": "VALID"
+},
+{
+    "COMP_NAME": "Oracle Database Packages and Types",
+    "VERSION": "12.1.0.2.0",
+    "STATUS": "VALID"
+}]

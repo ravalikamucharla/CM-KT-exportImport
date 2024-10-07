@@ -1,0 +1,5 @@
+[{
+    "FREQUENCY_OF_BACKUP_IN_DAYS": "{{ output.results[index].stdout_lines[1].split(',')[0] }}",
+    "OCCURENCES": "{{ output.results[index].stdout_lines[1].split(',')[1] }}",
+    "STATUS": {{ output.results[index].stdout_lines[1].split(',')[2] }}
+}]

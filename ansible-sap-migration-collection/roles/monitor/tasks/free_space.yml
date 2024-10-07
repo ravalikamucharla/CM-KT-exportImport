@@ -1,0 +1,60 @@
+---
+- name: set fact min free memory
+  set_fact:
+    MIN_FREE_MEMORY: 10
+
+- name: Run the free -g command to check free memort
+  shell: free -g | awk 'NR==2{print $4}'
+  register: FREE_MEMORY
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: Run the free -g command to check total memory
+  shell: free -g | awk 'NR==2{print $2}'
+  register: TOTAL_MEMORY
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: calculate free %
+  shell: echo "scale=2; $FREE_MEMORY / $TOTAL_MEMORY * 100" | bc
+  register: FREE_PERCENTAGE
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  when: system_type == "source"
+
+- name: print outout
+  debug:
+    msg: "There is at least 10% free memory available in source system"
+  when: FREE_PERCENTAGE >= MIN_FREE_MEMORY and system_type == "source"
+
+- name: print outout
+  debug:
+    msg: "There is less than 10% free memory available in source system"
+  when: FREE_PERCENTAGE <= MIN_FREE_MEMORY and system_type == "source"
+
+- name: Run the free -g command to check free memort
+  shell: free -g | awk 'NR==2{print $4}'
+  register: FREE_MEMORY
+  delegate_to: "{{ groups['target_pas'][0] }}"
+  when: system_type == "target"
+
+- name: Run the free -g command to check total memory
+  shell: free -g | awk 'NR==2{print $2}'
+  register: TOTAL_MEMORY
+  delegate_to: "{{ groups['target_pas'][0] }}"
+  when: system_type == "target"
+
+- name: calculate free %
+  shell: echo "scale=2; $FREE_MEMORY / $TOTAL_MEMORY * 100" | bc
+  register: FREE_PERCENTAGE
+  delegate_to: "{{ groups['target_pas'][0] }}"
+  when: system_type == "target"
+
+- name: print outout
+  debug:
+    msg: "There is at least 10% free memory availablein target system"
+  when: FREE_PERCENTAGE >= MIN_FREE_MEMORY and system_type == "target"
+
+- name: print outout
+  debug:
+    msg: "There is less than 10% free memory available in target system"
+  when: FREE_PERCENTAGE <= MIN_FREE_MEMORY and system_type == "target"

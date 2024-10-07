@@ -1,0 +1,1948 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_TREXADMIN_EXP_TREXDATA                  *
+* Title               :   TREX administration data                    *
+* Purpose             :   This report is used to export TREX adminis- *
+*                     :  -tration data based on rfc connection        *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* TREXADMIN OR TREX_ADMIN_TOOL                                        *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* IPADDR              :     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*05-10-2020  Initial   ASHWINI B    Local    To export TREXADMIN data *
+*09-21-2022  V001      Soumya Ray   Local    To pass 'No data found'  *
+*                                        in case of no data in system *
+*06-21-2023  V002     Ashwini K P   Local    To make headings static  *
+*---------------------------------------------------------------------*
+
+REPORT zcm_trexadmin_exp_trexdata.
+
+*----------------------------------------------------------------------*
+*       CLASS lCL_trexadmin_export DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_trexadmin_export DEFINITION.
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_sep      TYPE c VALUE '|'                  LENGTH 1,
+               gc_host     TYPE c VALUE 'Host'               LENGTH 4,
+               gc_file     TYPE c VALUE 'File'               LENGTH 4,
+               gc_size     TYPE c VALUE 'Size'               LENGTH 4,
+               gc_modified TYPE c VALUE 'Modified'           LENGTH 8,
+               gc_active   TYPE c VALUE 'Active'             LENGTH 6,
+               gc_error    TYPE c VALUE 'Error'              LENGTH 5,
+               gc_warning  TYPE c VALUE 'Warning'            LENGTH 7,
+               gc_inactive TYPE c VALUE 'Inactive'           LENGTH 8,
+* Begin of changes in V001
+               gc_nodata   TYPE c VALUE 'No data found'      LENGTH 30.
+* End of changes in V001
+
+    TYPES: gtt_data TYPE STANDARD TABLE OF tab512.
+
+    DATA: gs_output   TYPE tab512,
+          gs_prefinal TYPE string.
+
+    METHODS: read_services_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: read_summary_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: read_trace_files_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: read_ini_files_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: read_alerts_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: read_rfc_monitor_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: read_version_data
+      IMPORTING iv_rfcserv TYPE trex_rfc-rfc_destination
+      EXPORTING it_data    TYPE gtt_data.
+
+    METHODS: end_null_check
+      CHANGING is_prefinal TYPE string.
+
+    METHODS: get_topology
+      IMPORTING iv_topology_path TYPE trex_rfc-topology_path
+                iv_rfcserv       TYPE trex_rfc-rfc_destination
+      EXPORTING it_topology      TYPE trext_topology.
+
+ENDCLASS.                    "lCL_trexadmin_export DEFINITION
+*&---------------------------------------------------------------------*
+*&      Form  get_config
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->LT_INPUT   To read input values from Python
+*      -->LT_OUTPUT  To give output to Python
+*----------------------------------------------------------------------*
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                   LENGTH 1,
+             lc_export    TYPE c VALUE 'EXPORT'              LENGTH 6,
+             lc_noinput   TYPE c VALUE 'No input given'      LENGTH 20,
+             lc_inc_input TYPE c VALUE 'Incorrect input'     LENGTH 20,
+             lc_title     TYPE c VALUE
+             'TREX Administration Tool Data'                 LENGTH 30.
+
+  DATA: ls_input            TYPE tab512,
+        ls_output           TYPE tab512,
+        lv_action           TYPE char6,
+        lv_rfcserv          TYPE trex_rfc-rfc_destination,
+        lo_trexadmin_export TYPE REF TO lcl_trexadmin_export,
+        lt_data             TYPE STANDARD TABLE OF tab512.
+
+  FREE: lt_output.
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CLEAR: ls_input,lv_action,lv_rfcserv.
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    SPLIT ls_input AT lc_sep INTO
+    lv_action              " Action
+    lv_rfcserv.            " RFC Destination
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.   " When action is EXPORT
+
+      FREE: lt_output.
+
+      CREATE OBJECT lo_trexadmin_export.
+
+      " Read TREX services data
+      FREE: lt_data.
+      CALL METHOD lo_trexadmin_export->read_services_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      " Read TREX summary data
+      CALL METHOD lo_trexadmin_export->read_summary_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      " Read TREX trace files data
+      CALL METHOD lo_trexadmin_export->read_trace_files_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      " Read TREX ini files data
+      CALL METHOD lo_trexadmin_export->read_ini_files_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      " Read TREX alerts data
+      CALL METHOD lo_trexadmin_export->read_alerts_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      " Read TREX RFC monitor data
+      CALL METHOD lo_trexadmin_export->read_rfc_monitor_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      " Read TREX version data
+      CALL METHOD lo_trexadmin_export->read_version_data
+        EXPORTING
+          iv_rfcserv = lv_rfcserv
+        IMPORTING
+          it_data    = lt_data.
+
+      lt_output[] = lt_data[].
+
+      " Add NULL value if any of the field value is blank
+      DO.
+        REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+        IN TABLE lt_output WITH '|NULL|'.
+        FIND '||' IN TABLE lt_output.
+        IF sy-subrc <> 0.
+          EXIT .
+        ENDIF.
+      ENDDO.
+
+    WHEN OTHERS.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.                    "get_config
+*----------------------------------------------------------------------*
+*       CLASS lCL_trexadmin_export IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_trexadmin_export IMPLEMENTATION.
+
+  METHOD read_services_data.
+
+    CONSTANTS: lc_services    TYPE c VALUE
+* Begin of changes V002
+*               'Services details for'                        LENGTH 80,
+               'Services details'                            LENGTH 80,
+* End of changes V002
+               lc_error       TYPE c VALUE
+               'Error occured while fetching services data'  LENGTH 80,
+               lc_txt314      TYPE c VALUE 'indexserver'     LENGTH 11,
+               lc_txt315      TYPE c VALUE 'queueserver'     LENGTH 11,
+               lc_txt316      TYPE c VALUE 'preprocessor'    LENGTH 15,
+               lc_txt317      TYPE c VALUE 'httpserver'      LENGTH 10,
+               lc_txt318      TYPE c VALUE 'nameserver'      LENGTH 10,
+               lc_txt319      TYPE c VALUE 'cruiser'         LENGTH 7,
+               lc_txt321      TYPE c VALUE 'rfc server'      LENGTH 10,
+               lc_txt325      TYPE c VALUE 'other'           LENGTH 6,
+               lc_hyphen      TYPE c VALUE '-'               LENGTH 1,
+               lc_icon_green  TYPE c VALUE 'Green'           LENGTH 5,
+               lc_icon_red    TYPE c VALUE 'Red'             LENGTH 3,
+               lc_icon_yellow TYPE c VALUE 'Yellow'          LENGTH 6,
+               lc_active      TYPE c VALUE 'Active'          LENGTH 6,
+               lc_location    TYPE c VALUE 'Location'        LENGTH 8,
+               lc_services1   TYPE c VALUE 'Services'        LENGTH 8,
+               lc_processid   TYPE c VALUE 'ProcessID'       LENGTH 9,
+               lc_serverinfo  TYPE c VALUE 'ServerInfo'      LENGTH 10,
+               lc_cpuinper    TYPE c VALUE 'ProcessCPUin%'   LENGTH 13,
+               lc_cputotal    TYPE c VALUE 'TotalCPUin%'     LENGTH 11,
+               lc_cpuusage    TYPE c VALUE 'CPUUsage'        LENGTH 8,
+               lc_memorymb    TYPE c VALUE
+               'MemoryUsageofProcessinMB'                    LENGTH 25,
+               lc_memoryper   TYPE c VALUE
+               'MemoryUsageOfProcessin%'                     LENGTH 25,
+               lc_memtotal    TYPE c VALUE
+               'TotalMemoryUsageOfProcessin%'                LENGTH 30,
+               lc_memusage    TYPE c VALUE 'MemoryUsage'     LENGTH 11,
+               lc_starttime   TYPE c VALUE 'StartTime'       LENGTH 10,
+               lc_threads     TYPE c VALUE 'Threads'         LENGTH 7,
+               lc_handles     TYPE c VALUE 'Handles'         LENGTH 7,
+               lc_actrequest  TYPE c VALUE 'ActiveRequests'  LENGTH 14,
+               lc_finrequest  TYPE c VALUE
+               'FinishedRequests'                            LENGTH 16,
+               lc_pending     TYPE c VALUE 'PendingRequests' LENGTH 15,
+               lc_response    TYPE c VALUE 'ResponseTime'    LENGTH 12,
+               lc_request     TYPE c VALUE 'Request/sec'     LENGTH 12,
+               lc_70          TYPE c VALUE '70'              LENGTH 2,
+               lc_85          TYPE c VALUE '85'              LENGTH 2.
+
+    TYPES: BEGIN OF lty_service,
+             icon_active         TYPE c LENGTH 6,
+             location            TYPE trexs_server_info-location,
+             service             TYPE c LENGTH 20,
+             pids                TYPE trexs_server_info-pids,
+             total_mem_percent   TYPE c LENGTH 4,
+             process_mem_percent TYPE c LENGTH 4,
+             total_memory        TYPE c LENGTH 10,
+             process_memory      TYPE c LENGTH 10,
+             total_cpu           TYPE c LENGTH 4,
+             process_cpu         TYPE c LENGTH 4,
+             response_time       TYPE c LENGTH 10,
+             request_sec         TYPE c LENGTH 10,
+             start_time          TYPE c LENGTH 20,
+             threads             TYPE c LENGTH 10,
+             handles             TYPE c LENGTH 10,
+             finished_request1   TYPE c LENGTH 20,
+             finished_request2   TYPE c LENGTH 20,
+             active_requests     TYPE c LENGTH 10,
+             pending_requests    TYPE c LENGTH 10,
+             icon_cpu            TYPE c LENGTH 5,
+             icon_memory         TYPE c LENGTH 5,
+             server_info         TYPE trexs_server_info-url,
+           END OF lty_service.
+
+    DATA: lt_server_info      TYPE trext_server_info,
+          ls_server_info      TYPE trexs_server_info,
+          lt_service          TYPE trext_service_statistics,
+          ls_service          TYPE trexs_service_statistic,
+          lt_outtab_services  TYPE STANDARD TABLE OF lty_service,
+          ls_outtab2          TYPE lty_service,
+          lv_memory           TYPE p,
+          lo_trexadmin_export TYPE REF TO lcl_trexadmin_export,
+          lv_server_type      TYPE trexd_server_type,
+          lv_is_active        TYPE trexs_server_list-is_active.
+
+    " Adding title to the output
+    CONCATENATE lc_services iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    lv_server_type = '6'. "All Servers
+    lv_is_active   = ' '. "All active and inactive Servers
+
+    " FM to get Servers
+    CALL FUNCTION 'TREX_EXT_SHOW_SERVERS'
+      EXPORTING
+        i_rfc_destination = iv_rfcserv
+        i_server_type     = lv_server_type
+        i_is_active       = lv_is_active
+      IMPORTING
+        e_server_info     = lt_server_info
+      EXCEPTIONS
+        conversion_error  = 1
+        error             = 2
+        OTHERS            = 3.
+    IF sy-subrc NE 0.
+      "Error occured while fetching services data
+      gs_output = lc_error.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+    ELSE.
+      " FM to get Services data
+      CALL FUNCTION 'TREX_EXT_SERVICE_STATISTICS'
+        EXPORTING
+          i_rfc_destination    = iv_rfcserv
+        IMPORTING
+          e_service_statistics = lt_service
+        EXCEPTIONS
+          conversion_error     = 1
+          error                = 2
+          OTHERS               = 3.
+      IF sy-subrc EQ 0.
+
+        FREE: lt_outtab_services[].
+
+        CLEAR: ls_server_info.
+        LOOP AT lt_server_info INTO ls_server_info.
+          CLEAR: ls_outtab2,ls_service.
+          READ TABLE lt_service INTO ls_service
+          WITH KEY location = ls_server_info-location.
+          IF sy-subrc EQ 0.
+            ls_outtab2-location = ls_server_info-location.
+
+            "SERVER_TYPE --> service: IndexServer, QueueServer,...
+            "0=IS  1=QS 2=PP 3=HTTP 4=NS
+            "5=RFC 6=All 7=Cruiser 8=Schedule
+            CASE ls_server_info-server_type.
+              WHEN '0'.
+                ls_outtab2-service = lc_txt314.     "Indexserver
+              WHEN '1'.
+                ls_outtab2-service = lc_txt315.     "Queueserver
+              WHEN '2'.
+                ls_outtab2-service = lc_txt316.     "Preprocessor
+              WHEN '3'.
+                ls_outtab2-service = lc_txt317.     "Httpserver
+              WHEN '4'.
+                ls_outtab2-service = lc_txt318.     "Nameserver
+              WHEN '5'.
+                ls_outtab2-service = lc_txt321.     "Rfcserver
+              WHEN '7'.
+                ls_outtab2-service = lc_txt319.     "Cruiser
+              WHEN OTHERS.
+                ls_outtab2-service = lc_txt325.     "Other
+            ENDCASE.
+
+            " Active/Inactive server info
+            IF ls_server_info-is_active = 0.
+              "ICON_LED_RED
+              ls_outtab2-icon_active       = gc_inactive.
+              ls_outtab2-total_mem_percent = lc_hyphen.
+              ls_outtab2-total_cpu         = lc_hyphen.
+              ls_outtab2-response_time     = lc_hyphen.
+              ls_outtab2-request_sec       = lc_hyphen.
+              ls_outtab2-finished_request1 = lc_hyphen.
+              ls_outtab2-finished_request2 = lc_hyphen.
+              ls_outtab2-active_requests   = lc_hyphen.
+              ls_outtab2-pending_requests  = lc_hyphen.
+              ls_outtab2-icon_cpu          = lc_hyphen.
+              ls_outtab2-icon_memory       = lc_hyphen.
+              APPEND ls_outtab2 TO lt_outtab_services.
+              CLEAR: ls_outtab2.
+              CONTINUE.
+            ELSEIF ls_server_info-is_active = '1'.
+              ls_outtab2-icon_active = gc_active. "ICON_LED_GREEN
+            ENDIF.
+
+            IF ls_server_info-pid NE 0.
+              ls_outtab2-pids = ls_server_info-pid.
+            ELSEIF ls_server_info-pids NE space.
+              ls_outtab2-pids = ls_server_info-pids.
+            ELSE.
+              ls_outtab2-pids = lc_hyphen.
+            ENDIF.
+
+            IF NOT ls_server_info-serverinfo_group IS INITIAL.
+              ls_outtab2-server_info =
+              ls_server_info-serverinfo_group.
+            ELSEIF NOT ls_server_info-url IS INITIAL.
+              ls_outtab2-server_info = ls_server_info-url.
+            ENDIF.
+
+            IF ls_service-start_time GT 0.
+              WRITE ls_service-start_time TO ls_outtab2-start_time
+              USING EDIT MASK '____-__-__ __:__:__'.
+            ENDIF.
+
+            ls_outtab2-threads = ls_service-threads.
+
+            IF ls_service-handles GT 0.
+              ls_outtab2-handles     = ls_service-handles.
+            ENDIF.
+
+            ls_outtab2-response_time  = ls_service-response_time.
+            ls_outtab2-request_sec    =
+            ls_service-request_sec / 100.
+            ls_outtab2-finished_request1 =
+            ls_service-finished_request1.
+            ls_outtab2-finished_request2 =
+            ls_service-finished_request2.
+            ls_outtab2-active_requests  = ls_service-active_requests.
+            ls_outtab2-pending_requests = ls_service-pending_requests.
+
+            "Memory usage
+            CLEAR lv_memory.
+            lv_memory =
+          ls_service-total_memory / ls_service-available_memory * 100.
+
+            IF lv_memory LE lc_70.
+              ls_outtab2-icon_memory = lc_icon_green. "ICON_LED_GREEN
+            ELSEIF lv_memory LE lc_85.
+              ls_outtab2-icon_memory = lc_icon_yellow."ICON_LED_YELLOW
+            ELSE." lv_memory > '85'.
+              ls_outtab2-icon_memory = lc_icon_red.   "ICON_LED_RED
+            ENDIF.
+
+            ls_outtab2-total_mem_percent = lv_memory.
+
+            "process used memory
+            CLEAR: lv_memory.
+            lv_memory =
+         ls_service-process_memory / ls_service-physical_memory * 100.
+
+            ls_outtab2-process_mem_percent = lv_memory.
+            lv_memory = ls_service-process_memory / 1024.
+            ls_outtab2-process_memory = lv_memory.
+
+            ls_outtab2-total_memory = ls_service-total_memory.
+
+            "CPU usage
+            IF ls_service-total_cpu = -1.
+              ls_outtab2-icon_cpu = lc_hyphen.
+              ls_outtab2-total_cpu = lc_hyphen.
+            ELSE.
+              IF ls_service-total_cpu LE lc_70.
+                ls_outtab2-icon_cpu = lc_icon_green. "ICON_LED_GREEN
+              ELSEIF ls_service-total_cpu GT lc_70
+                AND ls_service-total_cpu LE lc_85.
+                ls_outtab2-icon_cpu = lc_icon_yellow."ICON_LED_YELLOW
+              ELSEIF ls_service-total_cpu GT lc_85.
+                ls_outtab2-icon_cpu = lc_icon_red.   "ICON_LED_RED
+              ENDIF.
+
+              ls_outtab2-total_cpu = ls_service-total_cpu.
+              ls_outtab2-process_cpu = ls_service-process_cpu.
+            ENDIF.
+
+            APPEND ls_outtab2 TO lt_outtab_services.
+          ENDIF.
+          CLEAR: ls_server_info.
+        ENDLOOP.
+      ELSE.
+        "Error occured while fetching services data
+        gs_output = lc_error.
+        APPEND gs_output TO it_data.
+        CLEAR: gs_output.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    IF lt_outtab_services IS NOT INITIAL.
+
+      " Adding heading to the output
+      CONCATENATE lc_active       gc_sep
+                  lc_location     gc_sep
+                  lc_services1    gc_sep
+                  lc_processid    gc_sep
+                  lc_serverinfo   gc_sep
+                  lc_cpuinper     gc_sep
+                  lc_cputotal     gc_sep
+                  lc_cpuusage     gc_sep
+                  lc_memorymb     gc_sep
+                  lc_memoryper    gc_sep
+                  lc_memtotal     gc_sep
+                  lc_memusage     gc_sep
+                  lc_starttime    gc_sep
+                  lc_threads      gc_sep
+                  lc_handles      gc_sep
+                  lc_actrequest   gc_sep
+                  lc_finrequest   gc_sep
+                  lc_pending      gc_sep
+                  lc_response     gc_sep
+                  lc_request
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      CREATE OBJECT lo_trexadmin_export.
+
+      CLEAR: ls_outtab2.
+      LOOP AT lt_outtab_services INTO ls_outtab2.
+
+        SHIFT ls_outtab2-pids LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-process_cpu LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-total_cpu LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-process_memory LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-process_mem_percent
+                                        LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-total_mem_percent LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-threads LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-handles LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-active_requests LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-finished_request1 LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-pending_requests LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-response_time LEFT DELETING LEADING '0'.
+        SHIFT ls_outtab2-request_sec LEFT DELETING LEADING '0'.
+
+        CONDENSE: ls_outtab2-process_memory,
+                  ls_outtab2-threads,
+                  ls_outtab2-process_mem_percent,
+                  ls_outtab2-total_mem_percent,
+                  ls_outtab2-request_sec.
+
+        CONCATENATE ls_outtab2-icon_active          gc_sep
+                    ls_outtab2-location             gc_sep
+                    ls_outtab2-service              gc_sep
+                    ls_outtab2-pids                 gc_sep
+                    ls_outtab2-server_info          gc_sep
+                    ls_outtab2-process_cpu          gc_sep
+                    ls_outtab2-total_cpu            gc_sep
+                    ls_outtab2-icon_cpu             gc_sep
+                    ls_outtab2-process_memory       gc_sep
+                    ls_outtab2-process_mem_percent  gc_sep
+                    ls_outtab2-total_mem_percent    gc_sep
+                    ls_outtab2-icon_memory          gc_sep
+                    ls_outtab2-start_time           gc_sep
+                    ls_outtab2-threads              gc_sep
+                    ls_outtab2-handles              gc_sep
+                    ls_outtab2-active_requests      gc_sep
+                    ls_outtab2-finished_request1    gc_sep
+                    ls_outtab2-pending_requests     gc_sep
+                    ls_outtab2-response_time        gc_sep
+                    ls_outtab2-request_sec
+                    INTO gs_output.
+
+        " Add NULL if last field value is blank
+        gs_prefinal = gs_output.
+
+        CALL METHOD lo_trexadmin_export->end_null_check
+          CHANGING
+            is_prefinal = gs_prefinal.
+
+        gs_output = gs_prefinal.
+
+        APPEND gs_output TO it_data.
+        CLEAR:gs_output,ls_outtab2,gs_prefinal.
+
+      ENDLOOP.
+
+    ELSE.
+      " No data found
+      gs_output = gc_nodata.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+    ENDIF.
+
+  ENDMETHOD.                    "read_services_data
+
+  METHOD read_summary_data.
+
+    CONSTANTS:
+* Begin of changes V002
+*               lc_summary     TYPE c VALUE
+*               'Landscape summary data for'                 LENGTH 80,
+*               lc_overview    TYPE c VALUE
+*               'Summary overview data for'                  LENGTH 80,
+               lc_summary     TYPE c VALUE
+               'Landscape summary data'                 LENGTH 80,
+               lc_overview    TYPE c VALUE
+               'Summary overview data'                  LENGTH 80,
+* End of changes V002
+               lc_error       TYPE c VALUE
+               'Error occured while fetching summary data'  LENGTH 80,
+               lc_summary1    TYPE c VALUE 'Summary'        LENGTH 7,
+               lc_version     TYPE c VALUE 'Version'        LENGTH 7,
+               lc_time        TYPE c VALUE 'Start Time'     LENGTH 10,
+               lc_platform    TYPE c VALUE 'Platform'       LENGTH 8,
+               lc_group       TYPE c VALUE 'GROUP'          LENGTH 5,
+               lc_trexversion TYPE c VALUE 'TREXVersion'    LENGTH 11,
+               lc_status      TYPE c VALUE 'Status'         LENGTH 6,
+               lc_name        TYPE c VALUE 'Name'           LENGTH 4,
+               lc_value       TYPE c VALUE 'Value'          LENGTH 5,
+               lc_null        TYPE c VALUE 'Null'           LENGTH 4,
+               lc_green       TYPE c VALUE 'GREEN'          LENGTH 5,
+               lc_red         TYPE c VALUE 'RED'            LENGTH 3,
+               lc_yellow      TYPE c VALUE 'YELLOW'         LENGTH 6,
+               lc_gray        TYPE c VALUE 'GRAY'           LENGTH 4.
+
+    TYPES: BEGIN OF lty_ls_sum,
+             component     TYPE trexs_landscape_summary-component,
+             function_type TYPE trexs_landscape_summary-function_type,
+             function_info TYPE trexs_landscape_summary-function_info,
+             icon          TYPE c LENGTH 5,
+           END OF lty_ls_sum.
+
+    DATA: lt_summary          TYPE trext_landscape_summary,
+          ls_summary          TYPE trexs_landscape_summary,
+          lt_outtab           TYPE STANDARD TABLE OF lty_ls_sum,
+          ls_outtab           TYPE lty_ls_sum,
+          lv_summary          TYPE c LENGTH 200,
+          lv_trex_version     TYPE c LENGTH 200,
+          lv_start_time       TYPE c LENGTH 200,
+          lv_platform         TYPE c LENGTH 200,
+          lo_trexadmin_export TYPE REF TO lcl_trexadmin_export.
+
+    " Add blank line between each table output
+    gs_output = ' '.
+    APPEND gs_output TO it_data.
+    CLEAR: gs_output.
+
+    " Adding title to the output
+    CONCATENATE lc_overview iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    FREE: lt_summary.
+    " FM to get TREX Summary
+    CALL FUNCTION 'TREX_EXT_LANDSCAPE_SUMMARY'
+      EXPORTING
+        i_rfc_destination = iv_rfcserv
+      IMPORTING
+        e_landscape_info  = lt_summary
+      EXCEPTIONS
+        conversion_error  = 1
+        error             = 2
+        OTHERS            = 3.
+    IF sy-subrc EQ 0.
+
+      FREE: lt_outtab.
+
+      CLEAR: lv_summary,
+             lv_trex_version,
+             lv_start_time,
+             lv_trex_version,
+             lv_platform,
+             ls_summary.
+
+      LOOP AT lt_summary INTO ls_summary.
+        CLEAR ls_outtab.
+
+        CASE ls_summary-component.
+          WHEN lc_summary1.  "Summary
+            lv_summary      = ls_summary-function_info.
+          WHEN lc_version.   "Version
+            lv_trex_version =  ls_summary-function_info.
+          WHEN lc_time.      "Starttime
+            lv_start_time   =  ls_summary-function_info.
+          WHEN lc_platform.  "Platform
+            lv_platform     =  ls_summary-function_info.
+          WHEN OTHERS.
+
+            MOVE-CORRESPONDING ls_summary TO ls_outtab.
+            CASE ls_summary-function_type.
+              WHEN lc_group.
+                ls_outtab-function_type = ls_summary-component.
+                ls_outtab-component = lc_null.
+              WHEN lc_green.
+                ls_outtab-function_type = gc_active. "ICON_LED_GREEN
+              WHEN lc_red.
+                ls_outtab-function_type = gc_error. "ICON_LED_RED
+              WHEN lc_yellow.
+                ls_outtab-function_type = gc_warning."ICON_LED_YELLOW
+              WHEN lc_gray.
+                ls_outtab-function_type = gc_inactive."ICON_LED_GRAY
+              WHEN OTHERS.
+                ls_outtab-function_type = lc_null.
+            ENDCASE.
+            APPEND ls_outtab TO lt_outtab.
+        ENDCASE.
+        CLEAR: ls_summary.
+      ENDLOOP.
+
+      " Adding TREX Version to the output
+      IF lv_trex_version IS INITIAL.
+        lv_trex_version = lc_null.
+      ENDIF.
+      CONCATENATE lc_trexversion gc_sep lv_trex_version
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      " Adding Platform to the output
+      IF lv_platform IS INITIAL.
+        lv_platform = lc_null.
+      ENDIF.
+      CONCATENATE lc_platform gc_sep lv_platform
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      " Adding Start Time to the output
+      IF lv_start_time IS INITIAL.
+        lv_start_time = lc_null.
+      ENDIF.
+      CONCATENATE lc_time gc_sep lv_start_time
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      " Adding Status to the output
+      IF lv_summary IS INITIAL.
+        lv_summary = lc_null.
+      ENDIF.
+      CONCATENATE lc_status gc_sep lv_summary
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      " Adding empty line to the output
+      gs_output = space.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      " Adding sub title to the output
+      CONCATENATE lc_summary iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+*  Begin of changes in V001
+      IF lt_outtab[] IS INITIAL.
+        gs_output = gc_nodata.
+        APPEND gs_output TO it_data.
+        CLEAR gs_output.
+        RETURN.
+      ENDIF.
+*  End of changes in V001
+
+      " Adding heading to the output
+      CONCATENATE lc_status gc_sep
+                  lc_name   gc_sep
+                  lc_value
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      CREATE OBJECT lo_trexadmin_export.
+
+      CLEAR: ls_outtab.
+
+      LOOP AT lt_outtab INTO ls_outtab.
+        CONCATENATE ls_outtab-function_type  gc_sep
+                    ls_outtab-component      gc_sep
+                    ls_outtab-function_info
+                    INTO gs_output.
+
+        " Add NULL if last field value is blank
+        gs_prefinal = gs_output.
+
+        CALL METHOD lo_trexadmin_export->end_null_check
+          CHANGING
+            is_prefinal = gs_prefinal.
+
+        gs_output = gs_prefinal.
+
+        APPEND gs_output TO it_data.
+        CLEAR: gs_output,ls_outtab,gs_prefinal.
+      ENDLOOP.
+
+    ELSE.
+
+      "Error occured while fetching services data
+      gs_output = lc_error.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+
+    ENDIF.
+
+  ENDMETHOD.                    "read_summary_data
+
+  METHOD read_trace_files_data.
+
+    CONSTANTS:
+* Begin of changes V002
+*               lc_trace TYPE c VALUE
+*               'Trace files for'                             LENGTH 80,
+               lc_trace TYPE c VALUE
+               'Trace files'                                 LENGTH 80,
+* End of changes V002
+               lc_error TYPE c VALUE
+             'Error occured while fetching trace files data' LENGTH 80.
+
+    DATA: lv_datum            TYPE sy-datum,
+          lv_minimum_date     TYPE trex_rfc-time_stamp,
+          lt_trace_list       TYPE trext_file_list,
+          ls_trace_list       TYPE trexs_file,
+          lo_trexadmin_export TYPE REF TO lcl_trexadmin_export.
+
+    " Add blank line between each table output
+    gs_output = ' '.
+    APPEND gs_output TO it_data.
+    CLEAR: gs_output.
+
+    " Adding sub title to the output
+    CONCATENATE lc_trace iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    " To pass minimum date
+    CLEAR: lv_datum, lv_minimum_date.
+    lv_datum = sy-datum - 1.
+    lv_minimum_date = lv_datum.
+
+    " FM to get Trace data
+    CALL FUNCTION 'TREX_EXT_GET_TRACE_FILE_LIST'
+      EXPORTING
+        i_rfc_destination = iv_rfcserv
+        i_minimum_date    = lv_minimum_date
+      IMPORTING
+        e_file_list       = lt_trace_list
+      EXCEPTIONS
+        conversion_error  = 1
+        error             = 2
+        OTHERS            = 3.
+    IF sy-subrc EQ 0.
+
+*  Begin of changes in V001
+      IF lt_trace_list[] IS INITIAL.
+        gs_output = gc_nodata.
+        APPEND gs_output TO it_data.
+        CLEAR gs_output.
+        RETURN.
+      ENDIF.
+*  End of changes in V001
+
+      " Adding heading to the output
+      CONCATENATE gc_host     gc_sep
+                  gc_file     gc_sep
+                  gc_size     gc_sep
+                  gc_modified
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      CREATE OBJECT lo_trexadmin_export.
+
+      CLEAR: ls_trace_list.
+      LOOP AT lt_trace_list INTO ls_trace_list.
+        SHIFT ls_trace_list-size LEFT DELETING LEADING '0'.
+        CONCATENATE ls_trace_list-host       gc_sep
+                    ls_trace_list-file_name  gc_sep
+                    ls_trace_list-size       gc_sep
+                    ls_trace_list-modified
+                    INTO gs_output.
+
+        " Add NULL if last field value is blank
+        gs_prefinal = gs_output.
+
+        CALL METHOD lo_trexadmin_export->end_null_check
+          CHANGING
+            is_prefinal = gs_prefinal.
+
+        gs_output = gs_prefinal.
+
+        APPEND gs_output TO it_data.
+        CLEAR: ls_trace_list, gs_output,gs_prefinal.
+      ENDLOOP.
+
+    ELSE.
+
+      gs_output = lc_error.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+
+    ENDIF.
+
+  ENDMETHOD.                    "read_trace_files_data
+
+  METHOD read_ini_files_data.
+
+    CONSTANTS:
+* Begin of changes V002
+*               lc_inifiles TYPE c VALUE
+*               'Ini files for'                              LENGTH 80,
+               lc_inifiles TYPE c VALUE
+               'Ini files'                                  LENGTH 80,
+* End of changes V002
+               lc_error    TYPE c VALUE
+              'Error occured while fetching ini files data' LENGTH 80.
+
+    DATA: lt_ini_list         TYPE trext_file_list,
+          ls_ini_list         TYPE trexs_file,
+          lo_trexadmin_export TYPE REF TO lcl_trexadmin_export.
+
+    " Adding empty line to the output
+    gs_output = space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    " Adding sub title to the output
+    CONCATENATE lc_inifiles iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    " FM to get Ini files
+    CALL FUNCTION 'TREX_EXT_GET_INI_FILE_LIST'
+      EXPORTING
+        i_rfc_destination = iv_rfcserv
+      IMPORTING
+        e_file_list       = lt_ini_list
+      EXCEPTIONS
+        conversion_error  = 1
+        error             = 2
+        OTHERS            = 3.
+
+    IF sy-subrc EQ 0.
+*  Begin of changes in V001
+      IF lt_ini_list[] IS INITIAL.
+        gs_output = gc_nodata.
+        APPEND gs_output TO it_data.
+        CLEAR gs_output.
+        RETURN.
+      ENDIF.
+*  End of changes in V001
+
+      " Adding heading to the output
+      CONCATENATE gc_host     gc_sep
+                  gc_file     gc_sep
+                  gc_size     gc_sep
+                  gc_modified
+                  INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      CREATE OBJECT lo_trexadmin_export.
+
+      CLEAR: ls_ini_list.
+      LOOP AT lt_ini_list INTO ls_ini_list.
+        SHIFT ls_ini_list-size LEFT DELETING LEADING '0'.
+        CONCATENATE ls_ini_list-host        gc_sep
+                    ls_ini_list-file_name   gc_sep
+                    ls_ini_list-size        gc_sep
+                    ls_ini_list-modified
+                    INTO gs_output.
+
+        " Add NULL if last field value is blank
+        gs_prefinal = gs_output.
+
+        CALL METHOD lo_trexadmin_export->end_null_check
+          CHANGING
+            is_prefinal = gs_prefinal.
+
+        gs_output = gs_prefinal.
+
+        APPEND gs_output TO it_data.
+        CLEAR: ls_ini_list, gs_output,gs_prefinal.
+      ENDLOOP.
+
+    ELSE.
+      " Error
+      gs_output = lc_error.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+    ENDIF.
+
+  ENDMETHOD.                    "read_ini_files_data
+
+  METHOD read_alerts_data.
+
+    CONSTANTS:
+* Begin of changes V002
+*               lc_title   TYPE c VALUE
+*               'Alert details for'                          LENGTH 80,
+               lc_title   TYPE c VALUE
+               'Alert details'                              LENGTH 80,
+* End of changes V002
+               lc_status  TYPE c VALUE 'Status'             LENGTH 6,
+               lc_details TYPE c VALUE 'NumberofDetails'    LENGTH 20,
+               lc_action  TYPE c VALUE 'Action'             LENGTH 6,
+               lc_error   TYPE c VALUE
+               'Error occured while fetching alerts data'   LENGTH 80,
+               lc_null    TYPE c VALUE 'NULL'               LENGTH 4.
+
+    DATA: lv_minimum_date          TYPE trex_rfc-time_stamp,
+          lv_status                TYPE string,
+          lv_details               TYPE string,
+          lv_action_description    TYPE string,
+          ls_summary_result        TYPE trexs_alert_status,
+          lt_summary_details       TYPE trext_alert_details,
+          ls_summary_details       TYPE trexs_alert_details,
+          lt_summary_detail_format TYPE trext_detail_format,
+          ls_summary_detail_format TYPE trexs_detail_format,
+          lt_summary_result        TYPE trext_alert_status,
+          lv_datum                 TYPE sy-datum,
+          lv_index                 TYPE sy-tabix,
+          lv_count                 TYPE i,
+          lv_number_of_details     TYPE i,
+          lv_number                TYPE i,
+          lo_trexadmin_export      TYPE REF TO lcl_trexadmin_export.
+
+    " Add blank line between each table output
+    gs_output = ' '.
+    APPEND gs_output TO it_data.
+    CLEAR: gs_output.
+
+    " Adding sub title to the output
+    CONCATENATE lc_title iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    "minimum date
+    CLEAR: lv_datum, lv_minimum_date.
+    lv_datum = sy-datum - 1.
+    lv_minimum_date = lv_datum.
+
+    CALL FUNCTION 'TREX_EXT_GET_ALERT_STATUS'
+      EXPORTING
+        i_rfc_destination       = iv_rfcserv
+        i_minimum_date          = lv_minimum_date
+      IMPORTING
+        e_summary_result        = lt_summary_result
+        e_summary_detail_format = lt_summary_detail_format
+        e_summary_details       = lt_summary_details
+      EXCEPTIONS
+        conversion_error        = 1
+        error                   = 2
+        OTHERS                  = 3.
+    IF sy-subrc NE 0.
+      gs_output = lc_error.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+    ENDIF.
+
+    IF lt_summary_result[] IS NOT INITIAL.
+
+      SORT:lt_summary_result BY check_result DESCENDING.
+      SORT:lt_summary_details BY check_name.
+      SORT:lt_summary_detail_format BY check_name.
+
+      "Column Heading
+      CONCATENATE lc_status gc_sep
+                  lc_details gc_sep
+                  lc_action INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+
+      CREATE OBJECT lo_trexadmin_export.
+
+      CLEAR: ls_summary_result,lv_count,lv_number,sy-subrc,
+             lv_action_description,lv_status,lv_index.
+      LOOP AT lt_summary_result INTO ls_summary_result.
+
+        lv_count = 0.
+        lv_number = 0.
+        sy-subrc = 0.
+
+        lv_action_description = ls_summary_result-action_description.
+
+        IF ls_summary_result-check_result = '0'.       "none
+          lv_status = lc_null.
+        ELSEIF ls_summary_result-check_result = '1'.   "green
+          lv_status = gc_active.
+        ELSEIF ls_summary_result-check_result = '2'.   "yellow
+          lv_status = gc_warning.
+        ELSEIF ls_summary_result-check_result = '3'.   "red
+          lv_status = gc_error.
+        ENDIF.
+
+        "Parllel Cursour method
+
+        READ TABLE lt_summary_detail_format
+        INTO ls_summary_detail_format
+        WITH KEY check_name = ls_summary_result-check_name
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          lv_index = sy-tabix.
+        ENDIF.
+
+        CLEAR: ls_summary_detail_format.
+        LOOP AT lt_summary_detail_format INTO ls_summary_detail_format
+          FROM lv_index.
+          IF ls_summary_result-check_name NE
+            ls_summary_detail_format-check_name.
+            EXIT.
+          ELSE.
+            lv_count = lv_count + 1.
+          ENDIF.
+        ENDLOOP.
+
+        CLEAR: lv_index.
+
+        "Parllel Cursour method
+        READ TABLE lt_summary_details INTO ls_summary_details
+        WITH KEY check_name = ls_summary_result-check_name
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          lv_index = sy-tabix.
+        ENDIF.
+
+        CLEAR: ls_summary_details.
+        LOOP AT lt_summary_details INTO ls_summary_details
+          FROM lv_index.
+          IF ls_summary_result-check_name NE
+             ls_summary_details-check_name.
+            EXIT.
+          ELSE.
+            lv_number = lv_number + 1.
+          ENDIF.
+        ENDLOOP.
+
+*   Calculate number of details
+        IF sy-subrc = 0.    "Otherwise value 0 is already set
+          lv_number_of_details = lv_number / lv_count.
+        ENDIF.
+
+        lv_details = lv_number_of_details.
+        CONDENSE lv_details.
+
+        CONCATENATE lv_status gc_sep lv_details gc_sep
+                    lv_action_description INTO gs_output.
+
+        " Add NULL if last field value is blank
+        gs_prefinal = gs_output.
+
+        CALL METHOD lo_trexadmin_export->end_null_check
+          CHANGING
+            is_prefinal = gs_prefinal.
+
+        gs_output = gs_prefinal.
+
+        APPEND gs_output TO it_data.
+
+        CLEAR: lv_number_of_details,
+               lv_details,
+               lv_number,
+               lv_count,
+               lv_index,
+               lv_action_description,
+               lv_status,
+               ls_summary_details,
+               ls_summary_detail_format,
+               ls_summary_result,
+               gs_prefinal.
+
+      ENDLOOP.
+    ELSE.
+* Begin of changes in V001
+      gs_output = gc_nodata.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+      RETURN.
+*  End of changes in V001
+    ENDIF.
+
+  ENDMETHOD.                    "read_alerts_data
+
+  METHOD read_rfc_monitor_data.
+
+    CONSTANTS: lc_rfc_test    TYPE c VALUE
+               'RFC - Connection test'                     LENGTH 21,
+               lc_error_txt   TYPE c VALUE
+        'Error occured while fetching icm connection data' LENGTH 80,
+               lc_x           TYPE c VALUE 'X'             LENGTH 1,
+               lc_appserver   TYPE c VALUE
+               'ApplicationServer'                         LENGTH 17,
+               lc_errortext   TYPE c VALUE 'Errortext'     LENGTH 9,
+               lc_gatewayhost TYPE c VALUE 'GatewayHost'   LENGTH 11,
+               lc_gatewayserv TYPE c VALUE
+               'GatewayService'                            LENGTH 14,
+               lc_programid   TYPE c VALUE 'ProgramID'     LENGTH 9,
+               lc_hostport    TYPE c VALUE 'Hostport'      LENGTH 8,
+               lc_status      TYPE c VALUE 'Status'        LENGTH 6,
+               lc_ipaddress   TYPE c VALUE 'IPaddress'     LENGTH 9,
+               lc_text        TYPE c VALUE
+               'TREX installations on following hosts are' LENGTH 50,
+               lc_text1       TYPE c VALUE
+               'also using the same RFC Destination:'      LENGTH 50,
+               lc_icm_test    TYPE c VALUE
+               'ICM connection test'                       LENGTH 20,
+               lc_packet_size TYPE c VALUE '. Packet Size' LENGTH 13,
+               lc_error1      TYPE c VALUE
+              'Error occured while fetching topology data' LENGTH 80,
+               lc_error2      TYPE c VALUE
+               'for icm connections'                       LENGTH 80,
+               lc_size_1      TYPE c VALUE ' 1 MB'         LENGTH 8,
+               lc_size_10     TYPE c VALUE ' 10 MB'        LENGTH 8,
+               lc_size_100    TYPE c VALUE '100 MB'        LENGTH 8,
+               lc_size        TYPE c VALUE '???'           LENGTH 3,
+               lc_serial_txt  TYPE c VALUE
+               'with de-/serial.'                          LENGTH 20,
+               lc_serial_txt1 TYPE c VALUE
+               'no de-/serial.'                            LENGTH 20,
+               lc_host_txt    TYPE c VALUE
+               'via host names'                            LENGTH 20,
+               lc_host_txt1   TYPE c VALUE
+               'via ip adress'                             LENGTH 20,
+               lc_semicolon   TYPE c VALUE ';'             LENGTH 1,
+               lc_colon       TYPE c VALUE ':'             LENGTH 1,
+               lc_path        TYPE trex_rfc-topology_path
+                              VALUE'/host/*/nameserver/*/info/ip=*',
+               lc_path1       TYPE trex_rfc-topology_path
+                              VALUE '/host/*/nameserver/*/info/*',
+               lc_ip          TYPE c VALUE 'ip'            LENGTH 2,
+               lc_null        TYPE c VALUE 'NULL'          LENGTH 4,
+               lc_mb          TYPE c VALUE ' MB/s'         LENGTH 6.
+
+    TYPES: BEGIN OF lty_outtab,
+             app_server TYPE trexs_connection_check_result-app_server,
+             error_code TYPE trexs_connection_check_result-error_code,
+             error_text TYPE trexs_connection_check_result-error_text,
+             icons      TYPE c LENGTH 6,
+             gw_host    TYPE trexs_connection_check_result-gw_host,
+             gw_service TYPE trexs_connection_check_result-gw_service,
+             program_id TYPE trexs_connection_check_result-program_id,
+           END OF lty_outtab,
+
+           BEGIN OF stru_ip_host_name,
+             host_name TYPE trexs_host_port-host,
+             ip_adress TYPE trexs_host_port-host,
+           END OF stru_ip_host_name.
+
+    TYPES: BEGIN OF stru_througput.
+        INCLUDE  TYPE trexs_icm_throughput_info.
+    TYPES: ip_adress TYPE
+           trexs_icm_throughput_info-trex_index_server_host,
+           END OF stru_througput.
+
+    DATA: lt_return            TYPE trext_connection_check_result,
+          ls_return            TYPE trexs_connection_check_result,
+          lt_unknown_hosts     TYPE trext_host_list,
+          ls_unknown_hosts     TYPE trexs_host_list,
+          lt_outtab            TYPE STANDARD TABLE OF lty_outtab,
+          ls_outtab            TYPE lty_outtab,
+          lo_trexadmin_export  TYPE REF TO lcl_trexadmin_export,
+          lv_sy_tabix          TYPE i VALUE 0,
+          lv_string            TYPE string,
+          lt_topology          TYPE trext_topology,
+          ls_topology          TYPE trexs_topology,
+          lt_server            TYPE trext_server_info,
+          ls_server            TYPE trexs_server_info,
+          lv_node_id           TYPE trexs_topology-node_id,
+          lv_node_name         TYPE trexs_topology-node_name,
+          lv_ip                TYPE trexs_host_port-host,
+          lv_ip2               TYPE trexs_host_port-host,
+          lv_serialization     TYPE trex_rfc-flag,
+          lt_ip_host           TYPE STANDARD TABLE OF
+                                    stru_ip_host_name,
+          ls_ip_host           TYPE stru_ip_host_name,
+          lt_host_port         TYPE trext_host_port,
+          ls_host_port         TYPE trexs_host_port,
+          lv_package_size      TYPE trex_rfc-numc,
+          lt_icm_througput     TYPE STANDARD TABLE OF stru_througput,
+          lt_througput         TYPE trext_icm_throughput_info,
+          ls_throughput        TYPE trexs_icm_throughput_info,
+          ls_outstru_icm       TYPE stru_througput,
+          lv_ip_isloc          TYPE abap_bool,
+          lv_packagesize       TYPE char10 VALUE ' 1',
+          lv_package_size_0501 TYPE char10,
+          lv_with_serial       TYPE char3 VALUE ' ',
+          lv_with_serial_0501  TYPE char20,
+          lv_host_ip           TYPE char20,
+          lv_througput         TYPE trex_rfc-classify_method,
+          lv_text              TYPE trex_rfc-location,
+          lv_server_type       TYPE trexd_server_type,
+          lv_is_active         TYPE trexs_server_list-is_active,
+          lv_status            TYPE string,
+          lv_tabix             TYPE sy-tabix.
+***************************RFC Monitor******************************
+
+    " Add blank line between each table output
+    gs_output = ' '.
+    APPEND gs_output TO it_data.
+    CLEAR: gs_output.
+
+    " Adding sub title to the output
+    CONCATENATE lc_rfc_test iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    FREE: lt_return[],
+          lt_unknown_hosts.
+
+    " Check RFC connections
+    CALL FUNCTION 'TREX_RFC_CONNECTION_CHECK'
+      EXPORTING
+        trex_destination        = iv_rfcserv
+        check_unknown_hosts     = lc_x
+      IMPORTING
+        check_result            = lt_return
+        unknown_hosts           = lt_unknown_hosts
+      EXCEPTIONS
+        system_failure          = 1
+        communication_failure   = 2
+        authority_not_available = 3
+        send_error              = 4
+        not_available           = 5
+        OTHERS                  = 6.
+    IF sy-subrc NE 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+              INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+      RETURN.
+    ELSE.
+      FREE: lt_outtab.
+      " Pass icon texts
+      CLEAR: ls_outtab,ls_return.
+      LOOP AT lt_return INTO ls_return.
+        MOVE-CORRESPONDING ls_return TO ls_outtab.
+        IF ls_return-error_code = 0.
+          ls_outtab-icons = gc_active. "ICON_LED_GREEN
+        ELSE.
+          ls_outtab-icons = gc_error.  "ICON_LED_RED
+        ENDIF.
+        APPEND ls_outtab TO lt_outtab.
+        CLEAR: ls_outtab,ls_return.
+      ENDLOOP.
+
+      CLEAR: lv_string,lv_sy_tabix,
+             ls_outtab,ls_unknown_hosts.
+      LOOP AT lt_unknown_hosts INTO ls_unknown_hosts.
+        IF lv_sy_tabix = 0.
+          CONCATENATE lc_text lc_text1 INTO lv_string
+          SEPARATED BY space.
+          ls_outtab-icons = gc_error. "Red light
+          ls_outtab-error_text = lv_string.
+          APPEND ls_outtab TO lt_outtab.
+          CLEAR: lv_string.
+        ELSEIF lv_sy_tabix > 0.
+          CONCATENATE lv_string '; ' INTO lv_string.
+        ENDIF.
+        CONCATENATE lv_string ls_unknown_hosts-host_name
+        INTO lv_string.
+        lv_sy_tabix = lv_sy_tabix + 1.
+        CLEAR: ls_unknown_hosts.
+      ENDLOOP.
+
+      IF lv_sy_tabix > 0.
+        CLEAR ls_outtab.
+        ls_outtab-icons = gc_error. "Red light
+        ls_outtab-error_text = lv_string.
+        APPEND ls_outtab TO lt_outtab.
+      ENDIF.
+
+* Begin changes in V001
+      IF lt_outtab[] IS INITIAL.
+        gs_output = gc_nodata.
+        APPEND gs_output TO it_data.
+        CLEAR gs_output.
+      ELSE.
+* End of changes in V001
+
+        " Adding heading to the output
+        CONCATENATE lc_appserver      gc_sep
+                    lc_status         gc_sep
+                    lc_errortext      gc_sep
+                    lc_gatewayhost    gc_sep
+                    lc_gatewayserv    gc_sep
+                    lc_programid
+                    INTO gs_output.
+        APPEND gs_output TO it_data.
+        CLEAR gs_output.
+
+        CREATE OBJECT lo_trexadmin_export.
+
+        " Data
+        CLEAR: ls_outtab.
+        LOOP AT lt_outtab INTO ls_outtab.
+
+          CONCATENATE ls_outtab-app_server   gc_sep
+                      ls_outtab-icons        gc_sep
+                      ls_outtab-error_text   gc_sep
+                      ls_outtab-gw_host      gc_sep
+                      ls_outtab-gw_service   gc_sep
+                      ls_outtab-program_id
+                      INTO gs_output.
+
+          " Add NULL if last field value is blank
+          gs_prefinal = gs_output.
+
+          CALL METHOD lo_trexadmin_export->end_null_check
+            CHANGING
+              is_prefinal = gs_prefinal.
+
+          gs_output = gs_prefinal.
+
+          APPEND gs_output TO it_data.
+          CLEAR: gs_output,ls_outtab,gs_prefinal.
+
+        ENDLOOP.
+      ENDIF. "+V001
+
+    ENDIF.
+
+**********************ICM Test connection*************************
+
+    " Add blank line between each table output
+    gs_output = ' '.
+    APPEND gs_output TO it_data.
+    CLEAR: gs_output.
+
+    lv_server_type = '0'. "Indexsever
+    lv_is_active   = ' '. "All active and inactive
+
+    CALL FUNCTION 'TREX_EXT_SHOW_SERVERS'
+      EXPORTING
+        i_rfc_destination = iv_rfcserv
+        i_server_type     = lv_server_type
+        i_is_active       = lv_is_active
+      IMPORTING
+        e_server_info     = lt_server
+      EXCEPTIONS
+        conversion_error  = 1
+        error             = 2
+        OTHERS            = 3.
+    IF sy-subrc NE 0.
+      " Adding sub title to the output
+      CONCATENATE lc_icm_test iv_rfcserv
+                  INTO gs_output
+                  SEPARATED BY space.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      "Error
+      gs_output = lc_error_txt.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+    ENDIF.
+
+    CLEAR: lv_ip_isloc.
+    SELECT SINGLE ipaddr
+      FROM trexicm_global
+      INTO lv_ip_isloc.
+
+    IF lv_ip_isloc = abap_true.
+      "get IP adress
+      CALL METHOD lo_trexadmin_export->get_topology
+        EXPORTING
+          iv_topology_path = lc_path
+          iv_rfcserv       = iv_rfcserv
+        IMPORTING
+          it_topology      = lt_topology.
+    ENDIF.
+
+    IF lt_topology IS INITIAL.
+      "get IP adress
+      CALL METHOD lo_trexadmin_export->get_topology
+        EXPORTING
+          iv_topology_path = lc_path1
+          iv_rfcserv       = iv_rfcserv
+        IMPORTING
+          it_topology      = lt_topology.
+    ENDIF.
+
+    IF lt_topology[] IS INITIAL.
+      " Adding sub title to the output
+      CONCATENATE lc_icm_test iv_rfcserv
+                  INTO gs_output
+                  SEPARATED BY space.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      "Error occured while fetching topology data for
+      "icm connections
+      CONCATENATE lc_error1 lc_error2 INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+      RETURN.
+    ENDIF.
+
+    CLEAR: ls_server.
+    LOOP AT lt_server INTO ls_server.
+      SPLIT ls_server-location AT lc_colon
+      INTO ls_host_port-host ls_host_port-port.
+      IF lv_ip_isloc = abap_true.
+        "use ip adress for index server location
+        "get the node_id of the host name to get
+        " the ip adress of the tree structure
+        "1. get the host name
+        lv_node_name = ls_host_port-host.
+        CLEAR: ls_topology.
+        READ TABLE lt_topology INTO ls_topology
+        WITH KEY node_name = lv_node_name.
+        "for the output table
+        IF sy-subrc = 0.
+          lv_node_id = ls_topology-node_id + 1.
+          "2. get the ip adress
+          CLEAR: ls_topology.
+          READ TABLE lt_topology INTO ls_topology
+           WITH KEY parent_id = lv_node_id
+                    node_name = lc_ip.
+          IF sy-subrc = 0.
+            SPLIT ls_topology-node_value AT ' ' INTO lv_ip lv_ip2.
+            "store host name and their ip adress
+            ls_ip_host-host_name = ls_host_port-host.
+            ls_ip_host-ip_adress = lv_ip.
+            ls_host_port-host    = lv_ip.
+            APPEND ls_ip_host TO lt_ip_host.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+      APPEND ls_host_port TO lt_host_port.
+    ENDLOOP.
+
+    CLEAR: lv_serialization,lv_package_size.
+    lv_serialization = lv_with_serial.
+    lv_package_size  = lv_packagesize * 1024.
+
+    FREE:lt_icm_througput,
+         lt_througput.
+    CALL FUNCTION 'TREX_EXT_ICM_THROUGHPUT'
+      EXPORTING
+        trex_index_servers    = lt_host_port
+        data_package_size_kb  = lv_package_size
+        repeats               = 5
+        with_ser_deser        = lv_serialization
+      IMPORTING
+        e_icm_throughput      = lt_througput
+      EXCEPTIONS
+        not_available         = 1
+        connection_test_error = 2
+        general_error         = 3
+        OTHERS                = 4.
+    IF sy-subrc NE 0.
+      " Adding sub title to the output
+      CONCATENATE lc_icm_test iv_rfcserv
+                  INTO gs_output
+                  SEPARATED BY space.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+
+      " Error
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+              INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR gs_output.
+      RETURN.
+    ELSE.
+
+      CLEAR: ls_throughput,ls_outstru_icm.
+      LOOP AT lt_througput INTO ls_throughput.
+        IF lv_ip_isloc = abap_true.
+          CLEAR: ls_ip_host.
+          READ TABLE lt_ip_host INTO ls_ip_host
+          WITH KEY ip_adress = ls_throughput-trex_index_server_host.
+          IF sy-subrc = 0.
+            MOVE-CORRESPONDING ls_throughput TO ls_outstru_icm.
+            ls_outstru_icm-trex_index_server_host =
+            ls_ip_host-host_name.
+            ls_outstru_icm-ip_adress = ls_ip_host-ip_adress.
+            APPEND ls_outstru_icm TO lt_icm_througput.
+          ENDIF.
+        ELSE.
+          MOVE-CORRESPONDING ls_throughput TO ls_outstru_icm.
+          APPEND ls_outstru_icm TO lt_icm_througput.
+        ENDIF.
+        CLEAR: ls_throughput,ls_outstru_icm.
+      ENDLOOP.
+
+      " text for the grid title
+      CASE lv_packagesize.
+        WHEN 1.
+          lv_package_size_0501 = lc_size_1.
+        WHEN 10.
+          lv_package_size_0501 = lc_size_10.
+        WHEN 100.
+          lv_package_size_0501 = lc_size_100.
+        WHEN OTHERS.
+          lv_package_size_0501 = lc_size.
+      ENDCASE.
+
+      IF lv_with_serial = abap_true.
+        lv_with_serial_0501 = lc_serial_txt.
+      ELSE.
+        lv_with_serial_0501 = lc_serial_txt1.
+      ENDIF.
+
+      IF lv_ip_isloc = ' '.
+        lv_host_ip = lc_host_txt.
+      ELSEIF lv_ip_isloc = lc_x.
+        lv_host_ip = lc_host_txt1.
+      ENDIF.
+
+    ENDIF.
+
+    " Adding sub title to the output
+    CONCATENATE lc_icm_test lc_packet_size lv_package_size_0501
+                lc_semicolon lv_with_serial_0501 lc_semicolon
+                lv_host_ip INTO gs_output.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    SORT:lt_outtab BY app_server,
+         lt_icm_througput BY app_server trex_index_server_host
+                             trex_index_server_port.
+
+    " For the same app server if host and port values are same
+    " then delete those
+    DELETE ADJACENT DUPLICATES FROM lt_icm_througput
+    COMPARING app_server
+              trex_index_server_host
+              trex_index_server_port.
+
+    " Building the output table for ICM connection test
+    " based on no.of application servers
+    CLEAR: ls_outtab.
+    LOOP AT lt_outtab INTO ls_outtab.
+      " Parallel cursor technique applied as nested loop
+      " cannot be avoided
+      CLEAR: ls_outstru_icm,lv_tabix.
+      READ TABLE lt_icm_througput INTO ls_outstru_icm
+      WITH KEY app_server = ls_outtab-app_server.
+      IF sy-subrc EQ 0.
+        lv_tabix = sy-tabix.
+      ENDIF.
+      CLEAR: ls_outstru_icm,lv_text,lv_status,lv_througput.
+      " Read throughput and ipaddress
+      LOOP AT lt_icm_througput INTO ls_outstru_icm FROM lv_tabix.
+        IF ls_outtab-app_server NE ls_outstru_icm-app_server.
+          " Adding heading to the output
+          CONCATENATE lc_hostport   gc_sep
+                      lc_status     gc_sep
+                      lc_ipaddress  gc_sep
+                      ls_outstru_icm-app_server
+                      INTO gs_output.
+          APPEND gs_output TO it_data.
+          CLEAR gs_output.
+          EXIT.
+        ENDIF.
+        IF sy-tabix EQ 1.
+          " Adding heading to the output
+          CONCATENATE lc_hostport   gc_sep
+                      lc_status     gc_sep
+                      lc_ipaddress  gc_sep
+                      ls_outstru_icm-app_server
+                      INTO gs_output.
+          APPEND gs_output TO it_data.
+          CLEAR gs_output.
+        ENDIF.
+        IF ls_outstru_icm-return_code EQ 0.
+          "if no error: fill the fields with the throughput value
+          lv_througput =
+          ceil( ls_outstru_icm-icm_throughput / 1024 ).
+
+          CONCATENATE lv_througput lc_mb INTO lv_text.
+
+          lv_status = gc_active. " icon green
+        ELSE.
+          "if error occurred fill the field with the error text
+          lv_text = ls_outstru_icm-return_text.
+
+          lv_status = gc_error. " icon red
+        ENDIF.
+        CONDENSE lv_text.
+        IF ls_outstru_icm-ip_adress IS NOT INITIAL.
+          " Data
+          CONCATENATE ls_outstru_icm-trex_index_server_host lc_colon
+                      ls_outstru_icm-trex_index_server_port gc_sep
+                      lv_status gc_sep
+                      ls_outstru_icm-ip_adress gc_sep
+                      lv_text INTO gs_output.
+
+          " Add NULL if last field value is blank
+          gs_prefinal = gs_output.
+
+          CALL METHOD lo_trexadmin_export->end_null_check
+            CHANGING
+              is_prefinal = gs_prefinal.
+
+          gs_output = gs_prefinal.
+
+          APPEND gs_output TO it_data.
+          CLEAR: gs_output.
+        ELSE.
+          " Data
+          CONCATENATE ls_outstru_icm-trex_index_server_host lc_colon
+                      ls_outstru_icm-trex_index_server_port gc_sep
+                      lv_status gc_sep
+                      lc_null   gc_sep
+                      lv_text INTO gs_output.
+
+          " Add NULL if last field value is blank
+          gs_prefinal = gs_output.
+
+          CALL METHOD lo_trexadmin_export->end_null_check
+            CHANGING
+              is_prefinal = gs_prefinal.
+
+          gs_output = gs_prefinal.
+          APPEND gs_output TO it_data.
+          CLEAR: gs_output.
+        ENDIF.
+        CLEAR: ls_outstru_icm,gs_output,lv_text,
+               lv_status,lv_througput,gs_prefinal.
+      ENDLOOP.
+      CLEAR: ls_outtab.
+    ENDLOOP.
+
+  ENDMETHOD.                    "read_rfc_monitor_data
+
+  METHOD read_version_data.
+
+    CONSTANTS: lc_status       TYPE c VALUE 'Status'     LENGTH 6,
+               lc_host         TYPE c VALUE 'Host'       LENGTH 4,
+               lc_version      TYPE c VALUE 'Version'    LENGTH 7,
+               lc_build        TYPE c VALUE 'Build'      LENGTH 5,
+               lc_date         TYPE c VALUE
+               'CompileDate'                             LENGTH 12,
+               lc_change       TYPE c VALUE 'ChangeList' LENGTH 10,
+               lc_compile_host TYPE c VALUE
+               'CompileHost'                             LENGTH 14,
+               lc_type         TYPE c VALUE 'Type'       LENGTH 4,
+* Begin of changes V002
+*               lc_title        TYPE c VALUE
+*               'Version details for'                     LENGTH 80,
+               lc_title        TYPE c VALUE
+               'Version details'                         LENGTH 80,
+* End of changes V002
+               lc_error        TYPE c VALUE
+             'Error occured while fetching version data' LENGTH 80,
+               lc_x            TYPE c VALUE 'X'          LENGTH 1.
+
+    DATA: lt_new_version      TYPE trext_trex_version_info2,
+          lv_wrong_version    TYPE flag,
+          lv_status           TYPE string,
+          gs_output           TYPE tab512,
+          ls_new_version      TYPE LINE OF trext_trex_version_info2,
+          ls_new_version2     TYPE LINE OF trext_trex_version_info2,
+          lv_version          TYPE trex_rfc-location,
+          lv_build_nr         TYPE trex_rfc-location,
+          lv_change_list      TYPE trex_rfc-location,
+          lv_compile_date     TYPE num08,
+          lv_compile_host     TYPE trex_rfc-location,
+          lo_trexadmin_export TYPE REF TO lcl_trexadmin_export.
+
+    " Add blank line between each table output
+    gs_output = ' '.
+    APPEND gs_output TO it_data.
+    CLEAR: gs_output.
+
+    " Adding sub title to the output
+    CONCATENATE lc_title iv_rfcserv
+                INTO gs_output
+                SEPARATED BY space.
+    APPEND gs_output TO it_data.
+    CLEAR gs_output.
+
+    CREATE OBJECT lo_trexadmin_export.
+
+    FREE: lt_new_version.
+    CALL FUNCTION 'TREX_EXT_GET_VERSION_INFO'
+      EXPORTING
+        i_rfc_destination  = iv_rfcserv
+      IMPORTING
+        e_trex_verion_info = lt_new_version
+      EXCEPTIONS
+        conversion_error   = 1
+        error              = 2
+        OTHERS             = 3.
+    IF sy-subrc NE 0 AND lt_new_version IS INITIAL.
+
+      CALL FUNCTION 'TREX_EXT_GET_TREX_VERSION_INFO'
+        EXPORTING
+          i_rfc_destination = iv_rfcserv
+        IMPORTING
+          e_version         = lv_version
+          e_build_nr        = lv_build_nr
+          e_change_list     = lv_change_list
+          e_compile_date    = lv_compile_date
+          e_compile_host    = lv_compile_host
+        EXCEPTIONS
+          conversion_error  = 1
+          error             = 2
+          OTHERS            = 3.
+      IF sy-subrc NE 0.
+        gs_output = lc_error.
+        APPEND gs_output TO it_data.
+        CLEAR: gs_output.
+        RETURN.
+      ENDIF.
+
+      "Column Headings
+      CONCATENATE lc_version gc_sep
+                  lc_build   gc_sep
+                  lc_date    gc_sep
+                  lc_change  gc_sep
+                  lc_compile_host INTO gs_output.
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+
+      "data
+      CONCATENATE lv_version      gc_sep
+                  lv_build_nr     gc_sep
+                  lv_compile_date gc_sep
+                  lv_change_list  gc_sep
+                  lv_compile_host INTO gs_output.
+
+      gs_prefinal = gs_output.
+
+      CALL METHOD lo_trexadmin_export->end_null_check
+        CHANGING
+          is_prefinal = gs_prefinal.
+
+      gs_output = gs_prefinal.
+
+      APPEND gs_output TO it_data.
+      CLEAR: gs_output.
+
+    ELSE.
+* Begin of changes in V001
+      IF lt_new_version[] IS INITIAL.
+        gs_output = gc_nodata.
+        APPEND gs_output TO it_data.
+        CLEAR gs_output.
+      ELSE.
+* End of changes in V001
+
+        "Column Heading
+        CONCATENATE lc_status       gc_sep
+                    lc_host         gc_sep
+                    lc_version      gc_sep
+                    lc_build        gc_sep
+                    lc_date         gc_sep
+                    lc_change       gc_sep
+                    lc_compile_host gc_sep
+                    lc_type INTO gs_output.
+        APPEND gs_output TO it_data.
+        CLEAR: gs_output.
+
+        CLEAR: ls_new_version.
+        LOOP AT lt_new_version INTO ls_new_version.
+
+          LOOP AT lt_new_version INTO ls_new_version2
+            WHERE change_list <> ls_new_version-change_list.
+            lv_wrong_version = lc_x.
+            EXIT.
+          ENDLOOP.
+
+          IF lv_wrong_version = lc_x.
+            lv_status = gc_error.       "icon red led
+          ELSE.
+            lv_status = gc_active.      "icon green led
+          ENDIF.
+
+          CONCATENATE lv_status                   gc_sep
+                      ls_new_version-host         gc_sep
+                      ls_new_version-version      gc_sep
+                      ls_new_version-build_nr     gc_sep
+                      ls_new_version-compile_date gc_sep
+                      ls_new_version-change_list  gc_sep
+                      ls_new_version-compile_host gc_sep
+                      ls_new_version-type
+                      INTO gs_output.
+
+          " Add NULL if last field value is blank
+          gs_prefinal = gs_output.
+
+          CALL METHOD lo_trexadmin_export->end_null_check
+            CHANGING
+              is_prefinal = gs_prefinal.
+
+          gs_output = gs_prefinal.
+
+          APPEND gs_output TO it_data.
+          CLEAR: gs_output,ls_new_version,ls_new_version2,
+                 gs_prefinal,lv_wrong_version,lv_status.
+        ENDLOOP.
+      ENDIF. "+V001
+    ENDIF.
+
+  ENDMETHOD.                    "read_version_data
+
+  METHOD end_null_check.
+
+    DATA lv_last_char TYPE char1.
+
+    lv_last_char = substring( val = is_prefinal
+                     off = strlen( is_prefinal ) - 1
+                     len = 1 ).
+    IF lv_last_char = '|'.
+      CONCATENATE is_prefinal 'NULL'
+        INTO is_prefinal.
+    ENDIF.
+
+  ENDMETHOD.                    "end_null_check
+
+  METHOD get_topology.
+
+    FREE: it_topology.
+
+    CALL FUNCTION 'TREX_EXT_GET_TOPOLOGY_TREE'
+      EXPORTING
+        i_path            = iv_topology_path
+        i_rfc_destination = iv_rfcserv
+      IMPORTING
+        e_topology        = it_topology
+      EXCEPTIONS
+        conversion_error  = 1
+        error             = 2
+        OTHERS            = 3.
+    IF sy-subrc NE 0.
+      CLEAR: it_topology.
+    ENDIF.
+
+  ENDMETHOD.                    "get_topology
+
+ENDCLASS.                    "lCL_trexadmin_export IMPLEMENTATION
