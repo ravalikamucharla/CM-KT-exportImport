@@ -1,1 +1,0 @@
-{"OUTPUT": [{"TITLE": "Reginfo File", "DATA": [{"Data": "#VERSION=2"}, {"Data": "#"}, {"Data": "# file /usr/sap/NWO/D00/data/reginfo not found, use internal default"}, {"Data": "#"}, {"Data": "P TP=* HOST=local"}, {"Data": "P TP=* HOST=internal"}]}]}

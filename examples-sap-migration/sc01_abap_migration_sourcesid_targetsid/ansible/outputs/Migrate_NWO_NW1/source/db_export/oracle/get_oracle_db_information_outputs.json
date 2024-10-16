@@ -1,7 +1,0 @@
-[{
-    "NAME": "NWO",
-    "LOG_MODE": "NOARCHIVELOG",
-    "OPEN_MODE": "READWRITE",
-    "DATABASE_ROLE": "PRIMARY",
-    "PLATFORM_NAME": "Linux x86 64-bit"
-}]

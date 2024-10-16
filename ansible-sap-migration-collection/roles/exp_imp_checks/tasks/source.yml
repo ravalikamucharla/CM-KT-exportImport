@@ -1,22 +1,521 @@
-#################################### port status ############################################
-- name: To check if ports are open 
-  command: nc -vz {{ hostip }} 4237
+##################################### port status ############################################
+- name: source | To check if ports are open 
+  command: nc -vz {{ hostvars[groups['source_pas'][0]].ansible_host }} 4237
+  register: port_status_source
+  failed_when: port_status_source.rc not in [0,1]
+
+- name: source | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_status_source.stderr.split('] ')[1] | replace('!','') }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_portstatus.txt"
+  when: port_status_source.stderr is search('succeeded')
+
+- name: source | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_status_source.stderr.split()[-2] }} {{ port_status_source.stderr.split()[-1] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_portstatus.txt" 
+  when: port_status_source.stderr is search('Connection refused')
+
+##################################### port status 4238 ############################################
+- name: source | To check if ports are open 
+  command: nc -vz {{ hostvars[groups['source_pas'][0]].ansible_host }} 4238
+  register: port_status_source_4238
+  failed_when: port_status_source_4238.rc not in [0,1]
+
+- name: source | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_status_source_4238.stderr.split('] ')[1] | replace('!','') }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_portstatus_4238.txt"
+  when: port_status_source_4238.stderr is search('succeeded')
+
+- name: source | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_status_source_4238.stderr.split()[-2] }} {{ port_status_source_4238.stderr.split()[-1] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_portstatus_4238.txt" 
+  when: port_status_source_4238.stderr is search('Connection refused')
+#################################### export dir should have sidadm/sapsys access ############################################
+
+- name: source | export dir permissions
+  stat:
+    path: "{{exp_imp_prechecks.expdir}}"
+  register: directory_info_src
   delegate_to: "{{ groups['source_pas'][0] }}"
-  register: port_status
-  failed_when: port_status.rc not in [0,1]
+  become: yes
+  ignore_errors: true
 
-- name: copy the content of port status to a file
-  set_fact: 
-    port_status: "{{ port_status.stderr.split('] ')[1] | replace('!','') }}"
-  when: port_status.stderr is search('succeeded')
+- name: source | copy the content export dir permissions to a file
+  local_action: 
+    module: copy 
+    content: "{{ directory_info_src.stat.pw_name}}/{{directory_info_src.stat.gr_name }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_export_dir_permissions.txt"
+  when: "{{directory_info_src.stat.exists}} != false"
 
-- name: copy the content of port status to a file
-  set_fact: 
-    port_status: "{{ port_status.stderr.split()[-2] }} {{ port_status.stderr.split()[-1] }}"
-  when: port_status.stderr is search('Connection refused')
+- name: target | copy the content export dir permissions to a file
+  local_action: 
+    module: copy 
+    content: "export directory is not present in source"
+    dest: "{{ exp_imp_prechecks.target_file_path }}/target_export_dir_permissions.txt"
+  when: "{{directory_info_src.stat.exists}} == false"
 
-- name: source checks
-  template:
-    src: "source.j2"
-    dest: "{{ output }}/source_checks.md"
-  delegate_to: localhost
+#################################### export dir empty ############################################
+
+- name: source | Find files in the export directory
+  command: ls "{{exp_imp_prechecks.expdir}}" | wc -l
+  register: directory_contents
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  become: yes
+  ignore_errors: true
+
+- set_fact: 
+    directory_contents_src: "Directory does not exists"
+  when: "{{directory_info_src.stat.exists}} == false"
+
+- set_fact: 
+    directory_contents_src: "{{directory_contents.stdout_lines[1]}}"
+  when: 
+    - "{{directory_info_src.stat.exists}} != false"
+
+- name: source | copy the content export dir content to a file
+  local_action: 
+    module: copy 
+    content: "{{ directory_contents_src }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_export_dir_contents.txt"
+
+#################################### export dir size in source system ############################################
+
+- name: source | Find size in the export directory
+  command: du -sh {{exp_imp_prechecks.expdir}}
+  register: exp_directory_size
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  become: yes
+  ignore_errors: true
+
+- set_fact: 
+    directory_size: "{{exp_directory_size.stdout.split('/')[0]| trim}}"
+
+- set_fact: 
+    directory_size_src: "Source export directory have the required space"
+  when: directory_size == "{{exp_imp_prechecks.export_dir_size_src}}"
+
+- set_fact: 
+    directory_size_src: "Source export directory has greater size than the required space"
+  when: directory_size > "{{exp_imp_prechecks.export_dir_size_src}}"
+
+- set_fact: 
+    directory_size_src: "Source export directory has less size than the required space"
+  when: directory_size < "{{exp_imp_prechecks.export_dir_size_src}}"
+
+#################################### nfs status on source pas ############################################
+
+- name: source | Check for nfs service
+  shell: "systemctl show nfs | grep LoadState | cut -d = -f 2"
+  register: nfs_service_status_src_pas
+  changed_when: no
+  check_mode: no
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  become: yes
+  ignore_errors: true
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+- name: source | copy the content nfs service status to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ nfs_service_status_src_pas.stdout_lines[0] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_nfs_status_src_pas.txt"
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+#################################### nfs status on source db ############################################
+
+- name: source | Check for nfs service
+  shell: "systemctl show nfs | grep LoadState | cut -d = -f 2"
+  register: nfs_service_status_src_db
+  changed_when: no
+  check_mode: no
+  delegate_to: "{{ groups['source_db'][0] }}"
+  become: yes
+  ignore_errors: true
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+- name: source | copy the content nfs service status to a file of source db
+  local_action: 
+    module: copy 
+    content: "{{ nfs_service_status_src_db.stdout_lines[0] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_nfs_status_src_db.txt"
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+#################################### ftp status on source pas ############################################
+
+- name: source | Check for ftp service
+  shell: "systemctl show vsftpd | grep LoadState | cut -d = -f 2"
+  register: ftp_service_status_src_pas
+  changed_when: no
+  check_mode: no
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  become: yes
+  ignore_errors: true
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+
+- name: source | copy the content ftp service status to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ ftp_service_status_src_pas.stdout_lines[0] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_ftp_status_src_pas.txt"
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+
+#################################### ftp status on source db ############################################
+
+- name: source | Check for ftp service
+  shell: "systemctl show vsftpd | grep LoadState | cut -d = -f 2"
+  register: ftp_service_status_src_db
+  changed_when: no
+  check_mode: no
+  delegate_to: "{{ groups['source_db'][0] }}"
+  become: yes
+  ignore_errors: true
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+
+- name: source | copy the content ftp service status to a file of source db
+  local_action: 
+    module: copy 
+    content: "{{ ftp_service_status_src_db.stdout_lines[0] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_ftp_status_src_db.txt"
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+
+################################## port status check from source ###################################
+- name: source | port status check from source to target
+  vars: 
+    target_ip: "{{ hostvars[groups['target_pas'][0]].ansible_host }}"
+  command: telnet {{ target_ip }} 21
+  become: yes
+  register: port_stat_src_tgt
+  failed_when: port_stat_src_tgt.rc not in [0,1]
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+- name: source | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_stat_src_tgt.stderr.split('] ')[1] | replace('!','') }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/src_tgt_port_status.txt"
+  when: port_stat_src_tgt.stderr is search('succeeded')
+
+- name: source | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_stat_src_tgt.stderr.split()[-2] }} {{ port_status_source.stderr.split()[-1] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/src_tgt_port_status.txt" 
+  when: port_stat_src_tgt.stderr is search('Connection refused')
+
+#################################### R3load version in source server ############################################
+
+- name: source | Execute command for r3load version
+  command: sudo su - {{ app_sid_src |lower }}adm -c "R3load -version"
+  register: r3load_outputs_src
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+- set_fact: 
+    r3load_outputs: "{{ r3load_outputs_src.stdout_lines[5] }} {{r3load_outputs_src.stdout_lines[23]}}"
+  when: r3load_outputs_src.stdout != ''
+
+- name: source | filter kernel version for comparison between source and target
+  shell: echo "{{ r3load_outputs_src.stdout_lines[5] }}" | tr -cd '0-9' 
+  register: r3load_kernel_ver_src
+  when: r3load_outputs_src.stdout != ''
+    
+- set_fact:
+    r3load_kernel_ver_src: "{{ r3load_kernel_ver_src.stdout | int }}"
+  when: r3load_outputs_src.stdout != ''
+
+- name: source | copy the content kernel version to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ r3load_kernel_ver_src }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/kernel-version.txt"
+  when: r3load_outputs_src.stdout != ''
+
+- name: source | filterpatch no for comparison between source and target
+  shell: echo "{{ r3load_outputs_src.stdout_lines[23] }}" | tr -cd '0-9' 
+  register: r3load_patch_no_src
+  when: r3load_outputs_src.stdout != ''
+    
+- set_fact:
+    r3load_patch_no_src: "{{ r3load_patch_no_src.stdout | int }}"
+  when: r3load_outputs_src.stdout != ''
+
+- name: source | copy the content patch no to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ r3load_patch_no_src }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/patch-no.txt"
+  when: r3load_outputs_src.stdout != ''
+
+- name: source | copy the content R3load to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ r3load_outputs }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/r3load-version.txt"
+  when: r3load_outputs_src.stdout != ''
+
+- name: source | copy the content R3load to a file of source pas
+  local_action: 
+    module: copy 
+    content: "Error: {{ r3load_outputs_src.msg }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/r3load-version.txt"
+  when: r3load_outputs_src.stdout == ''
+
+############################################ r3trans version ###############################################################
+- name: source | r3trans version check
+  command: sudo su - {{ app_sid_src | lower }}adm -c "R3trans -version"
+  register: r3trans_src
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  failed_when: r3trans_src.rc not in [12,0]
+
+- set_fact: 
+    r3trans: "{{ r3trans_src.stdout_lines[7]}} {{r3trans_src.stdout_lines[25]}}"
+  when: r3trans_src.stdout != ''
+
+- name: source | copy the content r3trans to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ r3trans }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/r3trans-version.txt"
+  when: r3trans_src.stdout != ''
+
+- name: source | copy the content r3trans to a file of source pas
+  local_action: 
+    module: copy 
+    content: "Error: {{ r3trans_src.msg }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/r3trans-version.txt"
+  when: r3trans_src.stdout == ''
+
+############################################ disp+work ###############################################################
+- name: source | disp_work check
+  command: sudo su - {{ app_sid_src | lower }}adm -c "disp+work"
+  register: disp_work_src 
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+- set_fact: 
+    disp_work: "{{ disp_work_src.stdout_lines[5]}} {{disp_work_src.stdout_lines[19]}}"
+  when: disp_work_src.stdout != ''
+
+- name: source | copy the content disp_work to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ disp_work }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/disp_work.txt"
+  when: disp_work_src.stdout != ''
+
+- name: source | copy the content disp_work to a file of source pas
+  local_action: 
+    module: copy 
+    content: "Error: {{ disp_work_src.msg }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/disp_work.txt"
+  when: disp_work_src.stdout == ''
+
+############################################ check if smigr is executed in export directory ###############################################################
+- name: source | Check if smigr is executed in export directory
+  stat:
+    path: "{{exp_imp_prechecks.impdir}}/SQLFiles.LST"
+  register: smigr_status
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  become: yes
+  ignore_errors: true
+
+- set_fact: 
+    smigr_status_src: "smigr not executed in source in export directory"
+  when: "{{smigr_status.stat.exists}} == false"
+
+- set_fact: 
+    smigr_status_src: "smigr executed in source in export directory"
+  when: "{{smigr_status.stat.exists}} != false"
+  
+#################################### cpu count no of process count on source system ############################################
+
+- name: source | Command to check the CPU Count
+  shell: nproc
+  become: yes
+  register: output_cpucount_src
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+- name: source | copy the content CPU Count to a file of source pas
+  local_action: 
+    module: copy 
+    content: "Error: {{ output_cpucount_src.stderr }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_cpu_count.txt"
+  when: output_cpucount_src.stdout == ''
+
+- name: source | copy the content CPU Count to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ output_cpucount_src.stdout }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_cpu_count.txt"
+  when: output_cpucount_src.stdout != ''
+
+- name: source | get the number of processes easy for user to a file of source pas
+  local_action: 
+    module: copy 
+    content: "Error in processes count"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_processes_count.txt"
+  when: output_cpucount_src.stdout == ''
+  
+- name: source | set fact number of processes easy for user of source pas
+  set_fact:
+    no_process_src: "{{ (output_cpucount_src.stdout | int)*3}}"
+  when: output_cpucount_src.stdout != ''
+
+- name: source | get the number of processes easy for user to a file of source pas
+  local_action: 
+    module: copy 
+    content: "{{ no_process_src }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_processes_count.txt"
+  when: output_cpucount_src.stdout != ''
+
+######################################### db service ###########################################################
+
+- name: source | Status of start and stop of database service
+  shell: sudo su - {{ db_sid_src | lower }}adm -c "sapcontrol -nr {{ db_instance_number }} -function GetProcessList"
+  failed_when: "db_service_status.rc not in [0,1,2,3,4,5]"
+  register: db_service_status
+  delegate_to: "{{ groups['source_db'][0] }}"
+
+- name: source | copy the content of db service status to a file
+  local_action: 
+    module: copy 
+    content: "{{ db_service_status.stdout }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/dbservice_status.txt" 
+######################################### ascs service ###########################################################
+
+- name: source | Status of start and stop of ascs service
+  shell: sudo su - {{ app_sid_src | lower }}adm -c "sapcontrol -nr {{ ascs_instance_number }} -function GetProcessList"
+  register: ascs_service_status
+  delegate_to: "{{ groups['source_ascs'][0] }}"
+  failed_when: "ascs_service_status.rc not in [0,1,2,3,4,5]"
+
+- name: source | copy the content of ascs service status to a file
+  local_action: 
+    module: copy 
+    content: "{{ ascs_service_status.stdout }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/ascsservice_status.txt" 
+
+######################################### pas service ###########################################################
+
+- name: source | Status of start and stop of pas service
+  shell: sudo su - {{ app_sid_src | lower }}adm -c "sapcontrol -nr {{ pas_instance_number }} -function GetProcessList"
+  register: pas_service_status
+  delegate_to: "{{ groups['source_pas'][0] }}"
+  failed_when: "pas_service_status.rc not in [0,1,2,3,4,5]"
+
+- name: source | copy the content of pas service status to a file
+  local_action: 
+    module: copy 
+    content: "{{ pas_service_status.stdout }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/passervice_status.txt" 
+
+##################################### ulimit -a for root user on source system ############################################
+
+- name: source | Execute command for ulimit for root user
+  shell: ulimit -a
+  register: ulimit_outputs_src
+  become: yes
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+- name: source | get ulimit output to a file of source pas for root user
+  local_action: 
+    module: copy 
+    content: "{{ ulimit_outputs_src.stdout }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_ulimit.txt"
+  when: ulimit_outputs_src.stdout_lines | length > 0
+
+- name: source | get ulimit output to a file of source pas for root user
+  local_action: 
+    module: copy 
+    content: "{{ ulimit_outputs_src.stderr }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_ulimit.txt"
+  when: ulimit_outputs_src.stderr is search('Command not found')
+
+##################################### oel port status ############################################
+
+- name: main | oel check
+  include_tasks: oel.yml
+  when: 
+    - db_type is defined
+    - db_type == "oracle"
+# #################################### ulimit -a for sidadm user on source system ############################################
+
+- name: source | Execute command for ulimit for sidadm user
+  shell: sudo su - {{ app_sid_src|lower }}adm -c 'ulimit -a'
+  register: ulimit_outputs_src_sidadm
+  become: yes
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+- name: source | get ulimit output to a file of source pas for sidadm user
+  local_action: 
+    module: copy 
+    content: "{{ ulimit_outputs_src_sidadm.stdout }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_ulimit_sidadm.txt"
+  when: ulimit_outputs_src.stdout_lines | length > 0
+
+- name: source | get ulimit output to a file of source pas for sidadm user
+  local_action: 
+    module: copy 
+    content: "{{ ulimit_outputs_src_sidadm.stderr }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_ulimit_sidadm.txt"
+  when: ulimit_outputs_src_sidadm.stderr is search('Command not found')
+
+#################################### Firewall status on source ############################################
+
+- name: source | Command to check the Firewall status in source system
+  shell: systemctl status firewalld | awk 'NR==3'
+  become: yes
+  register: output_firewall_src
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+#################################### Swap space check on source ############################################
+
+- name: source | Checking the size of swap
+  shell: free -g | grep Swap | awk '{print $2}'
+  become: yes
+  register: output_swap_src
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+#################################### timezone check on source ############################################
+
+- name: source | Command to check the timezone
+  shell: date
+  become: yes
+  register: output_timezone_src
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"
+
+#################################### Check saptune is set on source ############################################
+
+- name: source | Fetching the saptune name
+  shell: /usr/sbin/saptune solution list | awk '{print $1,$2}' | sed -n '/\* /s///p'
+  become: yes
+  register: output_saptune_src
+  ignore_errors: true
+  delegate_to: "{{ groups['source_pas'][0] }}"

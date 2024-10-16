@@ -1,5 +1,6 @@
 login_mechanism: sudo # sudo, dzdo provide login mechanism 
 platform: azure # azure, gcp, aws
+connection_type: password_without_group #router_with_group/router_without_group/password_with_group/password_without_group/snc_with_group_with_cert/snc_without_group_with_cert/snc_router_password_without_group/snc_router_password_with_group
 
 bucket_name: "ns-sw"  # IF platform is aws
 downloads_path:
@@ -247,6 +248,33 @@ passwords:  #The passwords of sudo users for os script execution.
   env_update:
     source: "{{ env_update_passwords.source }}"
     target: "{{ env_update_passwords.target }}"
+  router:
+    connection_saprouter: "{{ router.connection_saprouter }}" #saprouter connection string needs to be pass in vault file,if needed
+  snc_cm:
+    password: "{{ snc_cm.password }}"
+
+abap_scripts_path: "/code1/ravali/CM-KT/examples-sap-migration/sc01_abap_migration_FIO_FIO/ansible/scripts/"
+outputs_path: "/code1/ravali/CM-KT/examples-sap-migration/sc01_abap_migration_FIO_FIO/ansible/outputs"
+
+# pass values only when you want to send ansible log via mail
+mail_server: #smtp.ex.com # if send_email = yes
+sender_email_address: abc@accenture.com # if send_email = yes
+recipient_email_address: # if send_email = yes
+  - xyz@accenture.com
+  - lkm@accenture.com
+cc_email_address: bca@accenture.com # if send_email = yes
+
+snc:
+  cm_snc_partner_value: "CN=SAP_CloudMigrate-RFC, OU=SAPCloudSuite, O=Accenture, C=IN"
+  snc_partner_value: p:CN=FIO, OU=SAPCloudSuite, O=Accenture, C=IN 
+  trace_value: 3
  
-abap_scripts_path: "/code1/susmita/CM-KT-exportImport/examples-sap-migration/sc05_export_import_nfs_mig_NWO_HDB/ansible/scripts/"
-outputs_path: "/code1/susmita/CM-KT-exportImport/examples-sap-migration/sc05_export_import_nfs_mig_NWO_HDB/ansible/outputs"
+folders: #folder creation to store output
+  - path: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/abap_export/"
+    owner: "root"
+    group: "root"
+    mode: '0755'
+  - path: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/target/abap_export/"
+    owner: "root"
+    group: "root"
+    mode: '0755'

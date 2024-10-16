@@ -1,14 +1,8 @@
 
 - name: establish connection and getting output from SAP installed System 
   sap_pyrfc: 
-    username: "{{ user }}" 
-    password: "{{ password }}" 
-    sncpartnername: "{{ sncpartner_name }}"
-    hostname: "{{ hostname }}"
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: "{{ item.name }}" 
     outputspath: "{{ abap_export_path }}" 
@@ -70,14 +64,8 @@
 
 - name: establish connection and getting output from SAP installed System client
   sap_pyrfc: 
-    username: "{{ item.user }}" 
-    password: "{{ item.password }}" 
-    sncpartnername: "{{ sncpartner_name }}"
-    hostname: "{{ hostname }}"
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ item.client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: "{{ item.name }}" 
     outputspath: "{{ abap_export_path }}{{ item.client }}_" 
@@ -107,12 +95,7 @@
 
 - name: Execute os commands
   os_command_execution: 
-    username: "{{ user }}" 
-    password: "{{ password }}" 
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: ZCM_EXP_RSBDCOS0_OSCOMMAND.txt 
     command: "{{ item.query }}" 

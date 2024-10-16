@@ -7,7 +7,7 @@
 * Related Transaction OR Standard Program References                  *
 * RSBDCOS0                                                            *
 *---------------------------------------------------------------------*
-*Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
 * XXXXX                     X                                         *
 *---------------------------------------------------------------------*
 * Program Change History                                              *
@@ -16,6 +16,7 @@
 *---------------------------------------------------------------------*
 *07-06-2022  Initial   Soumya Ray   Local        Fetch result of OS   *
 *                                                commands             *
+*03-04-2023  V001      Yasaswini K  Local        To add SXPG framework*
 *---------------------------------------------------------------------*
 
 "The execute command is taken from 'EXEC' perform of program 'RSBDCOS0'
@@ -26,9 +27,14 @@ FORM get_config
                TABLES lt_input  STRUCTURE tab512
                       lt_output STRUCTURE tab512.
 
-  TYPES: BEGIN OF lty_result,
-           value TYPE c LENGTH 255,
-         END OF lty_result.
+*  Begin of changes in V001
+  TYPES: BEGIN OF lty_sxpgcostab,
+           name       TYPE sxpglogcmd,
+           opsystem   TYPE syopsys,
+           opcommand  TYPE btcxpgpgm,
+           parameters TYPE btcxpgpar,
+         END OF lty_sxpgcostab.
+*  End of changes in V001
 
   CONSTANTS: lc_sep       TYPE c VALUE '|'      LENGTH 1,
              lc_colon     TYPE c VALUE ':'      LENGTH 1,
@@ -37,17 +43,22 @@ FORM get_config
              'No input passed'                  LENGTH 15,
              lc_nodata    TYPE c  VALUE
              'No data found'                    LENGTH 20,
+             lc_error     TYPE c VALUE
+             'Error in command'                 LENGTH 20,
              lc_inc_input TYPE c VALUE
              'Incorrect input'                  LENGTH 20,
              lc_title     TYPE c VALUE
              'Result of OS command'             LENGTH 20.
 
-  DATA: ls_output TYPE tab512,
-        ls_input  TYPE tab512,
-        lv_action TYPE string,
-        lv_cmd    TYPE c LENGTH 254,
-        ls_result TYPE lty_result,
-        lt_result TYPE STANDARD TABLE OF lty_result.
+  DATA: ls_output     TYPE tab512,
+        ls_input      TYPE tab512,
+        lv_action     TYPE string,
+        lt_sxpgcostab TYPE STANDARD TABLE OF lty_sxpgcostab,   "+V001
+        ls_sxpgcostab TYPE lty_sxpgcostab,                     "+V001
+        lv_cmd        TYPE c LENGTH 254,
+        lv_parameters TYPE btcxpgpar,
+        ls_result     TYPE btcxpm,
+        lt_result     TYPE STANDARD TABLE OF btcxpm.
 
   CLEAR: ls_output, ls_input, lv_action, lv_cmd, ls_result.
   FREE: lt_result.
@@ -68,20 +79,72 @@ FORM get_config
 
   SPLIT ls_input AT lc_sep INTO
   lv_action
-  lv_cmd.
+  lv_cmd
+  lv_parameters.
 
   CASE lv_action.
     WHEN lc_export. "EXPORT
 
       FREE: lt_output.
+
+      IF lv_parameters IS INITIAL.
+
       CONCATENATE lc_title lc_colon lv_cmd INTO ls_output
       SEPARATED BY space.
       APPEND ls_output TO lt_output.
       CLEAR ls_output.
+      
+      ELSE.
 
-      "Execute command
-      CALL 'SYSTEM' ID 'COMMAND' FIELD lv_cmd
-                    ID 'TAB'     FIELD lt_result.
+      CONCATENATE lc_title lc_colon lv_cmd
+      lv_parameters INTO ls_output
+      SEPARATED BY space.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      ENDIF.
+
+*  Begin of changes in V001
+      SELECT name opsystem opcommand FROM sxpgcostab
+        INTO TABLE lt_sxpgcostab
+        WHERE opcommand = lv_cmd
+        AND   parameters = lv_parameters.
+
+      IF sy-subrc = 0.
+
+        READ TABLE lt_sxpgcostab INTO ls_sxpgcostab INDEX 1.
+
+        IF sy-subrc = 0.
+
+          CALL FUNCTION 'SXPG_CALL_SYSTEM'
+            EXPORTING
+              commandname                = ls_sxpgcostab-name
+              additional_parameters      = ls_sxpgcostab-parameters
+            TABLES
+              exec_protocol              = lt_result
+            EXCEPTIONS
+              no_permission              = 1
+              command_not_found          = 2
+              parameters_too_long        = 3
+              security_risk              = 4
+              wrong_check_call_interface = 5
+              program_start_error        = 6
+              program_termination_error  = 7
+              x_error                    = 8
+              parameter_expected         = 9
+              too_many_parameters        = 10
+              illegal_command            = 11
+              OTHERS                     = 12.
+          IF sy-subrc <> 0.
+            ls_output = lc_error.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+          ENDIF.
+
+        ENDIF.
+      ENDIF.
+*  End of changes in V001
 
       IF lt_result IS INITIAL.
         ls_output = lc_nodata.
@@ -94,7 +157,7 @@ FORM get_config
         IF ls_result IS INITIAL.
           CONTINUE.
         ENDIF.
-        ls_output = ls_result-value.
+        ls_output = ls_result-message.
         APPEND ls_output TO lt_output.
         CLEAR: ls_output, ls_result.
       ENDLOOP.

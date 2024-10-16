@@ -97,4 +97,4 @@
      path: /tmp/{{ item.name }}.sql
      state: absent
   with_items:
-     - "{{ hana_queries }}"     
+     - "{{ hana_queries }}" 

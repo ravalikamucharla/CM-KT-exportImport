@@ -17,47 +17,46 @@
 *09-09-2020  Initial   Fathima Hussain   Local      To Check Transport*
 *09-09-2022  V001      Yasaswini K       Local      To add no data    *
 *                                                     found changes   *
+*08-04-2023  V002      Ashwini K P       Local    Added error handling*
+*                                                 and NULL check logic*
 *---------------------------------------------------------------------*
-REPORT ZCM_STMS_CHK_CONNECTION.
-
-*INCLUDE lstpacon.
-*INCLUDE ltmsccon.
+REPORT zcm_stms_chk_connection.
 
 CONSTANTS:
-  gc_tp_test_tp_version  LIKE tptest-name    VALUE 'TP_VERSION',
-  gc_tp_test_db_connect  LIKE tptest-name    VALUE 'DB_CONNECT',
-  gc_tp_test_tp_offline  LIKE tptest-name    VALUE 'TP_OFFLINE',
-  gc_tp_test_rfc_ping    LIKE tptest-name    VALUE 'RFC_PING',
-  gc_tp_test_rfc_connect LIKE tptest-name    VALUE 'RFC_CONNECT',
-  gc_tp_test_open_param  LIKE tptest-name    VALUE 'OPEN_PARAM',
-  gc_tp_test_param_vers  LIKE tptest-name    VALUE 'PARAM_VERS',
-  gc_tp_test_tp_path     LIKE tptest-name    VALUE 'TP_PATH',
-  gc_tp_test_tp_check    LIKE tptest-name    VALUE 'TP_CHECK',
-  gc_tp_test_version     LIKE tptest-name    VALUE 'VERSION',
-  gc_tms_sev_error       like stmsc-severity value 'E',
-  gc_trans_buffer        LIKE stpa-file      VALUE 'buffer',
-  gc_trans_cofiles       LIKE stpa-file      VALUE 'cofiles',
-  gc_trans_data          LIKE stpa-file      VALUE 'data',
-  gc_trans_log           LIKE stpa-file      VALUE 'log',
-  gc_tms_sev_info        like stmsc-severity value 'I',
-  gc_tp_test_dir_trans   LIKE tptest-name    VALUE 'DIR_TRANS',
-  gc_tp_test_logging     LIKE tptest-name    VALUE 'LOGGING',
-  gc_tp_test_dest_name   LIKE tptest-name    VALUE 'DEST_NAME',
+  gc_tp_test_tp_version  TYPE tptest-name    VALUE 'TP_VERSION',
+  gc_tp_test_db_connect  TYPE tptest-name    VALUE 'DB_CONNECT',
+  gc_tp_test_tp_offline  TYPE tptest-name    VALUE 'TP_OFFLINE',
+  gc_tp_test_rfc_ping    TYPE tptest-name    VALUE 'RFC_PING',
+  gc_tp_test_rfc_connect TYPE tptest-name    VALUE 'RFC_CONNECT',
+  gc_tp_test_open_param  TYPE tptest-name    VALUE 'OPEN_PARAM',
+  gc_tp_test_param_vers  TYPE tptest-name    VALUE 'PARAM_VERS',
+  gc_tp_test_tp_path     TYPE tptest-name    VALUE 'TP_PATH',
+  gc_tp_test_tp_check    TYPE tptest-name    VALUE 'TP_CHECK',
+  gc_tp_test_version     TYPE tptest-name    VALUE 'VERSION',
+  gc_tms_sev_error       TYPE stmsc-severity VALUE 'E',
+  gc_trans_buffer        TYPE stpa-file      VALUE 'buffer',
+  gc_trans_cofiles       TYPE stpa-file      VALUE 'cofiles',
+  gc_trans_data          TYPE stpa-file      VALUE 'data',
+  gc_trans_log           TYPE stpa-file      VALUE 'log',
+  gc_tms_sev_info        TYPE stmsc-severity VALUE 'I',
+  gc_tp_test_dir_trans   TYPE tptest-name    VALUE 'DIR_TRANS',
+  gc_tp_test_logging     TYPE tptest-name    VALUE 'LOGGING',
+  gc_tp_test_dest_name   TYPE tptest-name    VALUE 'DEST_NAME',
   gc_create              TYPE stms_flag      VALUE 'C',
   gc_read                TYPE stms_flag      VALUE 'R',
   gc_delete              TYPE stms_flag      VALUE 'D',
-  gc_test_host           LIKE tptest-name    VALUE 'host',
-  gc_trans_bin           LIKE stpa-file      VALUE 'bin',
-  gc_trans_sapnames      LIKE stpa-file      VALUE 'sapnames',
-  gc_trans_tmp           LIKE stpa-file      VALUE 'tmp',
-  gc_test_interface      LIKE tptest-name    VALUE 'interface',
-  gc_test_profile        LIKE tptest-name    VALUE 'profile',
-  gc_tp_test_param_path  LIKE tptest-name    VALUE 'PARAM_PATH',
-  gc_test_destination    LIKE tptest-name    VALUE 'destination',
-  gc_test_connect        LIKE tptest-name    VALUE 'connect',
-  gc_test_deploy_service LIKE tptest-name    VALUE 'deploy service',
-  gc_test_deploy_tools   LIKE tptest-name    VALUE 'deploy tools',
-  gc_test_generic_deploy LIKE tptest-name    VALUE 'generic deploy',
+  gc_test_host           TYPE tptest-name    VALUE 'host',
+  gc_trans_bin           TYPE stpa-file      VALUE 'bin',
+  gc_trans_sapnames      TYPE stpa-file      VALUE 'sapnames',
+  gc_trans_tmp           TYPE stpa-file      VALUE 'tmp',
+  gc_test_interface      TYPE tptest-name    VALUE 'interface',
+  gc_test_profile        TYPE tptest-name    VALUE 'profile',
+  gc_tp_test_param_path  TYPE tptest-name    VALUE 'PARAM_PATH',
+  gc_test_destination    TYPE tptest-name    VALUE 'destination',
+  gc_test_connect        TYPE tptest-name    VALUE 'connect',
+  gc_test_deploy_service TYPE tptest-name    VALUE 'deploy service',
+  gc_test_deploy_tools   TYPE tptest-name    VALUE 'deploy tools',
+  gc_test_generic_deploy TYPE tptest-name    VALUE 'generic deploy',
   gc_x                   TYPE c              VALUE 'X',
   gc_01                  TYPE c              VALUE '01'       LENGTH 2,
   gc_02                  TYPE c              VALUE '02'       LENGTH 2,
@@ -72,122 +71,125 @@ CONSTANTS:
   gc_top                 TYPE c              VALUE 'TOP'      LENGTH 3,
   gc_checked             TYPE c              VALUE 'CHECKED'  LENGTH 7,
   gc_fail                TYPE c              VALUE 'FAILURE'  LENGTH 7,
-  gc_appl_prefix         LIKE tptest-name    VALUE 'APPL:'.
+  gc_appl_prefix         TYPE tptest-name    VALUE 'APPL:',
+* Begin of changes V002
+  gc_null                TYPE c              VALUE 'NULL'     LENGTH 4.
+* End of changes V002
 
-CONSTANTS:
-  lc_col_background TYPE n              VALUE '0',
-  lc_col_blue       TYPE n              VALUE '1',
-  lc_col_normal     TYPE n              VALUE '2'.
+CONSTANTS: lc_col_background TYPE n          VALUE '0',
+           lc_col_blue       TYPE n          VALUE '1',
+           lc_col_normal     TYPE n          VALUE '2'.
 
 DATA: BEGIN OF gt_result OCCURS 0.
     INCLUDE STRUCTURE snodetext.
-DATA: END   OF gt_result.
+DATA: END   OF gt_result,
+alldir        TYPE boolean,
+  dir_bin       TYPE boolean,
+  dir_buff      TYPE boolean,
+  dir_cofi      TYPE boolean,
+  dir_data      TYPE boolean,
+  dir_log       TYPE boolean,
+  dir_sapn      TYPE boolean,
+  dir_tmp       TYPE boolean,
+  gs_ci_pings   TYPE stms_ci_pings,
+  gs_ci_ping    TYPE stms_ci_ping,
+  gs_tp_dirtsts TYPE stms_tp_dirtsts,
+  BEGIN OF gs_grp_col,
+    date TYPE sy-datum,
+    time TYPE sy-uzeit,
+  END   OF gs_grp_col,
+  gt_sys TYPE STANDARD TABLE OF tmscsys,        "OCCURS 0,
+  gt_nfs TYPE STANDARD TABLE OF tmscnfs,       "OCCURS 0,
+  system TYPE tmscsys-sysnam,
+  domain TYPE tmscsys-domnam,
+  BEGIN OF gt_list OCCURS 0,
+    level    TYPE snodetext-tlevel,
+    name     TYPE tptest-name,
+    text(40),
+  END OF gt_list.
 
-DATA alldir TYPE boolean.
-DATA dir_bin TYPE boolean.
-DATA dir_buff TYPE boolean.
-DATA dir_cofi TYPE boolean.
-DATA dir_data TYPE boolean.
-DATA dir_log TYPE boolean.
-DATA dir_sapn TYPE boolean.
-DATA dir_tmp TYPE boolean.
+FORM get_config TABLES lt_input  STRUCTURE tab512
+                       lt_output STRUCTURE tab512.
 
-DATA: gs_ci_pings TYPE stms_ci_pings,
-      gs_ci_ping  TYPE stms_ci_ping.
-
-DATA: gs_tp_dirtsts          TYPE stms_tp_dirtsts.
-
-
-DATA: BEGIN OF gs_grp_col,
-        date LIKE sy-datum,
-        time LIKE sy-uzeit,
-      END   OF gs_grp_col.
-
-
-DATA: gt_sys LIKE tmscsys        OCCURS 0,
-      gt_nfs LIKE tmscnfs        OCCURS 0,
-      system LIKE tmscsys-sysnam,
-      domain LIKE tmscsys-domnam.
-
-DATA: BEGIN OF gt_list OCCURS 0,
-        level    LIKE snodetext-tlevel,
-        name     LIKE tptest-name,
-        text(40),
-      END   OF gt_list.
-
-
-
-FORM get_config
-              TABLES lt_input  STRUCTURE tab512
-                     lt_output STRUCTURE tab512.
-
-  CONSTANTS: lc_sep        TYPE c       VALUE '|',
-             lc_export     TYPE char20 VALUE 'EXPORT',
-             lc_title1     TYPE c      VALUE 'Connection Test'
-                                                           LENGTH 20,
-             lc_system     TYPE c      VALUE 'System'      LENGTH 10,
-             lc_host       TYPE c      VALUE 'Host'        LENGTH 10,
-             lc_desc       TYPE c      VALUE 'Description' LENGTH 20,
-             lc_rtime      TYPE c      VALUE 'Rtime(ms)'   LENGTH 10,
-             lc_status     TYPE c      VALUE 'Status'      LENGTH 10,
+  CONSTANTS: lc_sep       TYPE c      VALUE '|',
+             lc_export    TYPE c      VALUE 'EXPORT'         LENGTH 6,
+             lc_title1    TYPE c      VALUE 'Connection Test'
+                                                             LENGTH 20,
+             lc_system    TYPE c      VALUE 'System'         LENGTH 10,
+             lc_host      TYPE c      VALUE 'Host'           LENGTH 10,
+             lc_desc      TYPE c      VALUE 'Description'    LENGTH 20,
+             lc_rtime     TYPE c      VALUE 'Rtime(ms)'      LENGTH 10,
+             lc_status    TYPE c      VALUE 'Status'         LENGTH 10,
 *  Begin of changes in V001
-             lc_chkdir     TYPE c      VALUE 'Check Directory'
-                                                              LENGTH 20,
-             lc_level      TYPE c      VALUE 'LEVEL'          LENGTH 10,
-             lc_name       TYPE c      VALUE 'NAME'           LENGTH 10,
-             lc_path       TYPE c      VALUE 'PATH'           LENGTH 10,
-             lc_failure    TYPE c      VALUE 'Failure'        LENGTH 10,
-             lc_okay       TYPE c      VALUE 'Okay'           LENGTH 4,
-             lc_tool       TYPE c      VALUE 'Transport Tool' LENGTH 20,
-             lc_descr      TYPE c      VALUE 'DESCRIPTION'    LENGTH 20,
-             lc_title      TYPE c      VALUE 'STMSCONNECTION'
-                                                              LENGTH 25,
-             lc_inc_input  TYPE c      VALUE
-             'Incorrect input'                                LENGTH 20,
-             lc_noinput    TYPE c      VALUE
-             'No input passed'                                LENGTH 20,
+             lc_chkdir    TYPE c      VALUE 'Check Directory'
+                                                             LENGTH 20,
+             lc_level     TYPE c      VALUE 'LEVEL'          LENGTH 10,
+             lc_name      TYPE c      VALUE 'NAME'           LENGTH 10,
+             lc_path      TYPE c      VALUE 'PATH'           LENGTH 10,
+             lc_failure   TYPE c      VALUE 'Failure'        LENGTH 10,
+             lc_okay      TYPE c      VALUE 'Okay'           LENGTH 4,
+             lc_tool      TYPE c      VALUE 'Transport Tool' LENGTH 20,
+             lc_descr     TYPE c      VALUE 'DESCRIPTION'    LENGTH 20,
+             lc_title     TYPE c      VALUE 'STMSCONNECTION'
+                                                             LENGTH 25,
+             lc_inc_input TYPE c      VALUE
+             'Incorrect input'                               LENGTH 20,
+             lc_noinput   TYPE c      VALUE
+             'No input passed'                               LENGTH 20,
 *  End of changes in V001
-             lc_tp        TYPE c VALUE 'tp-Interface'
-                                                            LENGTH 20,
-             lc_hostnam   TYPE c VALUE 'Host Name'
-                                                            LENGTH 10,
-           	 lc_ver       TYPE c VALUE 'Version'            LENGTH 10,
-             lc_rfcdes    TYPE c VALUE 'RFC-Destination'    LENGTH 20,
-             lc_rfccon    TYPE c VALUE 'RFC-Connection'     LENGTH 20,
-             lc_tpver     TYPE c VALUE 'tp-Version'         LENGTH 20,
-             lc_des       TYPE c VALUE 'Destination'        LENGTH 20,
-             lc_proxy     TYPE c VALUE 'Proxy'              LENGTH 10,
-             lc_verb      TYPE c VALUE 'Verbindungstest'    LENGTH 20,
-             lc_filetr    TYPE c VALUE 'File Transfer'      LENGTH 20,
-             lc_deploy    TYPE c VALUE 'Deploy Tool'        LENGTH 20,
-             lc_sdmtool   TYPE c VALUE 'SDM Deploy Tool'    LENGTH 30,
-             lc_sdmurl    TYPE c VALUE 'SDM URL'            LENGTH 10,
-             lc_sdm       TYPE c VALUE 'SDM Anmeldedaten'   LENGTH 30,
-             lc_sdmping   TYPE c VALUE 'SDM Ping'           LENGTH 20,
-             lc_xiurl     TYPE c VALUE 'XI URL'             LENGTH 10,
-             lc_xi        TYPE c VALUE 'XI Anmeldedaten'    LENGTH 30,
-             lc_xiping    TYPE c VALUE 'XI Ping'            LENGTH 10,
-             lc_sldurl    TYPE c VALUE 'SLD URL'            LENGTH 10,
-             lc_sld       TYPE c VALUE 'SLD Anmeldedaten'   LENGTH 30,
-             lc_sldping   TYPE c VALUE 'SLD Ping'           LENGTH 20,
-             lc_ext       TYPE c VALUE 'External deployers' LENGTH 20,
-             lc_appl      TYPE c VALUE 'Appl.'              LENGTH 10,
-             lc_tppath    TYPE c VALUE 'tp Path'            LENGTH 10,
-             lc_tpexe     TYPE c VALUE 'tp-Executable'      LENGTH 20,
-             lc_ping      TYPE c VALUE 'RFC-Ping'           LENGTH 10,
-             lc_tpcall    TYPE c VALUE 'tp-Call'            LENGTH 10,
-             lc_dbconnect TYPE c VALUE 'DB-Connect'         LENGTH 15,
-             lc_off       TYPE c VALUE 'Offline Call'       LENGTH 20,
-             lc_webser    TYPE c VALUE 'Deploy Web Service' LENGTH 30,
-             lc_service   TYPE c VALUE 'Web Service'        LENGTH 20,
-             lc_log       TYPE c VALUE 'Logging'            LENGTH 10,
-             lc_trprofile TYPE c VALUE 'Transport Profile' LENGTH 30,
-             lc_profile   TYPE c VALUE 'Profile'           LENGTH 10.
+             lc_tp        TYPE c      VALUE 'tp-Interface'   LENGTH 20,
+             lc_hostnam   TYPE c      VALUE 'Host Name'      LENGTH 10,
+             lc_ver       TYPE c      VALUE 'Version'        LENGTH 10,
+             lc_rfcdes    TYPE c      VALUE
+                                      'RFC-Destination'      LENGTH 20,
+             lc_rfccon    TYPE c      VALUE 'RFC-Connection' LENGTH 20,
+             lc_tpver     TYPE c      VALUE 'tp-Version'     LENGTH 20,
+             lc_des       TYPE c      VALUE 'Destination'    LENGTH 20,
+             lc_proxy     TYPE c      VALUE 'Proxy'          LENGTH 10,
+             lc_verb      TYPE c      VALUE
+                                      'Verbindungstest'      LENGTH 20,
+             lc_filetr    TYPE c      VALUE 'File Transfer'  LENGTH 20,
+             lc_deploy    TYPE c      VALUE 'Deploy Tool'    LENGTH 20,
+             lc_sdmtool   TYPE c      VALUE
+                                      'SDM Deploy Tool'      LENGTH 30,
+             lc_sdmurl    TYPE c      VALUE 'SDM URL'        LENGTH 10,
+             lc_sdm       TYPE c      VALUE
+                                      'SDM Anmeldedaten'     LENGTH 30,
+             lc_sdmping   TYPE c      VALUE 'SDM Ping'       LENGTH 20,
+             lc_xiurl     TYPE c      VALUE 'XI URL'         LENGTH 10,
+             lc_xi        TYPE c      VALUE
+                                      'XI Anmeldedaten'      LENGTH 30,
+             lc_xiping    TYPE c      VALUE 'XI Ping'        LENGTH 10,
+             lc_sldurl    TYPE c      VALUE 'SLD URL'        LENGTH 10,
+             lc_sld       TYPE c      VALUE
+                                      'SLD Anmeldedaten'     LENGTH 30,
+             lc_sldping   TYPE c      VALUE 'SLD Ping'       LENGTH 20,
+             lc_ext       TYPE c      VALUE
+                                      'External deployers'   LENGTH 20,
+             lc_appl      TYPE c      VALUE 'Appl.'          LENGTH 10,
+             lc_tppath    TYPE c      VALUE 'tp Path'        LENGTH 10,
+             lc_tpexe     TYPE c      VALUE 'tp-Executable'  LENGTH 20,
+             lc_ping      TYPE c      VALUE 'RFC-Ping'       LENGTH 10,
+             lc_tpcall    TYPE c      VALUE 'tp-Call'        LENGTH 10,
+             lc_dbconnect TYPE c      VALUE 'DB-Connect'     LENGTH 15,
+             lc_off       TYPE c      VALUE 'Offline Call'   LENGTH 20,
+             lc_webser    TYPE c      VALUE
+                                      'Deploy Web Service'   LENGTH 30,
+             lc_service   TYPE c      VALUE 'Web Service'    LENGTH 20,
+             lc_log       TYPE c      VALUE 'Logging'        LENGTH 10,
+             lc_trprofile TYPE c      VALUE
+                                      'Transport Profile'    LENGTH 30,
+             lc_profile   TYPE c      VALUE 'Profile'        LENGTH 10.
 
-  DATA: ls_input    TYPE tab512,
-        ls_output   TYPE tab512,
-        lv_action   TYPE char8,
-        lv_rtime    TYPE string.
+  DATA: ls_input   TYPE tab512,
+        ls_output  TYPE tab512,
+        lv_action  TYPE char8,
+        lv_rtime   TYPE string,
+* Begin of changes V002
+        lv_lines   TYPE i,
+        ls_string  TYPE string,
+        lt_output1 TYPE STANDARD TABLE OF tab512.
+* End of changes V002
 
   CLEAR: ls_input, lv_action.
 
@@ -215,26 +217,47 @@ FORM get_config
 
     WHEN lc_export.
 
-      FREE: lt_output[].
+*      FREE: lt_output[].  "-V002
 
-*Read TMS systems
-      PERFORM read_tms  TABLES lt_output
-                        CHANGING ls_output .
+      " Read TMS systems
+      PERFORM read_tms TABLES   lt_output
+                       CHANGING ls_output.
 
-*Check Connection Test
+      " Display if any error occurs and exit from script execution.
+* Begin of changes V002
+      CLEAR: lv_lines.
+      DESCRIBE TABLE lt_output LINES lv_lines.
+      IF lv_lines GT 1.
+        RETURN.
+      ENDIF.
+* End of changes V002
 
-*   ping all systems
-      PERFORM exec_ci_ping .
+* Check Connection Test
 
+* Begin of changes V002
+      " Ping all systems
+*      PERFORM exec_ci_ping.
+      PERFORM exec_ci_ping TABLES   lt_output
+                           CHANGING ls_output.
 
-* sort systems
+      " Display if any error occurs and exit from script execution.
+      CLEAR: lv_lines.
+      DESCRIBE TABLE lt_output LINES lv_lines.
+      IF lv_lines GT 1.
+        RETURN.
+      ENDIF.
+* End of changes V002
+
+      " Sort systems
       SORT gs_ci_pings ASCENDING BY system-domnam system-sysnam.
 
-* Table Name
+      FREE: lt_output[].  "+V002
+
+      " Table Name
       ls_output = lc_title1.
       APPEND ls_output TO lt_output.
 
-*  Column Headings
+      " Column Headings
       CONCATENATE lc_system     lc_sep
                   lc_desc       lc_sep
                   lc_host       lc_sep
@@ -242,8 +265,9 @@ FORM get_config
                   lc_status
              INTO ls_output.
       APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
 
-
+      CLEAR: gs_ci_ping,lv_rtime.
       LOOP AT gs_ci_pings INTO gs_ci_ping.
 
         IF gs_ci_ping-alert-id <> space.
@@ -261,48 +285,67 @@ FORM get_config
                     gs_ci_ping-alert-id
          INTO ls_output.
         APPEND ls_output TO lt_output.
+        CLEAR: ls_output,gs_ci_ping,lv_rtime.
 
       ENDLOOP.
 
+      "Emtpy line
+      CLEAR ls_output.
+      APPEND ls_output TO lt_output.
 
-*    Emtpy line
-      CLEAR ls_output. APPEND ls_output TO lt_output.
-
-
-
-
-* check transport directories
-      PERFORM check_trans_dir TABLES lt_output
-                      CHANGING ls_output .
-
+* Begin of changes V002
+      " Check transport directories
+*      PERFORM check_trans_dir TABLES lt_output
+*                              CHANGING ls_output.
+      FREE: lt_output1.
+      PERFORM check_trans_dir TABLES lt_output1
+                              CHANGING ls_output.
+* End of changes V002
 
       PERFORM prepare_tree.
 
-
       ls_output = lc_chkdir.
       APPEND ls_output TO lt_output.
+* Begin of changes V002
+      CLEAR: ls_output.
+      IF lt_output1 IS NOT INITIAL.
+        LOOP AT lt_output1 INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+        ENDLOOP.
+      ELSE.
+* End of changes V002
 
-      CONCATENATE
-         lc_level   lc_sep
-         lc_name    lc_sep
-         lc_path    lc_sep
-         lc_status INTO ls_output.
+        CONCATENATE
+           lc_level   lc_sep
+           lc_name    lc_sep
+           lc_path    lc_sep
+           lc_status INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT gt_result.
+          CONCATENATE
+          gt_result-tlevel   lc_sep
+          gt_result-name lc_sep
+          gt_result-text lc_sep
+          gt_result-text1 INTO ls_output.
+* Begin of changes V002
+          ls_string = ls_output.
+          PERFORM end_null_check CHANGING ls_string.
+          ls_output = ls_string.
+* End of changes V002
+          APPEND ls_output TO lt_output.
+        ENDLOOP.
+
+      ENDIF.  "+V002
+
+      "Emtpy line
+      CLEAR ls_output.
       APPEND ls_output TO lt_output.
 
-      LOOP AT gt_result.
-        CONCATENATE
-         gt_result-tlevel   lc_sep
-         gt_result-name lc_sep
-         gt_result-text lc_sep
-         gt_result-text1 INTO ls_output.
-        APPEND ls_output TO lt_output.
-      ENDLOOP.
-
-*    Emtpy line
-      CLEAR ls_output. APPEND ls_output TO lt_output.
-* define layout
+      " Define layout
       REFRESH gt_list.
-      gt_list-level = gc_03.                               " interface
+      gt_list-level = gc_03.  "interface
       gt_list-name  = gc_test_interface.
       gt_list-text  = lc_tp.
       APPEND gt_list.
@@ -322,7 +365,7 @@ FORM get_config
       gt_list-name  = gc_tp_test_logging.
       gt_list-text  = lc_log.
       APPEND gt_list.
-      gt_list-level = gc_03.                               " profile
+      gt_list-level = gc_03. "profile
       gt_list-name  = gc_test_profile.
       gt_list-text  = lc_trprofile.
       APPEND gt_list.
@@ -338,7 +381,7 @@ FORM get_config
       gt_list-name  = gc_tp_test_param_vers.
       gt_list-text  = lc_ver.
       APPEND gt_list.
-      gt_list-level = gc_03.                               " destination
+      gt_list-level = gc_03.  "destination
       gt_list-name  = gc_test_destination.
       gt_list-text  = lc_rfcdes.
       APPEND gt_list.
@@ -358,7 +401,7 @@ FORM get_config
       gt_list-name  = gc_tp_test_rfc_ping.
       gt_list-text  = lc_ping.
       APPEND gt_list.
-      gt_list-level = gc_03.                               " connect
+      gt_list-level = gc_03. "connect
       gt_list-name  = gc_test_connect.
       gt_list-text  = lc_tpcall.
       APPEND gt_list.
@@ -446,7 +489,7 @@ FORM get_config
       gt_list-name  = ctsc_ds_test_sld_ping.
       gt_list-text  = lc_sldping.
       APPEND gt_list.
-* append generic deployers
+      " Append generic deployers
       gt_list-level = gc_03.
       gt_list-name  = gc_test_generic_deploy.
       gt_list-text  = lc_ext.
@@ -456,35 +499,54 @@ FORM get_config
       gt_list-text  = lc_appl.
       APPEND gt_list.
 
-
-      PERFORM interface_test TABLES lt_output
-                            CHANGING ls_output .
+* Begin of changes V002
+*      PERFORM interface_test TABLES lt_output
+*                            CHANGING ls_output.
+      FREE: lt_output1.
+      PERFORM interface_test TABLES lt_output1
+                             CHANGING ls_output.
+* End of changes V002
 
       ls_output = lc_tool.
       APPEND ls_output TO lt_output.
 
-      CONCATENATE
-         lc_level   lc_sep
-         lc_name    lc_sep
-         lc_descr   lc_sep
-         lc_status INTO ls_output.
-      APPEND ls_output TO lt_output.
-*
-      LOOP AT gt_result.
-        CONCATENATE
-         gt_result-tlevel   lc_sep
-         gt_result-name lc_sep
-         gt_result-text lc_sep
-         gt_result-text1 INTO ls_output.
-        APPEND ls_output TO lt_output.
-      ENDLOOP.
+* Begin of changes V002
+      CLEAR: ls_output.
+      IF lt_output1 IS NOT INITIAL.
+        LOOP AT lt_output1 INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+        ENDLOOP.
+      ELSE.
+* End of changes V002
 
+        CONCATENATE
+           lc_level   lc_sep
+           lc_name    lc_sep
+           lc_descr   lc_sep
+           lc_status INTO ls_output.
+        APPEND ls_output TO lt_output.
+
+        LOOP AT gt_result.
+          CONCATENATE
+          gt_result-tlevel   lc_sep
+          gt_result-name lc_sep
+          gt_result-text lc_sep
+          gt_result-text1 INTO ls_output.
+* Begin of changes V002
+          ls_string = ls_output.
+          PERFORM end_null_check CHANGING ls_string.
+          ls_output = ls_string.
+* End of changes V002
+          APPEND ls_output TO lt_output.
+        ENDLOOP.
+      ENDIF.
 
       " Correct emtpy entries to NULL
-      PERFORM null_check TABLES  lt_output.
-
+      PERFORM null_check TABLES lt_output.
 
     WHEN OTHERS.
+
 *  Begin of changes in V001
       ls_output = lc_inc_input.             "Incorrect input
       APPEND ls_output TO lt_output.
@@ -494,15 +556,15 @@ FORM get_config
 
 ENDFORM.
 
+*FORM exec_ci_ping. "-V002
+FORM exec_ci_ping TABLES   lt_output STRUCTURE tab512 "+V002
+                  CHANGING ls_output TYPE tab512.     "+V002
 
-FORM exec_ci_ping.
+  DATA: lv_lines TYPE i.    "+V001
 
-  DATA : lv_lines     TYPE i.                     "+V001
+* Read all the systems in TMS
 
-
-*Read all the systems in TMS
-
-* ping all active TMS systems
+  " Ping all active TMS systems
   CALL FUNCTION 'TMS_MGR_CHECK_TRANSPORT_TOOLS'
     EXPORTING
       iv_ping     = abap_true  "gc_x
@@ -518,23 +580,27 @@ FORM exec_ci_ping.
     MESSAGE ID     sy-msgid
             TYPE   'I'
             NUMBER sy-msgno
-            WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
-    LEAVE PROGRAM.
+* Begin of changes V002
+*            WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO ls_output.
+    APPEND ls_output TO lt_output.
+*    LEAVE PROGRAM.
+    RETURN.
+* End of changes V002
   ENDIF.
+
   DESCRIBE TABLE gs_ci_pings LINES lv_lines.
 
-
 ENDFORM.                    " EXEC_CI_PING
+*FORM check_trans_dir TABLES lt_output STRUCTURE tab512  "-V002
+FORM check_trans_dir TABLES lt_output1 STRUCTURE tab512  "+V002
+                     CHANGING ls_output TYPE tab512.
 
-FORM check_trans_dir TABLES lt_output STRUCTURE tab512
-   CHANGING ls_output TYPE tab512.
-
-
-  DATA: lt_dir_tab             LIKE stmsttefi      OCCURS 0.
-  DATA: ls_dir_tab    LIKE stmsttefi,
+  DATA: lt_dir_tab    TYPE STANDARD TABLE OF stmsttefi,
+        ls_dir_tab    TYPE stmsttefi,
         lv_keep_files TYPE stms_flag.
 
-* perform test
+  " Perform test
   CLEAR gs_tp_dirtsts.
   IF alldir = gc_x.
     REFRESH lt_dir_tab.
@@ -591,13 +657,15 @@ FORM check_trans_dir TABLES lt_output STRUCTURE tab512
     MESSAGE ID     sy-msgid
             TYPE   'E'
             NUMBER sy-msgno
-            WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+* Begin of changes V002
+*            WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO ls_output.
+    APPEND ls_output TO lt_output1.
+    RETURN.
+* End of changes V002
   ENDIF.
 
 ENDFORM.                    " CHECK_TRANS_DIR
-
-
-
 FORM prepare_tree.
 
   CONSTANTS:
@@ -625,23 +693,22 @@ FORM prepare_tree.
         ls_tefi2         TYPE LINE OF stms_tp_dirtst-tefi,
         ls_tefi_com      TYPE LINE OF stms_tp_dirtst-tefi.
 
-  DATA: lv_ind_2    LIKE sy-tabix,
-        lv_ind_3    LIKE sy-tabix,
-        lv_ind_4    LIKE sy-tabix,
+  DATA: lv_ind_2    TYPE sy-tabix,
+        lv_ind_3    TYPE sy-tabix,
+        lv_ind_4    TYPE sy-tabix,
         lv_icon(30) TYPE c,
         lv_hotspot  TYPE c,
         lv_hide     TYPE snodetext-hide.
 
 * fill table GT_RESULT ----------------------------------- begin ---
 
-  REFRESH gt_result.
+  FREE: gt_result.
   CLEAR gt_result.
 
-* write header
+  " Write header
   gt_result-type        = gc_top.
   gt_result-tlevel      = gc_01.
   gt_result-name        = lc_chkdir.
-  "Transportverzeichnis prüfen'(001).
   gt_result-nlength     = 32.
   gt_result-color       = lc_col_background.
   WRITE  gs_grp_col-date DD/MM/YYYY
@@ -653,7 +720,7 @@ FORM prepare_tree.
   gt_result-tcolor      = lc_col_background.
   APPEND gt_result.
 
-* loop at all systems
+  " Loop at all systems
   SORT gs_tp_dirtsts BY system-sysnam.
   LOOP AT gs_tp_dirtsts INTO ls_tp_dirtst
                         WHERE test = gc_create.
@@ -681,12 +748,11 @@ FORM prepare_tree.
       CONTINUE.
     ENDIF.
 
-*   header: transportdirectory
+    " Header: transportdirectory
     CLEAR gt_result.
     gt_result-type           = gc_dir.
     gt_result-tlevel         = gc_03.
     gt_result-name           = gc_trndir.
-    "Transportverzeichnis'(002).
     gt_result-nlength        = 20.
     gt_result-color          = lc_col_blue.
     gt_result-text1          = gc_okay.
@@ -695,7 +761,7 @@ FORM prepare_tree.
     gt_result-kind1          = lc_i.
     APPEND gt_result.
 
-*   loop at all directories
+    " Loop at all directories
     CLEAR gt_result.
     ls_system = ls_tp_dirtst-system.
     SORT ls_tp_dirtst-tefi BY dir.
@@ -703,7 +769,7 @@ FORM prepare_tree.
       lv_icon    = gc_okay.
       lv_hotspot = space.
       lv_hide    = space.
-*     special check for external systems
+      " Special check for external systems
       IF NOT ls_system-comsys IS INITIAL AND
          NOT ls_system-tradir IS INITIAL.
         READ TABLE gs_tp_dirtsts INTO ls_tp_dirtst_com
@@ -737,7 +803,7 @@ FORM prepare_tree.
       gt_result-hide         = lv_hide.
       APPEND gt_result.
 
-*     loop at all tests
+      " Loop at all tests
       DO 3 TIMES.
         CLEAR gt_result.
         gt_result-type       = lc_tst.
@@ -753,11 +819,9 @@ FORM prepare_tree.
         CASE sy-index.
           WHEN 1.
             gt_result-name       = lc_crttest.
-            "Testdatei anlegen'(003).
             ls_tefi2 = ls_tefi.
           WHEN 2.
             gt_result-name       = lc_rdtest.
-            "Testdatei lesen'(004).
             READ TABLE gs_tp_dirtsts INTO ls_tp_dirtst2
                        WITH KEY system-sysnam = ls_system-sysnam
                                 test          = gc_read.
@@ -791,12 +855,10 @@ FORM prepare_tree.
     ENDLOOP. " directories
 
   ENDLOOP. " systems
-*
+
 * fill table GT_RESULT ----------------------------------- end -----
-*
 
-
-* if any test is not ok, then remove OKAY
+  " If any test is not ok, then remove OKAY
   LOOP AT gt_result.
     IF gt_result-tlevel = 2.
       lv_ind_2 = sy-tabix.
@@ -834,34 +896,23 @@ FORM prepare_tree.
     ENDIF.
   ENDLOOP.
 
-
 ENDFORM.                    " PREPARE_TREE
-
-
-
-
-
 ****            Transport Tool
+*FORM interface_test TABLES lt_output STRUCTURE tab512  "-V002
+FORM interface_test TABLES lt_output1 STRUCTURE tab512  "+V002
+                    CHANGING ls_output TYPE tab512.
 
-FORM interface_test TABLES lt_output STRUCTURE tab512
-   CHANGING ls_output TYPE tab512.
-
-  DATA: gs_tp_tests            TYPE stms_tp_tests.
-
-
-  DATA: ls_tp_test TYPE stms_tp_test,
-        ls_test    TYPE LINE OF stms_tp_test-test,
-        ls_test2   TYPE LINE OF stms_tp_test-test.
-
-  DATA: lv_ind_2            LIKE sy-tabix,
-        lv_ind_3            LIKE sy-tabix,
-        lv_index            LIKE sy-tabix,
+  DATA: gs_tp_tests         TYPE stms_tp_tests,
+        ls_tp_test          TYPE stms_tp_test,
+        ls_test             TYPE LINE OF stms_tp_test-test,
+        ls_test2            TYPE LINE OF stms_tp_test-test,
+        lv_ind_2            TYPE sy-tabix,
+        lv_ind_3            TYPE sy-tabix,
+        lv_index            TYPE sy-tabix,
         lv_suppress_ws_node TYPE stms_flag,
         lv_lines            TYPE i.
 
-
-
-* perform test
+  " Perform test
   CALL FUNCTION 'TMS_MGR_CHECK_TRANSPORT_TOOLS'
     EXPORTING
       iv_system   = system
@@ -881,12 +932,12 @@ FORM interface_test TABLES lt_output STRUCTURE tab512
             NUMBER sy-msgno
             WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
             INTO ls_output.
-    APPEND ls_output TO lt_output.
+*    APPEND ls_output TO lt_output.    "-V002
+    APPEND ls_output TO lt_output1.    "+V002
+    RETURN. "+V002
   ENDIF.
 
-
-*
-* fill table GT_RESULT ----------------------------------- begin -------
+  " Fill table GT_RESULT ----------------------------------- begin ---
   REFRESH gt_result.
   CLEAR gt_result.
   gt_result-type    = 'TOP'.
@@ -930,7 +981,6 @@ FORM interface_test TABLES lt_output STRUCTURE tab512
     CLEAR lv_suppress_ws_node.
     LOOP AT gt_list.
       CLEAR gt_result.
-*     CLEAR ls_ds_test. hen 17.1.2008
       IF gt_list-level = gc_03.
         gt_result-tlevel      = gc_03.
         gt_result-type        = 'TOP'.
@@ -943,7 +993,7 @@ FORM interface_test TABLES lt_output STRUCTURE tab512
         gt_result-kind1       = 'I'.
         gt_result-tpos1       =  79.
         gt_result-tlength1    =  5.
-*       suppress deploy web service node if test is not available
+        " suppress deploy web service node if test is not available
         IF gt_list-name = gc_test_deploy_service.
           DESCRIBE TABLE ls_tp_test-ds_test LINES lv_lines.
           IF lv_lines = 0. " test not available
@@ -975,7 +1025,7 @@ FORM interface_test TABLES lt_output STRUCTURE tab512
           ENDIF.
           PERFORM fill_gtresult USING ls_test.
         ELSEIF gt_list-name = gc_appl_prefix AND gt_list-level = gc_04.
-*       new applications - several ones
+          " new applications - several ones
           LOOP AT ls_tp_test-test INTO ls_test
             WHERE name(5) = gc_appl_prefix.
             lv_index = sy-tabix + 1.
@@ -1012,7 +1062,7 @@ FORM interface_test TABLES lt_output STRUCTURE tab512
 
   ENDLOOP. " systems
 *
-* fill table GT_RESULT ----------------------------------- end ---------
+* fill table GT_RESULT ----------------------------------- end -------
 
 * if any test is not ok, then remove OKAY
 
@@ -1037,7 +1087,6 @@ FORM interface_test TABLES lt_output STRUCTURE tab512
   ENDLOOP.
 
 ENDFORM.
-
 FORM fill_gtresult USING ps_test TYPE tptest.
 
   CONSTANTS: lc_1       TYPE c VALUE '1'             LENGTH 1,
@@ -1054,7 +1103,6 @@ FORM fill_gtresult USING ps_test TYPE tptest.
     gt_result-text+38 = lc_dot.
   ENDIF.
   gt_result-tlength  = 40.
-*  gt_result-tcolor   = lc_col_background.
   IF ps_test-status = lc_1.
     gt_result-text1  = gc_checked.
     gt_result-kind1  = lc_i.
@@ -1085,9 +1133,8 @@ FORM fill_gtresult USING ps_test TYPE tptest.
   gt_result-tlength1 =  5.
 
 ENDFORM.                    "fill_gtresult
-
 FORM read_tms TABLES lt_output STRUCTURE tab512
-            CHANGING ls_output TYPE tab512.
+              CHANGING ls_output TYPE tab512.
 
   DATA: lv_plus_nonabap  TYPE stms_flag,
         lv_plus_external TYPE stms_flag.
@@ -1124,10 +1171,11 @@ FORM read_tms TABLES lt_output STRUCTURE tab512
               WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
               INTO ls_output.
       APPEND ls_output TO lt_output.
-      LEAVE PROGRAM.                       " exit
+      RETURN.    "+V002
     WHEN 3.
       MESSAGE i078(xt) WITH system INTO ls_output.
-      LEAVE PROGRAM.
+      APPEND ls_output TO lt_output.  "+V002
+      RETURN.   "+V002
     WHEN OTHERS.
       MESSAGE ID     sy-msgid
               TYPE   'E'
@@ -1135,11 +1183,10 @@ FORM read_tms TABLES lt_output STRUCTURE tab512
               WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
               INTO ls_output.
       APPEND ls_output TO lt_output.
+      RETURN.  "+V002
   ENDCASE.
 
 ENDFORM.
-
-
 FORM end_null_check CHANGING ls_string TYPE string.
 
   DATA lv_last_char TYPE char1.
@@ -1153,8 +1200,6 @@ FORM end_null_check CHANGING ls_string TYPE string.
   ENDIF.
 
 ENDFORM.
-
-
 FORM null_check TABLES lt_table TYPE table.
 
   DO .

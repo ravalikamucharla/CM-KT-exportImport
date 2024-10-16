@@ -1,8 +1,0 @@
----
-- name: status
-  hosts: "{{ groups['target_master_db'][0] }}"
-  ignore_errors: true
-  vars_files:
-    - ../inventory/group_vars/target_db.yml
-  roles:
-    - replication_status

@@ -7,13 +7,19 @@
     playbook_no: "08"
     stage: postmigration_compare
     hostname: "{{ groups['target_ascs'][0] }}"
-    hostip: "{{ hostvars[groups['target_ascs'][0]].ansible_host }}"    
+    hostip: "{{ hostvars[groups['target_ascs'][0]].ansible_host }}"  
+    tags: postmigration_compare
+    playbook_name: 08_target_post_migration_basisconfig_export_final
+    create_zip: "no"
+    send_email: "no"  
   vars_files:
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/target_ascs.yml
     - ../inventory/host_vars/{{ groups['target_ascs'][0] }}.yml
   roles:
     - folder_creation
     - sap_abap_execute_queries
+    - generate_log
 
 - hosts: target_ascs #target_ascs,target_pas,target_aas,target_db
   tags: os
@@ -22,11 +28,17 @@
   vars:
     hostip: "{{ hostvars[groups['target_ascs'][0]].ansible_host }}"
     ansible_become: false
+    tags: os
+    playbook_name: 08_target_post_migration_basisconfig_export_final
+    create_zip: "no"
+    send_email: "no"  
   vars_files:  
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/target_ascs.yml
     - ../inventory/host_vars/{{ groups['target_ascs'][0] }}.yml
   roles:
     - sap_get_os_command_outputs
+    - generate_log
 
 - hosts: target_db 
   tags: db
@@ -38,17 +50,30 @@
     sql_db_username: "{{ hostvars[groups['target_db'][0]].ansible_user }}"
     # oracle_user: "{{ target.sap.db.oracle_user }}" # this is the default user for oracle user
     # hana_db_name: "{{ target.sap.db.hana_db_name }}" # this is the default hana_db name 
+    tags: db
+    playbook_name: 08_target_post_migration_basisconfig_export_final
+    create_zip: "no"
+    send_email: "no"  
   vars_files:
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/target_db.yml
   roles:
     - sap_get_db_queries_outputs
+    - generate_log
 
 - name: Hana mini checks # if database type is hana
   hosts: target_db
   gather_facts: yes
   become: true
   tags: hanamini
+  vars:
+    tags: hanamini
+    playbook_name: 08_target_post_migration_basisconfig_export_final
+    create_zip: "no"
+    send_email: "no"  
   vars_files:
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/target_db.yml
   roles:
       - hana_mini_checks
+      - generate_log

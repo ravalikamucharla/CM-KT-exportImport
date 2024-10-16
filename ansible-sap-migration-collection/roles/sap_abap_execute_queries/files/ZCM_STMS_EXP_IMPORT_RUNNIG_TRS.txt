@@ -18,6 +18,8 @@
 *                                            Import Running           *
 *07-09-2022  V001     Yasaswini K  Local     To add no data found     *
 *                                            changes                  *
+*05-28-2024  V002     Yasaswini K  Local     Replacing FM with tables *
+*                                            to supress dynpro error  *
 *---------------------------------------------------------------------*
 REPORT zcm_stms_exp_import_runnig_trs.
 
@@ -79,14 +81,18 @@ FORM get_config
              'No input passed'                          LENGTH 20.
 *  End of changes in V001
 
-  DATA: lt_requests TYPE tmsiqreqs,
-        ls_requests TYPE stmsiqreq,
+*  Begin of changes in V002
+  DATA: lt_requests TYPE STANDARD TABLE OF tmsbufreq,
+        lt_tmsbuftxt TYPE STANDARD TABLE OF tmsbuftxt,
+        ls_tmsbuftxt TYPE tmsbuftxt,
+        ls_requests TYPE tmsbufreq,
+        lv_impstat  TYPE tmsimpstat,
+*  End of changes in V002
         ls_input    TYPE tab512,
         ls_output   TYPE tab512,
         lv_lines    TYPE i,
         lv_before   TYPE stms_flag,
-        lv_action   TYPE string,
-        lv_system   TYPE tmscsys-sysnam.
+        lv_action   TYPE string.
 
   "Clear variables
   CLEAR: ls_requests,
@@ -94,11 +100,17 @@ FORM get_config
          ls_output,
          lv_before,
          lv_action,
-         lv_system.
+*  Begin of changes in V002
+         ls_tmsbuftxt,
+         ls_requests,
+         lv_impstat.
+*  End of changes in V002
+
 
   "Free internal tables
   FREE: lt_output,
-        lt_requests.
+        lt_requests,
+        lt_tmsbuftxt.            "+V002
 
   "Tittle
   ls_output = lc_title.
@@ -120,16 +132,7 @@ FORM get_config
 
     WHEN lc_export.                     "Export
 
-      lv_system = sy-sysid.
-
-      CALL FUNCTION 'TMS_UIQ_IQD_READ_QUEUE'
-        EXPORTING
-          iv_system         = lv_system
-        IMPORTING
-          et_requests       = lt_requests
-        EXCEPTIONS
-          read_queue_failed = 1
-          OTHERS            = 2.
+      SELECT * FROM tmsbufreq INTO TABLE lt_requests.  "+V002
 
       IF sy-subrc <> 0.
         "output
@@ -143,6 +146,18 @@ FORM get_config
 
       IF lt_requests IS NOT INITIAL.
 
+*  Begin of changes in V002
+        SORT lt_requests BY trkorr.
+
+        SELECT * FROM tmsbuftxt INTO TABLE lt_tmsbuftxt
+          FOR ALL ENTRIES IN lt_requests
+          WHERE TRKORR = lt_requests-trkorr.
+
+          IF sy-subrc = 0.
+           SORT lt_tmsbuftxt BY trkorr.
+          ENDIF.
+*  End of changes in V002
+
         "Column Headings
         CONCATENATE lc_tr lc_sep lc_owner
         INTO ls_output.
@@ -150,6 +165,16 @@ FORM get_config
         CLEAR: ls_output.
 
         LOOP AT lt_requests INTO ls_requests.
+
+*  Begin of changes in V002
+          READ TABLE lt_tmsbuftxt INTO ls_tmsbuftxt
+                  WITH KEY trkorr = ls_requests-trkorr
+                  BINARY SEARCH.
+
+          IF ls_tmsbuftxt-owner IS INITIAL.
+             ls_tmsbuftxt-owner = lc_null.
+          ENDIF.
+*  End of changes in V002
 
 *     check if request is before or after stopmark
           IF ls_requests-trkorr = lc_tp_stopmark.
@@ -168,36 +193,36 @@ FORM get_config
              ls_requests-impflg = lc_e OR         " transport type E
              ls_requests-impflg = lc_m OR         " client transport
              ls_requests-impflg = lc_o.           " transport type O
-            ls_requests-impstat = lc_impstat_noimp.
+            lv_impstat = lc_impstat_noimp.
           ELSEIF ls_requests-impflg = lc_2.       " already imported
-            ls_requests-impstat = lc_impstat_finished.
+            lv_impstat = lc_impstat_finished.
           ELSEIF lv_before <> abap_true.         " behind stopmark
-            ls_requests-impstat = lc_impstat_stopmark.
+            lv_impstat = lc_impstat_stopmark.
           ELSE.                                 " ready for import
-            ls_requests-impstat = lc_impstat_ready.
+            lv_impstat = lc_impstat_ready.
             IF ( ls_requests-umodes = lc_1 OR     " u1
                  ls_requests-umodes CS lc_i OR    " uI
                  ls_requests-umodes CS lc_j OR    " uJ
                  ls_requests-umodes CS lc_f ) AND " uF
                ls_requests-maxrc <> space.       " preliminary imported
-              ls_requests-impstat = lc_impstat_overtake.
+              lv_impstat = lc_impstat_overtake.
             ELSEIF ls_requests-umodes CS lc_tp_umode_prel_imp.
-              ls_requests-impstat = lc_impstat_overtake.
+              lv_impstat = lc_impstat_overtake.
             ENDIF.
           ENDIF.
 
           IF ls_requests-actflg = lc_tp_actflg_inactive.   "inactive
-            ls_requests-impstat = lc_impstat_approve.
+            lv_impstat = lc_impstat_approve.
           ELSEIF ls_requests-actflg =  lc_tp_actflg_suspend. "suspend
-            ls_requests-impstat = lc_impstat_deny.
+            lv_impstat = lc_impstat_deny.
           ENDIF.
 
-          IF ls_requests-impstat <> lc_impstat_finished.
+          IF lv_impstat <> lc_impstat_finished.
             " cvers check
             IF ls_requests-cversflg <> lc_h AND   " unknown
                ls_requests-cversflg <> lc_g AND   " fits
                ls_requests-cversflg <> space.    " no data available
-              ls_requests-impstat = lc_impstat_cverschck.
+              lv_impstat = lc_impstat_cverschck.
             ENDIF.
           ELSE.
             ls_requests-cversflg = lc_h.
@@ -207,73 +232,65 @@ FORM get_config
           IF ls_requests-tpstatid IS INITIAL.       " tp not running
             IF NOT ls_requests-jobid IS INITIAL.    " scheduled
               IF ls_requests-impsing = abap_true.   " single import
-                CASE ls_requests-impstat.
+                CASE lv_impstat.
                   WHEN lc_impstat_noimp
                     OR lc_impstat_cverschck
                     OR lc_impstat_stopmark
                     OR lc_impstat_overtake
                     OR lc_impstat_ready.
-                    ls_requests-impstat = lc_impstat_scheduled.
+                    lv_impstat = lc_impstat_scheduled.
                   WHEN OTHERS.
-                    CLEAR:ls_requests-impstat.
+                    CLEAR:lv_impstat.
                 ENDCASE.
               ELSE.                                   " project import
-                CASE ls_requests-impstat.
+                CASE lv_impstat.
                   WHEN lc_impstat_overtake
                     OR lc_impstat_cverschck
                     OR lc_impstat_ready.
-                    ls_requests-impstat = lc_impstat_scheduled.
+                    lv_impstat = lc_impstat_scheduled.
                   WHEN OTHERS.
-                    CLEAR:ls_requests-impstat.
+                    CLEAR:lv_impstat.
                 ENDCASE.
               ENDIF.
             ENDIF.
           ELSE.                                        " tp is running
             IF ls_requests-impsing = abap_true.        " single import
-              CASE ls_requests-impstat.
+              CASE lv_impstat.
                 WHEN lc_impstat_noimp
                   OR lc_impstat_cverschck
                   OR lc_impstat_stopmark
                   OR lc_impstat_overtake
                   OR lc_impstat_ready.
-* Begin of changes V001
-                  IF ls_requests-owner IS INITIAL.
-                  ls_requests-owner = lc_null.
-                  ENDIF.
-* End of changes V001
+
                   "Status - Import Running append to output
-                  ls_requests-impstat = lc_impstat_running.
+                  lv_impstat = lc_impstat_running.
                   CONCATENATE ls_requests-trkorr lc_sep
-                  ls_requests-owner
+                  ls_tmsbuftxt-owner                       "+V002
                   INTO ls_output.
                   APPEND ls_output TO lt_output.
                   CLEAR:ls_output.
                 WHEN OTHERS.
-                  CLEAR:ls_requests-impstat.
+                  CLEAR:lv_impstat.
               ENDCASE.
             ELSE.                                      " project import
-              CASE ls_requests-impstat.
+              CASE lv_impstat.
                 WHEN lc_impstat_overtake
                   OR lc_impstat_cverschck
                   OR lc_impstat_ready.
-* Begin of changes V001
-                  IF ls_requests-owner IS INITIAL.
-                  ls_requests-owner = lc_null.
-                  ENDIF.
-* End of changes V001
+
                   "Status - Import Running append to output
-                  ls_requests-impstat = lc_impstat_running.
+                  lv_impstat = lc_impstat_running.
                   CONCATENATE ls_requests-trkorr lc_sep
-                  ls_requests-owner
+                  ls_tmsbuftxt-owner                        "+V002
                   INTO ls_output.
                   APPEND ls_output TO lt_output.
                   CLEAR:ls_output.
                 WHEN OTHERS.
-                  CLEAR:ls_requests-impstat.
+                  CLEAR:lv_impstat.
               ENDCASE.
             ENDIF.
           ENDIF.
-          CLEAR: ls_requests.
+          CLEAR: ls_requests, ls_tmsbuftxt, lv_impstat.      "+V002
         ENDLOOP.
 
 "Removing column heading from output table if no entries were appended

@@ -1,0 +1,189 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_RSRFCCHK_EXP_JOBSUBMIT                   *
+* Title               :  Schedule background job for RFC connection   *
+* Purpose             :  To schedule background job for RFC connection*
+*                        with logon data                              *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* RSRFCCHK                                                            *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*01-12-2022  Initial   Soumya Ray   Local       To schedule background*
+*                                               job for RFC connection*
+*                                               test                  *
+*---------------------------------------------------------------------*
+
+REPORT zcm_rsrfcchk_exp_jobsubmit.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  TYPES: BEGIN OF lty_range,
+           sign   TYPE c LENGTH 1,
+           option TYPE c LENGTH 2,
+           low    TYPE tabname,
+           high   TYPE tabname,
+         END OF lty_range.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                  LENGTH 1,
+             lc_1         TYPE c VALUE '1'                  LENGTH 1,
+             lc_2         TYPE c VALUE '2'                  LENGTH 1,
+             lc_3         TYPE c VALUE '3'                  LENGTH 1,
+             lc_inclusive TYPE c VALUE 'I'                  LENGTH 1,
+             lc_conpatern TYPE c VALUE 'CP'                 LENGTH 2,
+             lc_all       TYPE c VALUE '*'                  LENGTH 1,
+             lc_strtimmed TYPE c VALUE 'X'                  LENGTH 1,
+             lc_null      TYPE c VALUE 'NULL'               LENGTH 4,
+             lc_rsrfcchk  TYPE btcjob VALUE 'RSRFCCHK',
+             lc_msgtitle  TYPE c VALUE
+             'RSRFCCHK connection test'                     LENGTH 50,
+             lc_message   TYPE c VALUE 'Message'            LENGTH 7,
+             lc_jobname   TYPE c VALUE 'Jobname'            LENGTH 7,
+             lc_jobnumber TYPE c VALUE 'Jobnumber'          LENGTH 9,
+             lc_invalid   TYPE c VALUE 'No input given'     LENGTH 15,
+             lc_export    TYPE c VALUE 'EXPORT'             LENGTH 6,
+             lc_inc_input TYPE c VALUE 'Incorrect input'    LENGTH 20,
+             lc_ncrtjob   TYPE c VALUE 'Cannot create job'  LENGTH 40,
+             lc_invldjob  TYPE c VALUE 'Invalid job data'   LENGTH 40,
+             lc_jobmiss   TYPE c VALUE 'Job name missing'   LENGTH 40,
+             lc_jobsucess TYPE c VALUE
+             'Job scheduled sucessfully'                    LENGTH 50,
+             lc_njobopen  TYPE c VALUE
+             'Issue in opening job for program RSRFCCHK'    LENGTH 60,
+             lc_msg       TYPE c VALUE 'lc_msg'             LENGTH 6,
+             lc_msg1      TYPE c VALUE
+             'Job cannot be started immediately'            LENGTH 50,
+             lc_msg2      TYPE c VALUE
+             'Invalid job start date'                       LENGTH 30,
+             lc_msg3      TYPE c VALUE 'Job missing'        LENGTH 12,
+             lc_msg4      TYPE c VALUE 'Job close failed'   LENGTH 20,
+             lc_msg5      TYPE c VALUE 'Job has no steps'   LENGTH 20,
+             lc_msg6      TYPE c VALUE 'Job has no text'    LENGTH 20,
+             lc_msg7      TYPE c VALUE 'Job lock failed'    LENGTH 20,
+             lc_msg8      TYPE c VALUE 'Invalid target'     LENGTH 20,
+             lc_msg9      TYPE c VALUE 'Invalid time zone'  LENGTH 30,
+             lc_msg10     TYPE c VALUE
+             'Issue in job closing'                         LENGTH 40.
+
+  DATA: ls_output     TYPE tab512,
+        ls_input      TYPE tab512,
+        lv_action     TYPE string,
+        lv_message    TYPE string,
+        lv_jobcount   TYPE btcjobcnt,
+        ls_rangestype TYPE lty_range,
+        lv_subrc      TYPE c LENGTH 2,
+        lt_rangestype TYPE STANDARD TABLE OF lty_range.
+
+  ls_output = lc_msgtitle. "Title
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CONCATENATE lc_message lc_jobname lc_jobnumber INTO ls_output
+  SEPARATED BY lc_sep.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    "No input given
+    CONCATENATE lc_invalid lc_null lc_null INTO ls_output
+    SEPARATED BY lc_sep.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+    WHEN lc_export.
+
+      "FM to open background job
+      CALL FUNCTION 'JOB_OPEN'
+        EXPORTING
+          jobname          = lc_rsrfcchk
+        IMPORTING
+          jobcount         = lv_jobcount
+        EXCEPTIONS
+          cant_create_job  = 1
+          invalid_job_data = 2
+          jobname_missing  = 3
+          OTHERS           = 4.
+      IF sy-subrc <> 0.
+        CASE sy-subrc.
+          WHEN lc_1.
+            lv_message = lc_ncrtjob.
+          WHEN lc_2.
+            lv_message = lc_invldjob.
+          WHEN lc_3.
+            lv_message = lc_jobmiss.
+          WHEN OTHERS.
+            lv_message = lc_njobopen.
+        ENDCASE.
+        CONCATENATE lv_message lc_rsrfcchk lc_null
+        INTO ls_output SEPARATED BY lc_sep. "Error
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_message.
+        RETURN.
+      ENDIF.
+
+      ls_rangestype-sign = lc_inclusive.
+      ls_rangestype-option = lc_conpatern.
+      ls_rangestype-low    = lc_all.
+      APPEND ls_rangestype TO lt_rangestype.
+
+      SUBMIT rsrfcchk
+      WITH stype IN lt_rangestype
+      WITH all_dest EQ abap_true
+      WITH excl_loc EQ abap_true
+      WITH conn_tst EQ abap_true
+      VIA JOB lc_rsrfcchk NUMBER lv_jobcount
+      AND RETURN.
+
+      "FM to close the background job
+      CALL FUNCTION 'JOB_CLOSE'
+        EXPORTING
+          jobcount             = lv_jobcount
+          jobname              = lc_rsrfcchk
+          strtimmed            = lc_strtimmed
+        EXCEPTIONS
+          cant_start_immediate = 1
+          invalid_startdate    = 2
+          jobname_missing      = 3
+          job_close_failed     = 4
+          job_nosteps          = 5
+          job_notex            = 6
+          lock_failed          = 7
+          invalid_target       = 8
+          invalid_time_zone    = 9
+          OTHERS               = 10.
+      IF sy-subrc <> 0.
+        lv_subrc = sy-subrc.
+        CONCATENATE lc_msg lv_subrc INTO lv_message.
+        CONCATENATE lv_message lc_rsrfcchk lv_jobcount INTO ls_output
+        SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, lv_message, lv_subrc.
+        RETURN.
+      ENDIF.
+
+      CONCATENATE lc_jobsucess lc_rsrfcchk lv_jobcount
+      INTO ls_output SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+    WHEN OTHERS.
+      CONCATENATE lc_inc_input lc_null lc_null INTO ls_output
+      SEPARATED BY lc_sep.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+ENDFORM.

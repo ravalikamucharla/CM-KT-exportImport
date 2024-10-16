@@ -1,1 +1,0 @@
-{"OUTPUT": [{"TITLE": "AS Instances of SAP System", "DATA": [{"ApplicationServerInstance": "dbora_NWO_00", "Host": "dbora", "InstanceServices": "Dialog Batch Update Upd2 Spool ICM", "State": "Active"}, {"ApplicationServerInstance": "dbora_NWO_02", "Host": "dbora", "InstanceServices": "Dialog Batch Update Upd2 Spool ICM", "State": "Active"}]}]}

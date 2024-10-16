@@ -1,0 +1,50 @@
+---
+- hosts: localhost
+  tags: source
+  vars:
+    mode: source
+    app_sid_src: "{{source.sap.sid}}" #NWO
+    db_sid_src: "{{source.sap.db.sid}}" #NWO 
+    ascs_instance_number: "{{source.sap.instance_numbers.ascs}}" #"01"
+    pas_instance_number: "{{source.sap.instance_numbers.pas}}" #"00"
+    db_instance_number: "{{source.sap.instance_numbers.db}}" #"02"
+    # db_type: "oracle" #uncomment only when source db is Oracle
+    tags: exp_imp_checks_src
+    playbook_name: 05_0_exp_imp_prereqs
+    create_zip: "no"
+    send_email: "no" 
+  roles:
+    - exp_imp_checks
+    - generate_log
+
+- hosts: localhost
+  tags: target
+  vars:
+    mode: target 
+    app_sid_tgt: "{{target.sap.sid}}" #NWO
+    db_sid_tgt: "{{target.sap.db.sid}}" #NWO 
+    ascs_instance_number: "{{target.sap.instance_numbers.ascs}}" #"01"
+    pas_instance_number: "{{target.sap.instance_numbers.pas}}" #"00"
+    db_instance_number: "{{target.sap.instance_numbers.db}}" #"02"
+    tags: exp_imp_checks_tgt
+    playbook_name: 05_0_exp_imp_prereqs
+    create_zip: "no"
+    send_email: "no" 
+  roles:
+    - exp_imp_checks
+    - generate_log
+
+- hosts: localhost
+  tags: compare
+  vars:
+    mode: compare 
+    app_sid_src: "{{source.sap.sid}}" #NWO
+    app_sid_tgt: "{{target.sap.sid}}" #NWO
+    # db_type: "oracle" #uncomment only when source db is Oracle
+    tags: exp_imp_checks_compare
+    playbook_name: 05_0_exp_imp_prereqs
+    create_zip: "no"
+    send_email: "no"
+  roles:
+    - exp_imp_checks
+    - generate_log

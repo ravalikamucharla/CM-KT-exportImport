@@ -1,0 +1,92 @@
+- name: copy file
+  copy:
+    src: /cm_sap_migration/cm-role/SNC_config/SAP_CloudMigrate-RFC.crt
+    dest: /tmp
+  become: yes
+
+- name: format file
+  lineinfile:
+    path: /tmp/SAP_CloudMigrate-RFC.crt
+    state: absent
+    regexp: "^------*"
+  become: yes
+
+- name: change permission under /tmp
+  command: "{{item}}"
+  become: yes
+  with_items:
+    - touch /tmp/cloudmigrate_del.crt
+    - chmod 777 /tmp/cloudmigrate_del.crt
+    - chown root:root /tmp/cloudmigrate_del.crt
+    - chmod 777 /tmp/SAP_CloudMigrate-RFC.crt
+    - chown root:root /tmp/SAP_CloudMigrate-RFC.crt
+
+- name: format file
+  shell: sudo sed ':a;N;$!ba;s/\n//g' /tmp/SAP_CloudMigrate-RFC.crt > /tmp/cloudmigrate_del.crt
+  register: cert_val
+
+- name: read file
+  command: cat /tmp/cloudmigrate_del.crt
+  register: cert_val
+
+- name: copy content
+  copy:
+    content: "{{cert_val.stdout }}"
+    dest: "/tmp/cloudmigrate_del.crt"
+  become: yes
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','trace': '{{snc.trace_value}}','mshost': '{{hostip}}','msserv': '36{{ instance_number }}','name': '{{ source.sap.sid }}','client': '{{ client }}','group': '{{ group }}',\\}\\"
+  when: connection_type == "snc_with_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','trace': '{{snc.trace_value}}','ashost': '{{hostip}}','sysnr': '{{ instance_number }}','name': '{{ source.sap.sid }}','client': '{{ client }}',\\}\\"
+  when: connection_type == "snc_without_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','name': '{{ source.sap.sid }}','client': '{{ client }}','trace': '{{snc.trace_value}}','user': '{{ user }}','passwd': '{{ password }}','saprouter': '{{passwords.router.connection_saprouter}}','mshost': '{{hostip}}','sysid': '{{ source.sap.sid }}','msserv': '36{{ source.sap.instance_numbers.ascs }}','group': '{{ group }}',\\}\\"
+  when: connection_type == "snc_router_password_with_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','name': '{{ source.sap.sid }}','client': '{{ client }}','trace': '{{snc.trace_value}}','user': '{{ user }}','passwd': '{{ password }}','saprouter': '{{passwords.router.connection_saprouter}}','ashost': '{{hostip}}','sysid': '{{ source.sap.sid }}','sysnr': '36{{ source.sap.instance_numbers.ascs }}',\\}\\"
+  when: connection_type == "snc_router_password_without_group"
+
+- name: delete file
+  command: rm "{{item}}"
+  with_items:
+    - /tmp/SAP_CloudMigrate-RFC.crt
+    - /tmp/cloudmigrate_del.crt
+  become: yes
+
+- debug:
+    msg: "{{connection_string}}"
+
+- name: copy abap pre-migration script files
+  copy:
+    src: "../files/"
+    dest: "{{ abap_scripts_path }}"
+    mode: "0755"
+
+- name: establish connection and getting output from SAP installed System
+  sap_pyrfc:
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
+    abappath: "{{ abap_scripts_path }}"
+    abapscript: ZBASIS_R_BASIS_COMPONENT.txt
+    outputspath: "{{ abap_export_path }}"
+    inputparams: "{{ item.input_params | default('EXPORT') }}"
+  register: output
+  async: 3600
+  poll: 0
+
+- name: checking the job status running in background based.
+  async_status:
+    jid: "{{ output.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 2000
+  delay: 10

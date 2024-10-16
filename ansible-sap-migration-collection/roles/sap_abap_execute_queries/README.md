@@ -57,6 +57,7 @@ The variables to be used within this role are all defined at all.yml,group_vars 
 |rampdown_activities.smigr.target_db_type|db type of target database|yes|
 |rampdown_activities.smigr.db_version|db version of the database|yes|
 |rampdown_activities.smigr.installation_directory|path or directory where smigr output to be installed|yes|
+|passwords.router.connection_saprouter|sap router connection string|no|
 
 ## Dependencies
 
@@ -99,7 +100,10 @@ cd <path>
 |minor|added template for hana sql queries script|28th jsune 2023|Pavithra sathyanarayanan|
 |minor|changes in pre and postmigration yml file (db_type to database_type)|14th july 2023|Pavithra sathyanarayanan|
 |minor|changes in title_json,RFC check,sm21,sm51,sm52,St03N,strurst,DB02 scripts for 702 version and added rz12 script,coloumn_mapping json file for 702 version|14th july 2023|Ashwini Patil,Yasaswini Kandukuri,Anuja Gangeshwari|
-
+|minor|changes in title_json,os commands windows and linux(running commands with sm69)|7th aug 2023|Pavithra sathyanarayanan, Yasaswini kandukuri|
+|minor|changes in stms script|9th aug 2023|Ashwini Patil|
+|minor|added SM66 and component version script |20th sep 2023|Ashwini Patil|
+|minor|changes in FIORI launchpad script and added new script SNCSYSACL|20th oct 2023|Yasaswini kandukuri|
 
 ## License
 Accenture use only

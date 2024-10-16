@@ -1,0 +1,197 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_T_SNCSYSACL_EXP_SNC_ACL                 *
+* Title               :   Check for open / unreleased TRs             *
+* Purpose             :   This report is used to export SNCSYSACL     *
+*                         table details                               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXX                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* SNCSYSACL                 X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author           TR#/Local     Description     *
+*---------------------------------------------------------------------*
+*09-23-2023  Initial   Yasaswini K   Local       To fetch snc acl s/m *
+*                                                   details           *
+*---------------------------------------------------------------------*
+REPORT zcm_t_sncsysacl_exp_snc_acl.
+
+FORM get_config
+              TABLES lt_input  STRUCTURE tab512
+                     lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_type       TYPE c VALUE 'ACLtype'       LENGTH 7,
+             lc_title      TYPE c VALUE
+             'SNC Access Control List '                LENGTH 30,
+             lc_inc_input  TYPE c VALUE
+             'Incorrect input'                         LENGTH 20,
+             lc_noinput    TYPE c VALUE
+             'No input passed'                         LENGTH 20,
+             lc_export     TYPE c VALUE 'EXPORT'        LENGTH 6,
+             lc_sep        TYPE c VALUE '|',
+             lc_security   TYPE c VALUE 'SNCSID'        LENGTH 8,
+             lc_id         TYPE c VALUE 'SystemID'      LENGTH 8,
+             lc_hash       TYPE c VALUE 'HashValue'     LENGTH 10,
+             lc_sncname    TYPE c VALUE 'SNCname'       LENGTH 7,
+             lc_rfc        TYPE c VALUE 'RFCactive'     LENGTH 9,
+             lc_cpic       TYPE c VALUE 'CPICactv'      LENGTH 8,
+             lc_diag       TYPE c VALUE 'DIAGActive'    LENGTH 10,
+             lc_cert       TYPE c VALUE 'CertActve'     LENGTH 9,
+             lc_ext        TYPE c VALUE 'ExtActive'     LENGTH 9,
+             lc_user       TYPE c VALUE 'User'          LENGTH 7,
+             lc_date       TYPE c VALUE 'Date'          LENGTH 4,
+             lc_time       TYPE c VALUE 'Time'          LENGTH 4,
+             lc_chngdby    TYPE c VALUE 'ChangedBy'     LENGTH 9,
+             lc_mdate      TYPE c VALUE 'modDate'       LENGTH 7,
+             lc_mtime      TYPE c VALUE 'modTime'       LENGTH 7,
+             lc_chkver     TYPE c VALUE 'Chkversion'    LENGTH 10,
+             lc_chkval     TYPE c VALUE 'Chkvalue'      LENGTH 8,
+             lc_null       TYPE c VALUE 'NULL'          LENGTH 4,
+             lc_msg_nodata TYPE c VALUE
+             'No data found'                           LENGTH 20,
+             lc_length     TYPE c VALUE 'LengthofLCHR'  LENGTH 12.
+
+  DATA: lt_sncsysacl TYPE STANDARD TABLE OF sncsysacl,
+        ls_sncsysacl TYPE sncsysacl,
+        ls_input     TYPE tab512,
+        lv_action    TYPE char8,
+        lv_version   TYPE string,
+        lv_value     TYPE string,
+        lv_length    TYPE string,
+        lv_name      TYPE string,
+        ls_output    TYPE tab512.
+
+  " Table name
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Read the action required from Python interface
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+  IF sy-subrc NE 0.
+    " No input passed
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+      SELECT * FROM sncsysacl INTO TABLE lt_sncsysacl.
+
+      IF sy-subrc = 0.
+
+        SORT lt_sncsysacl BY typ.
+
+        DELETE lt_sncsysacl WHERE typ NE 'I' AND typ NE 'E'.
+
+        IF lt_sncsysacl IS INITIAL.
+
+          ls_output = lc_msg_nodata.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+          RETURN.
+
+        ENDIF.
+
+        "Column Headings
+        CONCATENATE lc_type     lc_sep
+                    lc_security lc_sep
+                    lc_id       lc_sep
+                    lc_hash     lc_sep
+                    lc_sncname  lc_sep
+                    lc_rfc      lc_sep
+                    lc_cpic     lc_sep
+                    lc_diag     lc_sep
+                    lc_cert     lc_sep
+                    lc_ext      lc_sep
+                    lc_user     lc_sep
+                    lc_date     lc_sep
+                    lc_time     lc_sep
+                    lc_chngdby  lc_sep
+                    lc_mdate    lc_sep
+                    lc_mtime    lc_sep
+                    lc_chkver   lc_sep
+                    lc_chkval   lc_sep
+                    lc_length   INTO ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_sncsysacl INTO ls_sncsysacl.
+
+          lv_version = ls_sncsysacl-chkversion.
+          lv_value = ls_sncsysacl-chkval.
+          lv_length = ls_sncsysacl-knamelen.
+          lv_name = ls_sncsysacl-kname.
+
+          IF lv_name IS INITIAL.
+            lv_name = lc_null.
+          ENDIF.
+
+          CONCATENATE ls_sncsysacl-typ lc_sep
+          ls_sncsysacl-snc_sid     lc_sep
+          ls_sncsysacl-r_sysid     lc_sep
+          ls_sncsysacl-hname       lc_sep
+          ls_sncsysacl-pname       lc_sep
+          ls_sncsysacl-rfc_activ   lc_sep
+          ls_sncsysacl-cpic_activ  lc_sep
+          ls_sncsysacl-diag_activ  lc_sep
+          ls_sncsysacl-cert_activ  lc_sep
+          ls_sncsysacl-exti_activ  lc_sep
+          ls_sncsysacl-cdate       lc_sep
+          ls_sncsysacl-ctime       lc_sep
+          ls_sncsysacl-mname       lc_sep
+          ls_sncsysacl-mdate       lc_sep
+          ls_sncsysacl-mtime       lc_sep
+          lv_version               lc_sep
+          lv_value                 lc_sep
+          ls_sncsysacl-reserve     lc_sep
+          lv_length                lc_sep
+          lv_name
+          INTO ls_output.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_sncsysacl, lv_version, lv_name,
+                 lv_length, lv_value.
+        ENDLOOP.
+
+      ELSE.
+
+        ls_output = lc_msg_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      " Table Data
+      PERFORM null_check TABLES  lt_output.
+
+    WHEN OTHERS.
+      ls_output = lc_inc_input. "Incorrect input
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+ENDFORM.
+
+FORM null_check TABLES lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

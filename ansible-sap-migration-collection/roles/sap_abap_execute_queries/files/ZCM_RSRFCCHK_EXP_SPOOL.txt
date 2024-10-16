@@ -1,0 +1,205 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_RSRFCCHK_EXP_SPOOL                       *
+* Title               :  To get the spool for RSRFCCHK job submitted  *
+* Purpose             :  To fetch spool of RSRFCCHK job               *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* XXXXXXX                                                             *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TBTCP                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*30-12-2022  Initial   Soumya Ray   Local        To fetch RSRFCCHK job*
+*                                                spool details        *
+*---------------------------------------------------------------------*
+
+REPORT zcm_rsrfcchk_exp_spool.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  CONSTANTS: lc_sep       TYPE c VALUE '|'                   LENGTH 1,
+             lc_f         TYPE c VALUE 'F'                   LENGTH 1,
+             lc_p         TYPE c VALUE 'P'                   LENGTH 1,
+             lc_a         TYPE c VALUE 'A'                   LENGTH 1,
+             lc_s         TYPE c VALUE 'S'                   LENGTH 1,
+             lc_x         TYPE c VALUE 'X'                   LENGTH 1,
+             lc_y         TYPE c VALUE 'Y'                   LENGTH 1,
+             lc_r         TYPE c VALUE 'R'                   LENGTH 1,
+             lc_z         TYPE c VALUE 'Z'                   LENGTH 1,
+             lc_finished  TYPE c VALUE 'Finished'            LENGTH 8,
+             lc_canceled  TYPE c VALUE 'Canceled'            LENGTH 8,
+             lc_nostat    TYPE c VALUE
+             'StatusNotCaptured'                             LENGTH 17,
+             lc_running   TYPE c VALUE 'Running'             LENGTH 7,
+             lc_active    TYPE c VALUE 'Active'              LENGTH 6,
+             lc_ready     TYPE c VALUE 'Ready'               LENGTH 5,
+             lc_unknown   TYPE c VALUE 'Unknown State'       LENGTH 13,
+             lc_released  TYPE c VALUE 'Released'            LENGTH 8,
+             lc_scheduled TYPE c VALUE 'Scheduled'           LENGTH 9,
+             lc_fetch     TYPE c VALUE 'FETCH'               LENGTH 5,
+             lc_title     TYPE c VALUE 'RSRFCCHKJobStatus'   LENGTH 30,
+             lc_inc_input TYPE c VALUE 'Incorrect input'     LENGTH 20,
+             lc_no_input  TYPE c VALUE 'No input passed'     LENGTH 15,
+             lc_jobtitle  TYPE c VALUE 'RSRFCCHK spool'      LENGTH 30,
+             lc_nolog     TYPE c VALUE 'No data found'       LENGTH 30,
+             lc_nspool    TYPE c VALUE
+             'Issue in reading spool'                        LENGTH 50,
+             lc_nlistindt TYPE c VALUE
+             'No Spool number fetched'                       LENGTH 50.
+
+  DATA: ls_output    TYPE tab512,
+        ls_input     TYPE tab512,
+        lv_action    TYPE string,
+        lv_jobcount  TYPE btcjobcnt,
+        lv_jobname   TYPE btcjob,
+        lv_status    TYPE btcstatus,
+        lv_text      TYPE string,
+        lv_listident TYPE btclistid,
+        lv_rqident   TYPE rspoid,
+        ls_buffer    TYPE char512,
+        lt_buffer    TYPE STANDARD TABLE OF char512.
+
+  CLEAR: ls_output, ls_input, lv_action, lv_jobcount, lv_status,
+         lv_text, lv_jobname, lv_status, lv_text, lv_listident,
+         lv_rqident, ls_buffer.
+  FREE: lt_buffer.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  SPLIT ls_input AT lc_sep INTO
+   lv_action
+   lv_jobname
+   lv_jobcount.
+
+  CASE lv_action.
+    WHEN lc_fetch.
+
+      "Fetch the job status
+      SELECT SINGLE status FROM tbtco
+        INTO lv_status
+        WHERE jobname = lv_jobname "+V001
+        AND   jobcount = lv_jobcount.
+      IF sy-subrc EQ 0.
+        "In case status of SM37 job is not finished or cancelled
+        " then send status as output
+        CLEAR lv_text.
+        CASE lv_status.
+          WHEN lc_f.
+            lv_text = lc_finished.
+          WHEN lc_a.
+            lv_text = lc_canceled.
+          WHEN lc_p.
+            lv_text = lc_scheduled.
+          WHEN lc_s.
+            lv_text = lc_released.
+          WHEN lc_x.
+            lv_text = lc_unknown.
+          WHEN lc_y.
+            lv_text = lc_ready.
+          WHEN lc_r.
+            lv_text = lc_running.
+          WHEN lc_z.
+            lv_text = lc_active.
+          WHEN OTHERS.
+            lv_text = lc_nostat.
+        ENDCASE.
+
+        "DATA
+        ls_output = lv_text.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF lv_status NE lc_f.
+          RETURN.
+        ELSE.
+
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+
+          "Title of job log
+          ls_output = lc_jobtitle.
+          APPEND ls_output TO lt_output.
+          CLEAR ls_output.
+
+          SELECT SINGLE listident   "spool number
+          FROM tbtcp
+          INTO lv_listident
+          WHERE jobname = lv_jobname
+          AND jobcount  = lv_jobcount.
+          IF sy-subrc NE 0.
+            ls_output = lc_nlistindt.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+          ENDIF.
+
+          lv_rqident = lv_listident.
+
+          CALL FUNCTION 'RSPO_RETURN_ABAP_SPOOLJOB'
+            EXPORTING
+              rqident              = lv_rqident
+            TABLES
+              buffer               = lt_buffer
+            EXCEPTIONS
+              no_such_job          = 1
+              not_abap_list        = 2
+              job_contains_no_data = 3
+              selection_empty      = 4
+              no_permission        = 5
+              can_not_access       = 6
+              read_error           = 7
+              OTHERS               = 8.
+          IF sy-subrc <> 0.
+             ls_output = lc_nspool.
+             APPEND ls_output TO lt_output.
+             CLEAR ls_output.
+             RETURN.
+          ENDIF.
+
+          IF lt_buffer IS INITIAL.
+            ls_output = lc_nolog.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+            RETURN.
+          ENDIF.
+
+          LOOP AT lt_buffer INTO ls_buffer.
+            ls_output = ls_buffer.
+            APPEND ls_output TO lt_output.
+            CLEAR: ls_buffer, ls_output.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+
+      CLEAR: ls_output, ls_input, lv_action, lv_jobcount, lv_status,
+             lv_text, lv_jobname, lv_status, lv_text, lv_listident,
+             lv_rqident,ls_buffer.
+      FREE: lt_buffer.
+
+    WHEN OTHERS.
+      "Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+ENDFORM.

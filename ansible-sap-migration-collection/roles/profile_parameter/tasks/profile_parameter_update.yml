@@ -1,0 +1,84 @@
+---
+- name: set path
+  set_fact:
+    exclusion_list_path: "{{ lookup('first_found', 'exclusion.txt') }}"
+  delegate_to: localhost
+
+- debug:
+    var: exclusion_list_path
+
+- set_fact: 
+    inclusion_params: "{{ profile_parameter.inclusion_parameters | to_json | from_json | join(',') }}"
+
+- name: change permission 
+  become_method: sudo 
+  become: yes
+  file:
+    path: "{{ profile_param_output }}/Profile_params"
+    mode: "700"
+    recurse: yes
+
+- name: CPU count in target
+  shell:
+    cmd: grep 'CPU(s)' "{{ profile_param_output }}/Profile_params/validate_cpu_{{ ansible_hostname }}.json" | head -n 1 | cut -d '"' -f 4
+  register: target_cpu_count
+  delegate_to: localhost
+
+- debug: var=target_cpu_count
+
+- name: ram size in target
+  shell:
+    cmd: grep 'Total Memory' "{{ profile_param_output }}/Profile_params/capture_memory_{{ ansible_hostname }}.json" | head -n 1 | cut -d '"' -f 4
+  register: target_memory
+  delegate_to: localhost
+
+- debug: var=target_memory
+
+- name: Profile paramter update
+  sap_profile_update_os: 
+    source_files: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/profile_parameter/PFL_Files/"
+    target_files: "{{ profile_files }}"
+    new_location: "{{ profile_param_output }}/PFL_Updated/" 
+    target_sid: "{{ target.sap.sid | upper }}" 
+    cpu_count_target: "{{ target_cpu_count.stdout }}" 
+    ram_size_target: "{{ target_memory.stdout }}"
+    inclusion_param: "{{ inclusion_params }}" 
+    exclude_vars_file: "{{ exclusion_list_path }}"
+    max_work_process: "{{ profile_parameter.max_work_process }}"
+    rdisp_flag: True
+  register: profile_update
+  delegate_to: localhost
+
+- name: find pfl update path
+  find:
+    paths: "{{ profile_param_output }}/PFL_Updated/"
+    pattern: "*D*"
+    recurse: yes
+  register: pas_profile_files
+  delegate_to: localhost
+
+- name: copy pfl file from local to target 
+  become_method: sudo 
+  become: yes
+  copy:
+    src: "{{ item.path }}"
+    dest: "/usr/sap/{{ target.sap.sid }}/SYS/profile/"
+    backup: true
+  with_items: "{{ pas_profile_files.files }}"
+
+- name: find pfl update path
+  find:
+    paths: "{{ profile_param_output }}/PFL_Updated/"
+    pattern: "*A*"
+    recurse: yes
+  register: ascs_profile_files
+  delegate_to: localhost
+
+- name: copy pfl file from local to target 
+  become_method: sudo 
+  become: yes
+  copy:
+    src: "{{ item.path }}"
+    dest: "/usr/sap/{{ target.sap.sid }}/SYS/profile/"
+    backup: true
+  with_items: "{{ ascs_profile_files.files }}"

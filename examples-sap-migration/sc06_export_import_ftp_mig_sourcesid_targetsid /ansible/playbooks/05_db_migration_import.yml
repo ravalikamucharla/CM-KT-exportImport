@@ -11,6 +11,5 @@
     source_hostname: "{{groups['source_db'][0]}}"
     mode: import
   roles:
-    # - sap_abap_swpm_export_import
     - sap_import_database
   

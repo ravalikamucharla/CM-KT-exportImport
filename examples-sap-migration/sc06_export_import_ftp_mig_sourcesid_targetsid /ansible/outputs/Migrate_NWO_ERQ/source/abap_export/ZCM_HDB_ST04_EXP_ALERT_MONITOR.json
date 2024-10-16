@@ -1,3 +1,0 @@
-{"OUTPUT": [
-    {"TITLE": "Alert Check Information", "DATA": [{"RESULT": "This script is not valid for ['hana', 'sql', 'sybase', 'db2'] database"}]}, 
-    {"TITLE": "Current Alerts", "DATA": [{"RESULT": "This script is not valid for ['hana', 'sql', 'sybase', 'db2'] database"}]}]}

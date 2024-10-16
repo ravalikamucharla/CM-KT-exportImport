@@ -1,5 +1,93 @@
 ---
 
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'mshost': '{{hostname}}','msserv': '36{{ source.sap.instance_numbers.ascs }}','client': '{{ client }}','user': '{{ user }}','passwd': '{{ password }}','group': '{{ group }}',\\}\\"
+  when: connection_type == "password_with_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'ashost': '{{hostname}}','sysnr': '{{ instance_number }}','client': '{{ client }}','user': '{{ user }}','passwd': '{{ password }}',\\}\\"
+  when: connection_type  == "password_without_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'saprouter': '{{passwords.router.connection_saprouter}}','user': '{{ user }}','passwd': '{{ password }}','mshost': '{{hostname}}','msserv': '36{{ source.sap.instance_numbers.ascs }}','sysid': '{{ source.sap.sid }}','client': '{{ client }}','group': '{{ group }}',\\}\\"
+  when: connection_type == "router_with_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'saprouter': '{{passwords.router.connection_saprouter}}','user': '{{ user }}','passwd': '{{ password }}','ashost': '{{hostname}}','sysnr': '{{ instance_number }}','sysid': '{{ source.sap.sid }}','client': '{{ client }}',\\}\\"
+  when: connection_type == "router_without_group"
+
+- block:
+      - name: copy file
+        copy:
+          src: /cm_sap_migration/cm-role/SNC_config/SAP_CloudMigrate-RFC.crt
+          dest: /tmp
+        become: yes
+
+      - name: format file
+        lineinfile:
+          path: /tmp/SAP_CloudMigrate-RFC.crt
+          state: absent
+          regexp: '^------*'
+        become: yes
+
+      - name: change permission under /tmp
+        command: "{{item}}"
+        become: yes
+        with_items:
+          - touch /tmp/cloudmigrate_del.crt
+          - chmod 777 /tmp/cloudmigrate_del.crt
+          - chown root:root /tmp/cloudmigrate_del.crt
+          - chmod 777 /tmp/SAP_CloudMigrate-RFC.crt
+          - chown root:root /tmp/SAP_CloudMigrate-RFC.crt
+
+      - name: format file
+        shell: sudo sed ':a;N;$!ba;s/\n//g' /tmp/SAP_CloudMigrate-RFC.crt > /tmp/cloudmigrate_del.crt
+        register: cert_val
+
+      - name: read file
+        command: cat /tmp/cloudmigrate_del.crt
+        register: cert_val
+
+      - name: copy content
+        copy:
+          content: "{{cert_val.stdout }}"
+          dest: "/tmp/cloudmigrate_del.crt"
+        become: yes
+
+  when: connection_type == "snc_with_group_with_cert" or connection_type == "snc_without_group_with_cert" or connection_type == "snc_router_password_without_group" or connection_type == "snc_router_password_with_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','trace': '{{snc.trace_value}}','mshost': '{{hostip}}','sysid': '{{ source.sap.sid }}','msserv': '36{{ source.sap.instance_numbers.ascs }}','name': '{{ source.sap.sid }}','client': '{{ client }}','group': '{{ group }}',\\}\\"
+  when: connection_type == "snc_with_group_with_cert"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','trace': '{{snc.trace_value}}','ashost': '{{hostip}}','sysnr': '{{ instance_number }}','name': '{{ source.sap.sid }}','client': '{{ client }}',\\}\\"
+  when: connection_type == "snc_without_group_with_cert"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','name': '{{ source.sap.sid }}','client': '{{ client }}','trace': '{{snc.trace_value}}','user': '{{ user }}','passwd': '{{ password }}','saprouter': '{{passwords.router.connection_saprouter}}','mshost': '{{hostip}}','sysid': '{{ source.sap.sid }}','msserv': '36{{ source.sap.instance_numbers.ascs }}','group': '{{ group }}',\\}\\"
+  when: connection_type == "snc_router_password_with_group"
+
+- name: set fact connection string
+  set_fact:
+    connection_string: "\\{\\'snc_partnername': '{{snc.snc_partner_value}}','snc_lib': '/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so','x509cert': '{{cert_val.stdout}}','name': '{{ source.sap.sid }}','client': '{{ client }}','trace': '{{snc.trace_value}}','user': '{{ user }}','passwd': '{{ password }}','saprouter': '{{passwords.router.connection_saprouter}}','ashost': '{{hostip}}','sysid': '{{ source.sap.sid }}','sysnr': '36{{ source.sap.instance_numbers.ascs }}',\\}\\"
+  when: connection_type == "snc_router_password_without_group"
+
+- name: delete file
+  command: rm "{{item}}"
+  with_items: 
+    - /tmp/SAP_CloudMigrate-RFC.crt
+    - /tmp/cloudmigrate_del.crt
+  become: yes
+  when: connection_type == "snc_with_group_with_cert" or connection_type == "snc_without_group_with_cert" or connection_type == "snc_router_password_without_group" or connection_type == "snc_router_password_with_group"
+
 - name: To check if ports are open
   command: nc -vz {{ hostip }} {{ port_numb }}{{ instance_number }}
   register: port_status

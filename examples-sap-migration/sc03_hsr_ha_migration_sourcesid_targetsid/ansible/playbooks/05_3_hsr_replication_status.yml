@@ -1,6 +1,0 @@
-- name: status
-  hosts: "{{ groups['source_master_db'][0] }}"
-  vars_files:
-    - ../inventory/group_vars/source_db.yml
-  roles:
-    - replication_status

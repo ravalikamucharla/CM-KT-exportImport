@@ -1,0 +1,3308 @@
+*---------------------------------------------------------------------*
+* Program Name        :   ZCM_EXP_SM59_RFC_DESTINATIONS               *
+* Title               :   RFC Destination in SM59                     *
+* Purpose             :   This report is used to export RFCdestination*
+*                     :   in SM59                                     *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM59                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* RFCDES              :     X                                         *
+* RFCDOC              :     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*02-10-2023  Initial   Yasaswini K   Local         Configure new RFC  *
+*                                                  destination in SM59*
+*---------------------------------------------------------------------*
+REPORT zcm_exp_sm59_rfc_destinations.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  TYPES: BEGIN OF lty_option_table,
+           token TYPE rfchost_ext,
+         END OF lty_option_table.
+
+  CONSTANTS: lc_i               TYPE c VALUE 'I'      LENGTH 1,
+             lc_a               TYPE c VALUE 'A'      LENGTH 1,
+             lc_e               TYPE c VALUE 'E'      LENGTH 1,
+             lc_f               TYPE c VALUE 'F'      LENGTH 1,
+             lc_r               TYPE c VALUE 'R'      LENGTH 1,
+             lc_export          TYPE c VALUE 'EXPORT' LENGTH 6,
+             lc_3x              TYPE c VALUE '3=X,'   LENGTH 4,
+             lc_4x              TYPE c VALUE '4='     LENGTH 2,
+             lc_no_input        TYPE c VALUE
+             'No input passed'                        LENGTH 15,
+             lc_inc_input       TYPE c VALUE
+             'Incorrect input'                        LENGTH 20,
+             lc_msg13           TYPE c VALUE
+             'No data found'                          LENGTH 50,
+             lc_driver          TYPE c VALUE
+             'ABAP Driver'                            LENGTH 15,
+             lc_condriver       TYPE c VALUE
+             'Connections using ABAP Driver'          LENGTH 60,
+             lc_no              TYPE c VALUE
+             'No'                                     LENGTH 2,
+             lc_yesall          TYPE c VALUE
+             'Yes(All)'                               LENGTH 8,
+             lc_prompt          TYPE c VALUE
+             'Input Prompt'                           LENGTH 20,
+             lc_event           TYPE c VALUE
+             'Trigger Event'                          LENGTH 13,
+             lc_yes             TYPE c VALUE
+             'Yes'                                    LENGTH 3,
+             lc_authdest        TYPE c VALUE
+             'Authorization'                          LENGTH 20,
+             lc_3               TYPE c VALUE '3'      LENGTH 1,
+             lc_icm             TYPE c VALUE
+             'ICM Default Timeout'                    LENGTH 20,
+             lc_notimeout       TYPE c VALUE
+             'No Timeout'                             LENGTH 12,
+             lc_spetimeout      TYPE c VALUE
+             'Specify Timeout'                        LENGTH 20,
+             lc_tarhost         TYPE c VALUE 'Target Host'
+                                                      LENGTH 20,
+             lc_tarsys          TYPE c VALUE 'Target System'
+                                                      LENGTH 20,
+             lc_msgserv         TYPE c VALUE 'Msg Server'
+                                                      LENGTH 20,
+             lc_group           TYPE c VALUE 'Group'  LENGTH 10,
+             lc_x               TYPE c VALUE 'X'      LENGTH 1,
+             lc_flag            TYPE c VALUE 'l=X'    LENGTH 3,
+             lc_m2              TYPE c VALUE '-2'     LENGTH 2,
+             lc_m1              TYPE c VALUE '-1'     LENGTH 2,
+             lc_t               TYPE c VALUE 'T'      LENGTH 1,
+             lc_1               TYPE c VALUE '1'      LENGTH 1,
+             lc_0               TYPE c VALUE '0'      LENGTH 1,
+             lc_4               TYPE c VALUE '4'      LENGTH 1,
+             lc_hypen           TYPE c VALUE '-'      LENGTH 1,
+             lc_300             TYPE c VALUE '300'    LENGTH 3,
+             lc_msgtitle        TYPE c VALUE
+             'List of RFC Destinations'               LENGTH 34,
+             lc_internal        TYPE c VALUE
+             'Internal Connections'                   LENGTH 40,
+             lc_dest            TYPE c VALUE
+             'RFC destination'                        LENGTH 80,
+             lc_connection_type TYPE c VALUE
+             'RFC connection type'                    LENGTH 80,
+             lc_desc            TYPE c VALUE
+             'Description1'                           LENGTH 80,
+             lc_desc2           TYPE c VALUE
+             'Description2'                           LENGTH 80,
+             lc_desc3           TYPE c VALUE
+             'Description3'                           LENGTH 80,
+             lc_ref             TYPE c VALUE
+             'Reference Entry'                        LENGTH 30,
+             lc_communication   TYPE c VALUE
+             'Communication Type'                     LENGTH 20,
+             lc_load            TYPE c VALUE
+             'Loadbalancing'                          LENGTH 20,
+             lc_host            TYPE c VALUE
+             'Host'                                   LENGTH 10,
+             lc_ip              TYPE c VALUE
+             'IP Address'                             LENGTH 20,
+             lc_instance        TYPE c VALUE
+             'Instance No'                            LENGTH 80,
+             lc_save            TYPE c VALUE
+             'SaveToDatabaseAs'                       LENGTH 20,
+             lc_gwhost          TYPE c VALUE
+             'GatewayHost'                            LENGTH 20,
+             lc_gwserv          TYPE c VALUE
+             'GatewayService'                         LENGTH 30,
+             lc_external        TYPE c VALUE
+             'Start Type of External Program'         LENGTH 60,
+             lc_cpictime        TYPE c VALUE
+             'CPI-CTimeout'                           LENGTH 20,
+             lc_phost           TYPE c VALUE
+             'Proxy Host'                             LENGTH 80,
+             lc_pserv           TYPE c VALUE
+             'Proxy Service'                          LENGTH 80,
+             lc_puser           TYPE c VALUE
+             'Proxy User'                             LENGTH 15,
+             lc_service         TYPE c VALUE
+             'Service No'                             LENGTH 15,
+             lc_path            TYPE c VALUE
+             'Path Prefix'                            LENGTH 15,
+
+             lc_lang            TYPE c VALUE
+             'Language'                               LENGTH 80,
+             lc_client          TYPE c VALUE
+             'Client'                                 LENGTH 80,
+             lc_ssl             TYPE c VALUE 'SSL'    LENGTH 3,
+             lc_sslcert         TYPE c VALUE
+             'SSL Certificate'                        LENGTH 15,
+             lc_sslerr          TYPE c VALUE
+             'SSL Certificate Entries not found'      LENGTH 70,
+             lc_timeout         TYPE c VALUE
+             'Timeout'                                LENGTH 10,
+             lc_httpversion     TYPE c VALUE
+             'HTTP Version'                           LENGTH 20,
+             lc_compstatus      TYPE c VALUE
+             'Compression Status'                     LENGTH 30,
+             lc_compresponse    TYPE c VALUE
+             'Compressed Response'                    LENGTH 30,
+             lc_cookies         TYPE c VALUE
+             'Accept Cookies'                         LENGTH 20,
+             lc_cuser           TYPE c VALUE
+             'CurrentUser'                            LENGTH 20,
+             lc_user            TYPE c VALUE
+             'User'                                   LENGTH 5,
+             lc_2               TYPE c VALUE '2'      LENGTH 1,
+             lc_r2              TYPE c VALUE 'R/2 Connections'
+                                                      LENGTH 20,
+             lc_abap            TYPE c VALUE 'ABAP Connections'
+                                                      LENGTH 30,
+             lc_httpe           TYPE c VALUE
+             'HTTP connections to External Server'    LENGTH 40,
+             lc_httpabap        TYPE c VALUE
+             'HTTP connections to ABAP system'        LENGTH 40,
+             lc_logical         TYPE c VALUE 'Logical Connection'
+                                                      LENGTH 20,
+             lc_cmc             TYPE c VALUE 'CMC Connection'
+                                                      LENGTH 20,
+             lc_sna             TYPE c VALUE 'SNA/CPI-C Connection'
+                                                      LENGTH 30,
+             lc_tcp             TYPE c VALUE 'TCP/IP Connection'
+                                                      LENGTH 30,
+             lc_donot           TYPE c VALUE 'Do not use a user'
+                                                      LENGTH 30,
+             lc_saprfc          TYPE c VALUE 'SAP RFC Logon'
+                                                      LENGTH 20,
+             lc_trust           TYPE c VALUE 'Trust'
+                                                      LENGTH 30,
+             lc_trust1          TYPE c VALUE 'Trust Relationship'
+                                                      LENGTH 30,
+             lc_bauth           TYPE c VALUE 'Basic Authentication'
+                                                      LENGTH 40,
+             lc_password        TYPE c VALUE 'Password'
+                                                      LENGTH 10,
+             lc_ppassword       TYPE c VALUE 'Proxy Password'
+                                                      LENGTH 20,
+             lc_logon           TYPE c VALUE
+             'Logon with User'                        LENGTH 15,
+             lc_logontkt        TYPE c VALUE
+             'Logon with Ticket'                      LENGTH 20,
+             lc_null            TYPE c VALUE 'NULL'   LENGTH 4,
+             lc_comma           TYPE c VALUE ','      LENGTH 1,
+             lc_d               TYPE c VALUE 'D='     LENGTH 2,
+             lc_b               TYPE c VALUE 'B'      LENGTH 1,
+             lc_nuser           TYPE c VALUE '%_LOG01%' LENGTH 8,
+             lc_nauth           TYPE c VALUE '%_PWD'  LENGTH 5,
+             lc_*               TYPE c VALUE '*'      LENGTH 1,
+             lc_n               TYPE c VALUE 'N'      LENGTH 1,
+             lc_s               TYPE c VALUE 'S'      LENGTH 1,
+             lc_y               TYPE c VALUE 'Y'      LENGTH 1,
+             lc_g               TYPE c VALUE 'G'      LENGTH 1,
+             lc_l               TYPE c VALUE 'L'      LENGTH 1,
+             lc_m               TYPE c VALUE 'M'      LENGTH 1,
+             lc_h               TYPE c VALUE 'H'      LENGTH 1,
+             lc_sep             TYPE c VALUE '|'      LENGTH 1,
+             lc_j               TYPE c VALUE 'J='     LENGTH 2,
+             lc_fy              TYPE c VALUE 'f=Y'    LENGTH 3,
+             lc_p               TYPE c VALUE 'p='     LENGTH 2,
+             lc_nt              TYPE c VALUE 'n='     LENGTH 2,
+             lc_descs           TYPE c VALUE
+             'SSF application description'            LENGTH 40,
+             lc_http0           TYPE c VALUE
+             'HTTP1.0'                                LENGTH 7,
+             lc_inactive        TYPE c VALUE
+             'Inactive'                               LENGTH 8,
+             lc_active          TYPE c VALUE
+             'Active'                                 LENGTH 6,
+             lc_sslc            TYPE c VALUE
+             'SSLC'                                   LENGTH 4,
+             lc_mime            TYPE c VALUE
+             'Active(Depends on MIME Type)'           LENGTH 30,
+             lc_whole           TYPE c VALUE
+             'Active(Whole Document)'                 LENGTH 30,
+             lc_http1           TYPE c VALUE
+             'HTTP1.1'                                LENGTH 7,
+             lc_startapp        TYPE c VALUE
+             'Start on Application Server'            LENGTH 30,
+             lc_program         TYPE c VALUE 'Program' LENGTH 10,
+             lc_exhost          TYPE c VALUE
+             'Start on Explicit Host'                  LENGTH 30,
+             lc_frontend        TYPE c VALUE
+             'Start on Front-End Work Station'         LENGTH 40,
+             lc_regprogram      TYPE c VALUE
+             'Registered Server Program'               LENGTH 30,
+             lc_logonscreen     TYPE c VALUE
+             'LogonScreen'                             LENGTH 30,
+             lc_defaultgw       TYPE c VALUE
+             'Default Gateway Value'                   LENGTH 30,
+             lc_exptrace        TYPE c VALUE
+             'Export Trace'                            LENGTH 20,
+             lc_notexptrace     TYPE c VALUE
+             'Do Not Export Trace'                     LENGTH 30,
+             lc_remoteexe       TYPE c VALUE
+             'Remote Execution'                        LENGTH 20,
+             lc_remoteshell     TYPE c VALUE
+             'Remote Shell'                            LENGTH 20,
+             lc_secureshell     TYPE c VALUE
+             'Secure Shell'                            LENGTH 15,
+             lc_stimeout        TYPE c VALUE
+             'Specify Timeout'                         LENGTH 20,
+             lc_timeoutinact    TYPE c VALUE
+             'Timeout Inactive'                        LENGTH 20,
+             lc_valuesec        TYPE c VALUE
+             'Defined Value in Seconds'                LENGTH 30,
+             lc_donotsend       TYPE c VALUE
+             'Do Not Send Logon Ticket'                LENGTH 40,
+             lc_sendlogon       TYPE c VALUE
+             'Send Logon Ticket Without Ref. to a Target System'
+                                                       LENGTH 60,
+             lc_createdby       TYPE c VALUE
+             'CreatedBy'                               LENGTH 10,
+             lc_createdon       TYPE c VALUE
+             'CreatedOn'                               LENGTH 10,
+             lc_creclient       TYPE c VALUE
+             'CreatedClient'                           LENGTH 15,
+             lc_cretime         TYPE c VALUE
+             'Createdtime'                             LENGTH 15,
+             lc_changedby       TYPE c VALUE
+             'LastChangedBy'                           LENGTH 20,
+             lc_changedon       TYPE c VALUE
+             'ChangedOn'                               LENGTH 10,
+             lc_chgclient       TYPE c VALUE
+             'ChangedClient'                           LENGTH 15,
+             lc_chgtime         TYPE c VALUE
+             'Changedtime'                             LENGTH 15,
+             lc_sendassertion   TYPE c VALUE
+              'Send Assertion Ticket for Dedicated Target System'
+                                                       LENGTH 60,
+             lc_systemid        TYPE c VALUE
+             'System ID'                               LENGTH 10,
+             lc_asystemid       TYPE c VALUE
+             'Assertion SystemID'                      LENGTH 30,
+             lc_aclient         TYPE c VALUE
+             'Assertion Client'                        LENGTH 30,
+             lc_text            TYPE c VALUE 'Non-Unicode'
+                                                       LENGTH 30,
+             lc_options         TYPE c VALUE
+             'Non-UnicodeOptions'                     LENGTH 20,
+             lc_codepagevalue   TYPE c VALUE
+             'Code Page Value'                        LENGTH 30,
+             lc_converstion     TYPE c VALUE
+             'CharacterConversion'                    LENGTH 30,
+             lc_default         TYPE c VALUE
+             'Default Setting'                         LENGTH 20,
+             lc_dump            TYPE c VALUE
+             'Short Dump After Conversion Error'       LENGTH 40,
+             lc_conerrors       TYPE c VALUE
+             'Ignore Conversion Errors'                LENGTH 30,
+             lc_indicator       TYPE c VALUE
+             'ErrorIndicator'                         LENGTH 20,
+             lc_value           TYPE c VALUE
+             'ErrorValue'                             LENGTH 20,
+             lc_rfcconnection   TYPE c VALUE
+             'SlowRFCConnection'                       LENGTH 20,
+             lc_rfctrace        TYPE c VALUE
+             'SetRFCTrace'                             LENGTH 12,
+             lc_tracemethods    TYPE c VALUE
+             'TraceExportMethods'                      LENGTH 30,
+             lc_keepalive       TYPE c VALUE
+             'Timeout'                                 LENGTH 30,
+             lc_timeoutvalue    TYPE c VALUE
+             'Seconds'                                 LENGTH 40,
+             lc_secondsvalue    TYPE c VALUE
+             'TimeoutValueInSeconds'                   LENGTH 60,
+             lc_donotmodfiy     TYPE c VALUE
+             'MFlag'                                   LENGTH 10,
+             lc_codepage        TYPE c VALUE
+             'Code page from client-side logon language(at runtime)'
+                                                       LENGTH 60,
+             lc_ecodepage       TYPE c VALUE
+             'Explicit Code Page'                      LENGTH 20,
+             lc_mdmpactive      TYPE c VALUE
+             'MDMP active'                             LENGTH 20,
+             lc_activation      TYPE c VALUE
+             'Activation Type'                         LENGTH 20,
+             lc_text1           TYPE c VALUE 'Unicode'
+                                                       LENGTH 10.
+
+  DATA: lt_rfcdes           TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcattrib        TYPE STANDARD TABLE OF rfcattrib,
+        ls_rfcattrib        TYPE rfcattrib,
+        ls_rfcdes           TYPE rfcdes,
+        lv_nmod             TYPE string,
+        lv_dummy            TYPE string,
+        lv_rest             TYPE string,
+        lv_user             TYPE string,
+        ls_rfcdisplay       TYPE rfcdisplay,
+        lv_msgserver        TYPE rfchost_ext,
+        lv_tarhost          TYPE rfchost_ext,
+        ls_rfc_imp          TYPE rfcdes,
+        lv_rfcsnc           TYPE string,
+        lv_psecontext       TYPE psecontext,
+        lv_trace            TYPE string,
+        lv_rfcoptions       TYPE rfcoptions,
+        lv_rfcunicode       TYPE rfcdisplay-rfcunicode,
+        lt_output1          TYPE STANDARD TABLE OF tab512,
+        ls_output           TYPE tab512,
+        lv_rfcslogin5       TYPE string,
+        lv_rfcslogin1       TYPE string,
+        ls_input            TYPE tab512,
+        lv_action           TYPE char20,
+        lt_rfcdes_3         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_2         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_l         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_s         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_m         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_g         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_h         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_i         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_t         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdes_x         TYPE STANDARD TABLE OF rfcdes,
+        lt_rfcdoc           TYPE STANDARD TABLE OF rfcdoc,
+        ls_rfcdoc           TYPE rfcdoc,
+        lv_compress         TYPE string,
+        lv_saveas           TYPE string,
+        lv_server           TYPE rfcdisplay-rfchost,
+        lt_option_table     TYPE STANDARD TABLE OF lty_option_table,
+        ls_option_table     TYPE lty_option_table,
+        lv_method           TYPE rfcdisplaz-rfcregid,
+        lv_program          TYPE rfcdisplay-rfcexec,
+        lv_no_ticket        TYPE string,
+        lv_activation       TYPE string,
+        lv_assertion_client TYPE sy-mandt,
+        lt_sslvalue         TYPE TABLE OF ssfapplict,
+        ls_sslvalue         TYPE ssfapplict,
+        lv_ssl              TYPE string,
+        lv_ssldesc          TYPE string,
+        lv_langu            TYPE sy-langu,
+        lv_assertion_sysid  TYPE sy-sysid,
+        lv_gwhost           TYPE rfcdisplay-rfcgwhost,
+        lv_gwservice        TYPE rfcdisplay-rfcgwserv,
+        lv_starttype        TYPE rfcdisplay-starttype,
+        lv_password         TYPE string,
+        lv_trust            TYPE string,
+        lv_logon            TYPE string,
+        lv_cuser            TYPE string,
+        lv_alt_conv_default TYPE string,
+        lv_rfcconvert_x(4)  TYPE c,
+        lv_convchar_x       TYPE xstring,
+        lv_convchar_c       TYPE c,
+        lv_loadbal          TYPE string,
+        lv_authority        TYPE destauth,
+        lv_toutval          TYPE cpic_timeout_val,
+        lv_keepalive        TYPE string,
+        lv_sendlogon        TYPE string,
+        lv_targhost         TYPE string,
+        lv_prgm             TYPE string,
+        lv_external         TYPE string,
+        lv_cpic             TYPE string,
+        lv_value            TYPE string,
+        lv_rfctrace         TYPE string,
+        lv_ticket           TYPE assertion_ticket,
+        lv_sysid            TYPE assertion_ticket_sysid,
+        lv_client           TYPE assertion_ticket_client,
+        lv_ssoticket        TYPE rfcdisplay-rfctsysopt,
+        lv_unicode          TYPE string,
+        lv_nonunicode       TYPE string,
+        lv_ecodepage        TYPE rfc_communication_codepage,
+        lv_string           TYPE string,
+        lv_string1          TYPE string,
+        lv_string2          TYPE string,
+        lv_first_800        TYPE c,
+        lv_httpinalias_t    TYPE string, " timeout
+        lv_httptimeoutvalue TYPE rfchttptime,
+        lv_http_t(7)        TYPE c,
+        lv_httpinalias_h(1) TYPE c, " http version
+        lv_httpalias        TYPE string,
+        lv_compressreply    TYPE string,
+        lv_httpinalias_k(1) TYPE c,
+        lv_httpinalias_c(1) TYPE c, " cookie
+        lv_cookies          TYPE string,
+        lv_httpinalias_a(1) TYPE c.
+
+  ls_output = lc_msgtitle. " Message title
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  " Reading input
+  READ TABLE lt_input INTO ls_input INDEX 1.
+
+  IF sy-subrc NE 0.
+
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.                 " When action is EXPORT
+
+      FREE: lt_output[].
+
+      SELECT * FROM rfcdes
+           INTO TABLE lt_rfcdes.
+
+      IF sy-subrc = 0 AND lt_rfcdes IS NOT INITIAL.
+
+        SORT lt_rfcdes BY rfctype.
+
+        " Connection to ABAP System(3)
+        lt_rfcdes_3[] = lt_rfcdes[].
+        DELETE lt_rfcdes_3 WHERE rfctype NE lc_3.
+
+        "R/2 Connection(2)
+        lt_rfcdes_2[] = lt_rfcdes[].
+        DELETE lt_rfcdes_2 WHERE rfctype NE lc_2.
+
+        "Logical Destination(L)
+        lt_rfcdes_l[] = lt_rfcdes[].
+
+        DELETE lt_rfcdes_l WHERE rfctype NE lc_l.
+
+        "SNA/CPI-C Connection(S)
+        lt_rfcdes_s[] = lt_rfcdes[].
+
+        DELETE lt_rfcdes_s WHERE rfctype NE lc_s.
+
+        "CMC connection(M)
+        lt_rfcdes_m[] = lt_rfcdes[].
+        DELETE lt_rfcdes_m WHERE rfctype NE lc_m.
+
+        " HTTP Connections to External Server(G)
+        lt_rfcdes_g[] = lt_rfcdes[].
+        DELETE lt_rfcdes_g WHERE rfctype NE lc_g.
+
+        " HTTP Connections to ABAP System(H)
+        lt_rfcdes_h[] = lt_rfcdes[].
+        DELETE lt_rfcdes_h WHERE rfctype NE lc_h.
+
+        " Internal Connections(I)
+        lt_rfcdes_i[] = lt_rfcdes[].
+        DELETE lt_rfcdes_i WHERE rfctype NE lc_i.
+
+        " TCP/IP Connections(T)
+        lt_rfcdes_t[] = lt_rfcdes[].
+        DELETE lt_rfcdes_t WHERE rfctype NE lc_t.
+
+        " Connections Using ABAP Driver(X)
+        lt_rfcdes_x[] = lt_rfcdes[].
+        DELETE lt_rfcdes_x WHERE rfctype NE lc_x.
+
+        " Get the description for RFC Destinations
+        SELECT *
+        FROM rfcdoc
+        INTO TABLE lt_rfcdoc
+              FOR ALL ENTRIES IN lt_rfcdes
+              WHERE rfclang EQ sy-langu
+              AND   rfcdest EQ lt_rfcdes-rfcdest.
+
+        IF sy-subrc EQ 0.
+          SORT lt_rfcdoc BY rfclang rfcdest.
+        ENDIF.
+
+        SELECT  * FROM rfcattrib INTO TABLE lt_rfcattrib
+          FOR ALL ENTRIES IN lt_rfcdes
+          WHERE rfcdest EQ lt_rfcdes-rfcdest.
+
+        IF sy-subrc = 0.
+          SORT lt_rfcattrib BY rfcdest.
+        ENDIF.
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+
+      ENDIF.
+
+      "R/2 Connections
+      ls_output = lc_r2.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "R/2 Connections
+      FREE lt_output1.
+      ls_output = lc_r2.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF  lt_rfcdes_2 IS NOT INITIAL.
+
+        "Column Heading
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_gwhost
+                    lc_gwserv
+                    lc_lang
+                    lc_client
+                    lc_user
+                    lc_password
+                    lc_cuser
+                    lc_authdest
+                    lc_communication
+                    lc_options
+                    lc_converstion
+                    lc_indicator
+                    lc_value
+                    lc_rfcconnection
+                    lc_rfctrace
+                    lc_tracemethods
+                    lc_keepalive
+                    lc_timeoutvalue
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_2 INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfctrace IS INITIAL.
+              ls_rfcdisplay-rfctrace = lc_null.
+            ENDIF.
+
+            "Current user
+            lv_cuser = ls_rfcdisplay-rfcsameusr.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                   ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                   ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+
+            "Keep-alive timeout
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+                lv_value = ls_rfcdisplay-keepalivetimeout.
+            ENDCASE.
+
+            IF ls_rfcdisplay-rfctrace EQ lc_x.
+              lv_rfctrace = lc_x.
+            ENDIF.
+
+            IF lv_value IS INITIAL.
+              lv_value = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-rfclang
+                        ls_rfcdisplay-rfcclient
+                        ls_rfcdisplay-rfcuser
+                        lc_null
+                        lv_cuser
+                        ls_rfcdisplay-authority
+                        lv_unicode
+                        lv_nonunicode
+                        lv_alt_conv_default
+                        lv_convchar_c
+                        lv_rfcconvert_x
+                        ls_rfcdisplay-rfcwan
+                        lv_rfctrace
+                        lv_trace
+                        lv_keepalive
+                        lv_value
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay,
+                 ls_rfcdoc,lv_alt_conv_default,
+                 lv_cuser,lv_unicode, lv_nonunicode, lv_trace,
+                 lv_keepalive, lv_value, ls_rfcattrib, lv_rfctrace,
+                 lv_rfcconvert_x,lv_convchar_c.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "ABAP Connections
+      ls_output = lc_abap.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "ABAP Connections
+      FREE lt_output1.
+      ls_output = lc_abap.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF lt_rfcdes_3 IS NOT INITIAL.
+
+        SORT lt_rfcdes_3 BY rfcdest.
+
+        "Column Heading
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+       INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_load
+                    lc_tarsys
+                    lc_msgserv
+                    lc_group
+                    lc_host
+                    lc_instance
+                    lc_save
+                    lc_gwhost
+                    lc_gwserv
+                    lc_lang
+                    lc_client
+                    lc_user
+                    lc_cuser
+                    lc_password
+                    lc_trust
+                    lc_logonscreen
+                    lc_authdest
+                    lc_communication
+                    lc_options
+                    lc_codepagevalue
+                    lc_converstion
+                    lc_indicator
+                    lc_value
+                    lc_rfcconnection
+                    lc_rfctrace
+                    lc_tracemethods
+                    lc_keepalive
+                    lc_timeoutvalue
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_3 INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            " Load Balancing
+            IF ls_rfcdisplay-rfcexit IS NOT INITIAL.
+              lv_loadbal = lc_yes.
+            ELSE.
+              lv_loadbal = lc_no.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+                SPLIT ls_rfcdes AT lc_3x INTO lv_string lv_string1.
+                CLEAR: lv_string.
+                SPLIT lv_string1 AT lc_4 INTO lv_string lv_string2.
+                CLEAR: lv_string1, lv_string.
+                SPLIT lv_string2 AT lc_comma INTO lv_string1 lv_string.
+                lv_ecodepage = lv_string1.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            IF ls_rfcdisplay-saveserver = lc_x.
+              lv_saveas = lc_host.
+            ELSE.
+              lv_saveas = lc_ip.
+            ENDIF.
+
+            "Trust
+            CASE ls_rfcdisplay-rfcslogin.
+              WHEN space.
+                lv_trust = lc_no.
+              WHEN OTHERS.
+                lv_trust = lc_yes.
+            ENDCASE.
+
+            "Logon Screen
+            IF ls_rfcdisplay-rfclogon IS INITIAL.
+              lv_logon = lc_no.
+            ELSE.
+              lv_logon = lc_yes.
+            ENDIF.
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                   ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                   ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            "Keep-alive timeout
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+                lv_value = ls_rfcdisplay-keepalivetimeout.
+            ENDCASE.
+
+            "Message server and target host
+            lv_msgserver = ls_rfcdisplay-rfchost.
+            lv_tarhost = ls_rfcdisplay-rfchost.
+
+
+            IF lv_loadbal = lc_no.
+              CLEAR: ls_rfcdisplay-rfcsysid,
+                     lv_msgserver,
+                     ls_rfcdisplay-pfadpre.
+            ELSE.
+              CLEAR: ls_rfcdisplay-rfcservice.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcuser EQ lc_nuser.
+              CLEAR: ls_rfcdisplay-rfcuser.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcauth EQ lc_nauth.
+              CLEAR: ls_rfcdisplay-rfcauth.
+            ENDIF.
+
+            IF lv_value IS INITIAL.
+              lv_value = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+            CLEAR ls_output.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        lv_loadbal
+                        ls_rfcdisplay-rfcsysid
+                        lv_msgserver
+                        ls_rfcdisplay-pfadpre
+                        lv_tarhost
+                        ls_rfcdisplay-rfcservice
+                        lv_saveas
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-rfclang
+                        ls_rfcdisplay-rfcclient
+                        ls_rfcdisplay-rfcuser
+                        ls_rfcdisplay-rfcsameusr
+                        lv_password
+                        lv_trust
+                        lv_logon
+                        ls_rfcdisplay-rfcauth
+                        lv_unicode
+                        lv_nonunicode
+                        lv_ecodepage
+                        lv_alt_conv_default
+                        lv_convchar_c
+                        lv_rfcconvert_x
+                        ls_rfcdisplay-rfcwan
+                        ls_rfcdisplay-rfctrace
+                        lv_trace
+                        lv_keepalive
+                        lv_value
+            INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+
+          CLEAR: ls_output, ls_rfcdisplay, ls_rfcdes, lv_ecodepage,
+                 lv_string, lv_string1, lv_string2,
+                 lv_loadbal, ls_rfcdoc, lv_msgserver, lv_tarhost,
+                 lv_saveas, lv_password, lv_trust, lv_logon,
+                 lv_unicode,lv_nonunicode,lv_alt_conv_default,
+                 lv_rfcconvert_x, lv_convchar_c,lv_trace,
+                 lv_keepalive, lv_value.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "HTTP connections to external server G
+      ls_output = lc_httpe.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "HTTP connections to external server G
+      FREE lt_output1.
+      ls_output = lc_httpe.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF  lt_rfcdes_g IS NOT INITIAL.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_tarhost
+                    lc_service
+                    lc_path
+                    lc_phost
+                    lc_pserv
+                    lc_puser
+                    lc_ppassword
+                    lc_logon
+                    lc_user
+                    lc_password
+                    lc_logontkt
+                    lc_systemid
+                    lc_client
+                    lc_ssl
+                    lc_sslcert
+                    lc_authdest
+                    lc_timeout
+                    lc_timeoutvalue
+                    lc_httpversion
+                    lc_compstatus
+                    lc_compresponse
+                    lc_cookies
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+*
+        LOOP AT lt_rfcdes_g INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            CALL FUNCTION 'RFCDISPLAY2RFCDES'
+              EXPORTING
+                rfcdis_import = ls_rfcdisplay
+              IMPORTING
+                rfcdes_export = ls_rfc_imp.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            lv_rfcoptions = ls_rfcdes-rfcoptions.
+
+            SPLIT lv_rfcoptions AT lc_d INTO lv_dummy lv_rest.
+
+            SPLIT lv_rest AT lc_comma INTO lv_user lv_rest.
+
+            CASE ls_rfcdisplay-rfcslogin.
+              WHEN lc_a.
+                lv_rfcslogin5 = lc_donot.
+              WHEN lc_b.
+                lv_rfcslogin5 = lc_bauth.
+            ENDCASE.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            IF lv_password IS INITIAL.
+              lv_password = lc_null.
+            ENDIF.
+
+            SPLIT ls_rfc_imp AT lc_comma INTO TABLE lt_option_table.
+
+            lv_no_ticket = lc_donotsend.
+
+* SSO Ticket generation
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token = lc_fy.
+            IF sy-subrc = 0.
+              lv_no_ticket = lc_sendlogon.
+            ENDIF.
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token(2) = lc_j.
+            IF sy-subrc = 0.
+              lv_no_ticket = lc_sendassertion.
+            ENDIF.
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token(2) = lc_nt.
+            IF sy-subrc = 0.
+              lv_assertion_sysid = ls_option_table-token+2(*).
+            ENDIF.
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token(2) = lc_p.
+            IF sy-subrc = 0.
+              lv_assertion_client = ls_option_table-token+2(*).
+            ENDIF.
+
+* SSL Certificate
+
+            IF ls_rfcdisplay-rfcsnc IS INITIAL.
+              lv_rfcsnc = lc_inactive.
+            ELSE.
+              lv_rfcsnc = lc_active.
+            ENDIF.
+
+            lv_psecontext = lc_sslc.
+
+            CALL FUNCTION 'SSFP_GET_APPINFO'
+              EXPORTING
+                context         = lv_psecontext
+                language        = lv_langu
+              TABLES
+                applictab       = lt_sslvalue
+              EXCEPTIONS
+                invalid_context = 1
+                OTHERS          = 2.
+
+            IF sy-subrc = 0.
+
+              READ TABLE lt_sslvalue INTO ls_sslvalue WITH KEY
+              applic = ls_rfcdisplay-sslapplic.
+
+              IF sy-subrc = 0.
+                CONCATENATE ls_rfcdisplay-sslapplic
+                ls_sslvalue-descript
+                INTO lv_ssldesc SEPARATED BY space.
+              ENDIF.
+
+            ENDIF.
+
+            CASE ls_rfcdisplay-rfchttp(7).
+
+              WHEN lc_0.
+                lv_httpinalias_t = lc_icm.
+
+              WHEN lc_m1.
+                lv_httpinalias_t = lc_notimeout.
+
+              WHEN space.
+                lv_httpinalias_t = lc_icm.
+
+              WHEN OTHERS. " Timeout entry
+                lv_httpinalias_t = lc_spetimeout.
+
+                lv_http_t(7) = ls_rfcdisplay-rfchttp(7).
+
+                lv_first_800 = lv_http_t(7).
+
+                IF ( lv_first_800 EQ lc_0 ) OR
+                   ( lv_first_800 IS INITIAL ) OR
+                   ( lv_first_800 EQ lc_hypen ).
+
+                  CLEAR lv_httptimeoutvalue.
+                ELSE.
+                  lv_httptimeoutvalue = lv_httpinalias_t(7).
+                ENDIF.
+
+            ENDCASE.
+
+            lv_httpinalias_h = ls_rfcdisplay-rfchttp+7(1).
+
+            CASE lv_httpinalias_h.
+              WHEN lc_0 OR space.
+                lv_httpalias = lc_http0.
+              WHEN lc_1.
+                lv_httpalias = lc_http1.
+            ENDCASE.
+
+            IF lv_httpalias = lc_http0.
+              lv_compress = lc_inactive.
+            ELSE.
+              lv_httpinalias_k = ls_rfcdisplay-rfchttp+8(1).
+
+              CASE lv_httpinalias_k.
+
+                WHEN lc_0 OR space.
+
+                  lv_compress = lc_inactive.
+
+                WHEN lc_1.
+                  lv_compress = lc_mime.
+
+                WHEN lc_2.
+                  lv_compress = lc_whole.
+              ENDCASE.
+            ENDIF.
+
+            lv_httpinalias_a = ls_rfcdisplay-rfchttp+9(1).
+
+            CASE lv_httpinalias_a.
+
+              WHEN lc_0 OR space.
+                lv_compressreply = lc_yes.
+              WHEN lc_1.
+                lv_compressreply = lc_no.
+            ENDCASE.
+
+            lv_httpinalias_c = ls_rfcdisplay-rfchttp+10(1).
+
+            CASE lv_httpinalias_c.
+              WHEN lc_0 OR space.
+                lv_cookies = lc_no.
+              WHEN lc_1.
+                lv_cookies = lc_yesall.
+
+              WHEN lc_2.
+                lv_cookies = lc_prompt.
+              WHEN lc_3.
+                lv_cookies = lc_event.
+            ENDCASE.
+
+            IF lv_cookies IS INITIAL.
+              lv_cookies = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+          INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+
+          CONCATENATE   ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdisplay-rfchost
+                        ls_rfcdisplay-rfcsysid
+                        ls_rfcdisplay-pfadpre
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-proxyuser
+                        lv_password
+                        lv_rfcslogin5
+                        lv_user
+                        lv_password
+                        lv_no_ticket
+                        lv_assertion_sysid
+                        lv_assertion_client
+                        lv_rfcsnc
+                        lv_ssldesc
+                        ls_rfcdisplay-authority
+                        lv_httpinalias_t
+                        lv_httptimeoutvalue
+                        lv_httpalias
+                        lv_compress
+                        lv_compressreply
+                        lv_cookies
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+
+          FREE: lt_option_table[].
+
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay, lv_rfcslogin5,
+                 lv_no_ticket, lv_cookies, lv_compress, lv_ssldesc,
+                 lv_httptimeoutvalue, lv_httpinalias_t, ls_rfcattrib,
+                 lv_assertion_client, lv_user, ls_rfcdoc, lv_rfcsnc,
+                 ls_option_table,
+                 ls_rfc_imp, lv_httpalias, ls_rfcattrib, ls_rfcdoc,
+                 lv_assertion_sysid, lv_ssldesc, lv_compressreply.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+*
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+*
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "HTTP connections to abap system
+      ls_output = lc_httpabap.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "HTTP connections to abap system
+      FREE lt_output1.
+      ls_output = lc_httpabap.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF  lt_rfcdes_h IS NOT INITIAL.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_tarhost
+                    lc_service
+                    lc_path
+                    lc_phost
+                    lc_pserv
+                    lc_puser
+                    lc_ppassword
+                    lc_logon
+                    lc_lang
+                    lc_client
+                    lc_user
+                    lc_cuser
+                    lc_password
+                    lc_logontkt
+                    lc_asystemid
+                    lc_aclient
+                    lc_ssl
+                    lc_sslcert
+                    lc_authdest
+                    lc_timeout
+                    lc_timeoutvalue
+                    lc_httpversion
+                    lc_compstatus
+                    lc_compresponse
+                    lc_cookies
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_h INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            CALL FUNCTION 'RFCDISPLAY2RFCDES'
+              EXPORTING
+                rfcdis_import = ls_rfcdisplay
+              IMPORTING
+                rfcdes_export = ls_rfc_imp.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest  BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            CASE ls_rfcdisplay-rfcslogin.
+              WHEN space.
+                lv_rfcslogin1 = lc_donot.
+              WHEN lc_y OR lc_s.
+                lv_rfcslogin1 = lc_trust1.
+              WHEN lc_a.
+                lv_rfcslogin1 = lc_saprfc.
+              WHEN lc_b.
+                lv_rfcslogin1 = lc_bauth.
+              WHEN OTHERS.
+                lv_rfcslogin1 = lc_trust.
+            ENDCASE.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            IF lv_password IS INITIAL.
+              lv_password = lc_null.
+            ENDIF.
+
+            SPLIT ls_rfc_imp AT lc_comma INTO TABLE lt_option_table.
+
+            lv_no_ticket = lc_donotsend.
+
+* SSO Ticket generation
+            READ TABLE lt_option_table INTO ls_option_table
+             WITH KEY token = lc_fy.
+            IF sy-subrc = 0.
+              lv_no_ticket = lc_sendlogon.
+            ENDIF.
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token(2) = lc_j.
+            IF sy-subrc = 0.
+              lv_no_ticket = lc_sendassertion.
+            ENDIF.
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token(2) = lc_nt.
+            IF sy-subrc = 0.
+              lv_assertion_sysid = ls_option_table-token+2(*).
+            ENDIF.
+
+            READ TABLE lt_option_table INTO ls_option_table
+            WITH KEY token(2) = lc_p.
+            IF sy-subrc = 0.
+              lv_assertion_client = ls_option_table-token+2(*).
+            ENDIF.
+
+*            IF ls_rfc_imp-rfcoptions CS lc_j
+*               AND ls_rfc_imp-rfcoptions CS lc_p.
+*              lv_no_ticket = lc_sendassertion.
+*            ELSE.
+*              lv_no_ticket = lc_sendlogon.
+*            ENDIF.
+
+            IF lv_assertion_sysid is NOT INITIAL
+             AND lv_assertion_client IS NOT INITIAL.
+            lv_no_ticket = lc_sendassertion.
+           ENDIF.
+
+* SSL Certificate
+
+            IF ls_rfcdisplay-rfcsnc IS INITIAL.
+              lv_rfcsnc = lc_inactive.
+            ELSE.
+              lv_rfcsnc = lc_active.
+            ENDIF.
+
+            lv_psecontext = lc_sslc.
+
+            CALL FUNCTION 'SSFP_GET_APPINFO'
+              EXPORTING
+                context         = lv_psecontext
+                language        = lv_langu
+              TABLES
+                applictab       = lt_sslvalue
+              EXCEPTIONS
+                invalid_context = 1
+                OTHERS          = 2.
+
+            IF sy-subrc = 0.
+              READ TABLE lt_sslvalue INTO ls_sslvalue WITH KEY
+              applic = ls_rfcdisplay-sslapplic.
+
+              IF sy-subrc = 0.
+                CONCATENATE ls_rfcdisplay-sslapplic
+                ls_sslvalue-descript
+                INTO lv_ssldesc SEPARATED BY space.
+              ENDIF.
+            ENDIF.
+
+            CASE ls_rfcdisplay-rfchttp(7).
+
+              WHEN lc_0.
+                lv_httpinalias_t = lc_icm.
+
+              WHEN lc_m1.
+                lv_httpinalias_t = lc_notimeout.
+
+              WHEN space.
+                lv_httpinalias_t = lc_icm.
+
+              WHEN OTHERS. " Timeout entry
+                lv_httpinalias_t = lc_spetimeout.
+
+                lv_http_t(7) = ls_rfcdisplay-rfchttp(7).
+
+                lv_first_800 = lv_http_t(7).
+
+                IF ( lv_first_800 EQ lc_0 ) OR
+                   ( lv_first_800 IS INITIAL ) OR
+                   ( lv_first_800 EQ lc_hypen ).
+
+                  CLEAR lv_httptimeoutvalue.
+                ELSE.
+                  lv_httptimeoutvalue = lv_httpinalias_t(7).
+                ENDIF.
+
+            ENDCASE.
+
+            lv_httpinalias_h = ls_rfcdisplay-rfchttp+7(1).
+
+            CASE lv_httpinalias_h.
+              WHEN lc_0 OR space.
+                lv_httpalias = lc_http0.
+              WHEN lc_1.
+                lv_httpalias = lc_http1.
+            ENDCASE.
+
+            IF lv_httpalias = lc_http0.
+              lv_compress = lc_inactive.
+            ELSE.
+              lv_httpinalias_k = ls_rfcdisplay-rfchttp+8(1).
+
+              CASE lv_httpinalias_k.
+
+                WHEN lc_0 OR space.
+
+                  lv_compress = lc_inactive.
+
+                WHEN lc_1.
+                  lv_compress = lc_mime.
+
+                WHEN lc_2.
+                  lv_compress = lc_whole.
+              ENDCASE.
+            ENDIF.
+
+            lv_httpinalias_a = ls_rfcdisplay-rfchttp+9(1).
+
+            CASE lv_httpinalias_a.
+
+              WHEN lc_0 OR space.
+                lv_compressreply = lc_yes.
+              WHEN lc_1.
+                lv_compressreply = lc_no.
+            ENDCASE.
+
+            lv_httpinalias_c = ls_rfcdisplay-rfchttp+10(1).
+
+
+            CASE lv_httpinalias_c.
+              WHEN lc_0 OR space.
+                lv_cookies = lc_no.
+              WHEN lc_1.
+                lv_cookies = lc_yesall.
+
+              WHEN lc_2.
+                lv_cookies = lc_prompt.
+              WHEN lc_3.
+                lv_cookies = lc_event.
+            ENDCASE.
+
+            IF lv_cookies IS INITIAL.
+              lv_cookies = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+             INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdisplay-rfchost
+                        ls_rfcdisplay-rfcsysid
+                        ls_rfcdisplay-pfadpre
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-proxyuser
+                        lv_password
+                        lv_rfcslogin1
+                        ls_rfcdisplay-rfclang
+                        ls_rfcdisplay-rfcclient
+                        ls_rfcdisplay-rfcuser
+                        ls_rfcdisplay-rfcsameusr
+                        lv_password
+                        lv_no_ticket
+                        lv_assertion_sysid
+                        lv_assertion_client
+                        lv_rfcsnc
+                        lv_ssldesc
+                        ls_rfcdisplay-authority
+                        lv_httpinalias_t
+                        lv_httptimeoutvalue
+                        lv_httpalias
+                        lv_compress
+                        lv_compressreply
+                        lv_cookies
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+
+          FREE: lt_option_table[].
+
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay, lv_rfcslogin5,
+                 ls_rfcdoc, lv_httpinalias_t, lv_httpalias,
+                 lv_httptimeoutvalue, lv_compress,lv_compressreply,
+                 lv_cookies, lv_ssldesc,lv_assertion_client, lv_rfcsnc,
+                 lv_assertion_sysid, lv_no_ticket, lv_password,
+                 ls_rfc_imp, lv_rfcslogin1,ls_option_table,
+                 ls_rfcattrib, ls_rfcdoc, lv_rfcsnc.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "Internal Connection
+      ls_output = lc_internal.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "Internal Connection
+      FREE lt_output1.
+      ls_output = lc_internal.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+*
+      IF lt_rfcdes_i IS NOT INITIAL.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+*
+       CONCATENATE  lc_dest
+                    lc_connection_type
+                    lc_tarhost
+                    lc_instance
+                    lc_gwhost
+                    lc_gwserv
+                    lc_authdest
+                    lc_communication
+                    lc_options
+                    lc_converstion
+                    lc_indicator
+                    lc_value
+                    lc_rfcconnection
+                    lc_rfctrace
+                    lc_tracemethods
+                    lc_keepalive
+                    lc_timeoutvalue
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_i INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                   ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                   ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+
+            "Keep-alive timeout
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+                lv_value = ls_rfcdisplay-keepalivetimeout.
+            ENDCASE.
+
+            IF ls_rfcdisplay-rfctrace EQ lc_x.
+              lv_rfctrace = lc_x.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfctrace EQ lc_x.
+              lv_rfctrace = lc_x.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            IF lv_value IS INITIAL.
+              lv_value = lc_null.
+            ENDIF.
+
+          ENDIF.
+
+          CONCATENATE ls_rfcdisplay-rfcdest
+                      ls_rfcdisplay-rfctype
+                      ls_rfcdoc-rfcdoc1
+                      ls_rfcdoc-rfcdoc2
+                      ls_rfcdoc-rfcdoc3
+                      ls_rfcattrib-cuname
+                      ls_rfcattrib-cudate
+                      ls_rfcattrib-cuclient
+                      ls_rfcattrib-cutime
+                      ls_rfcattrib-muname
+                      ls_rfcattrib-mudate
+                      ls_rfcattrib-muclient
+                      ls_rfcattrib-mutime
+                      INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output.
+
+          CONCATENATE ls_rfcdes-rfcdest
+                      ls_rfcdes-rfctype
+                      ls_rfcdisplay-rfchost
+                      ls_rfcdisplay-rfcservice
+                      ls_rfcdisplay-rfcgwhost
+                      ls_rfcdisplay-rfcgwserv
+                      ls_rfcdisplay-authority
+                      lv_unicode
+                      lv_nonunicode
+                      lv_alt_conv_default
+                      lv_convchar_c
+                      lv_rfcconvert_x
+                      ls_rfcdisplay-rfcwan
+                      lv_rfctrace
+                      lv_trace
+                      lv_keepalive
+                      lv_value
+                      INTO ls_output SEPARATED BY lc_sep.
+          APPEND ls_output TO lt_output1.
+
+          CLEAR: ls_output, ls_rfcdisplay, ls_rfcdes,
+                 ls_rfcattrib,
+                 lv_loadbal, lv_rfcunicode, ls_rfcdoc,
+                 lv_saveas, lv_password, lv_trust, lv_logon,
+                 lv_unicode,lv_nonunicode,lv_alt_conv_default,
+                 lv_rfcconvert_x, lv_convchar_c,lv_trace,
+                 lv_keepalive, lv_value.
+
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+      ENDIF.
+*
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "Logical Destination L
+      ls_output = lc_logical.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+       "Logical Destination L
+      FREE lt_output1.
+      ls_output = lc_logical.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF  lt_rfcdes_l IS NOT INITIAL.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+       CONCATENATE  lc_dest
+                    lc_connection_type
+                    lc_ref
+                    lc_gwhost
+                    lc_gwserv
+                    lc_lang
+                    lc_client
+                    lc_user
+                    lc_cuser
+                    lc_password
+                    lc_authdest
+                    lc_communication
+                    lc_options
+                    lc_codepagevalue
+                    lc_converstion
+                    lc_indicator
+                    lc_value
+                    lc_rfcconnection
+                    lc_rfctrace
+                    lc_tracemethods
+                    lc_keepalive
+                    lc_timeoutvalue
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_l INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+                SPLIT ls_rfcdes AT lc_3x INTO lv_string lv_string1.
+                CLEAR: lv_string.
+                SPLIT lv_string1 AT lc_4 INTO lv_string lv_string2.
+                CLEAR: lv_string1, lv_string.
+                SPLIT lv_string2 AT lc_comma INTO lv_string1 lv_string.
+                lv_ecodepage = lv_string1.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            "Character Conversion
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                  ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                  ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            "Trace Export Methods
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+            "Keep-alive timeout
+
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+                lv_value = lc_300.
+            ENDCASE.
+
+            IF ls_rfcdisplay-rfctrace EQ lc_x.
+              lv_rfctrace = lc_x.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            IF lv_value IS INITIAL.
+              lv_value = lc_300.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+                        INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output.
+
+            CONCATENATE ls_rfcdes-rfcdest
+                        ls_rfcdes-rfctype
+                        ls_rfcdisplay-rfcalias
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-rfclang
+                        ls_rfcdisplay-rfcclient
+                        ls_rfcdisplay-rfcuser
+                        ls_rfcdisplay-rfcsameusr
+                        lv_password
+                        ls_rfcdisplay-authority
+                        lv_unicode
+                        lv_nonunicode
+                        lv_ecodepage
+                        lv_alt_conv_default
+                        lv_rfcconvert_x
+                        lv_convchar_c
+                        ls_rfcdisplay-rfcwan
+                        lv_rfctrace
+                        lv_trace
+                        lv_keepalive
+                        lv_value
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay,lv_password,
+                 lv_unicode, lv_nonunicode, lv_alt_conv_default,
+                 lv_rfctrace, ls_rfcattrib, ls_rfcdoc, lv_trace,
+                 lv_alt_conv_default, lv_ecodepage, lv_string,
+                 lv_rfcconvert_x, lv_convchar_c,lv_trace, lv_keepalive,
+                 lv_value, lv_string1, lv_string2.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "Logical Destination
+      ls_output = lc_cmc.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "Logical Destination
+      FREE lt_output1.
+      ls_output = lc_cmc.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF lt_rfcdes_m IS NOT INITIAL.
+
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+*
+       CONCATENATE  lc_dest
+                    lc_connection_type
+                    lc_gwhost
+                    lc_gwserv
+                    lc_authdest
+                    lc_communication
+                    lc_options
+                    lc_converstion
+                    lc_indicator
+                    lc_value
+                    lc_rfcconnection
+                    lc_rfctrace
+                    lc_tracemethods
+                    lc_keepalive
+                    lc_timeoutvalue
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_m INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            "Character Conversion
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                  ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                  ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            "Trace Export Methods
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+            "Keep-alive timeout
+
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+            ENDCASE.
+
+            lv_value = lc_300.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+                        INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output.
+
+            CONCATENATE ls_rfcdes-rfcdest
+                        ls_rfcdes-rfctype
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-authority
+                        lv_unicode
+                        lv_nonunicode
+                        lv_alt_conv_default
+                        lv_convchar_c
+                        lv_rfcconvert_x
+                        ls_rfcdisplay-rfcwan
+                        ls_rfcdisplay-rfctrace
+                        lv_trace
+                        lv_keepalive
+                        lv_value
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay,ls_rfcdoc,
+                 lv_unicode, lv_nonunicode, lv_alt_conv_default,
+                 ls_rfcattrib,
+                 lv_rfcconvert_x, lv_convchar_c,lv_trace, lv_keepalive,
+                 lv_value.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "SNA/CPI-C Connection S
+      ls_output = lc_sna.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "SNA/CPI-C Connection S
+      FREE lt_output1.
+      ls_output = lc_sna.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF  lt_rfcdes_s IS NOT INITIAL.
+
+       CONCATENATE lc_dest
+                   lc_connection_type
+                   lc_desc
+                   lc_desc2
+                   lc_desc3
+                   lc_createdby
+                   lc_createdon
+                   lc_creclient
+                   lc_cretime
+                   lc_changedby
+                   lc_changedon
+                   lc_chgclient
+                   lc_chgtime
+                   INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+*
+       CONCATENATE lc_dest
+                   lc_connection_type
+                   lc_gwhost
+                   lc_gwserv
+                   lc_lang
+                   lc_client
+                   lc_user
+                   lc_cuser
+                   lc_password
+                   lc_authdest
+                   lc_communication
+                   lc_options
+                   lc_converstion
+                   lc_indicator
+                   lc_value
+                   lc_rfcconnection
+                   lc_rfctrace
+                   lc_tracemethods
+                   lc_keepalive
+                   lc_timeoutvalue
+                   INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_s INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            IF ls_rfcdisplay-rfcdest IS INITIAL.
+              ls_rfcdisplay-rfcdest = lc_null.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            "Character Conversion
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                  ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                  ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            "Trace Export Methods
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+            "Keep-alive timeout
+
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+                lv_value = ls_rfcdisplay-keepalivetimeout.
+            ENDCASE.
+
+            IF ls_rfcdisplay-rfctrace EQ lc_x.
+              lv_rfctrace = lc_x.
+            ENDIF.
+
+            IF lv_value IS INITIAL.
+              lv_value = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+                        INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output.
+
+            CONCATENATE ls_rfcdes-rfcdest
+                        ls_rfcdes-rfctype
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-rfclang
+                        ls_rfcdisplay-rfcclient
+                        ls_rfcdisplay-rfcuser
+                        ls_rfcdisplay-rfcsameusr
+                        lv_password
+                        ls_rfcdisplay-authority
+                        lv_unicode
+                        lv_nonunicode
+                        lv_alt_conv_default
+                        lv_rfcconvert_x
+                        lv_convchar_c
+                        ls_rfcdisplay-rfcwan
+                        lv_rfctrace
+                        lv_trace
+                        lv_keepalive
+                        lv_value
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay,ls_rfcdoc,
+                 lv_unicode, lv_nonunicode, lv_alt_conv_default,
+                 ls_rfcattrib, lv_rfctrace, lv_password,
+                 lv_rfcconvert_x, lv_convchar_c,lv_trace, lv_keepalive,
+                 lv_value.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+
+      "Blank line
+      APPEND ls_output TO lt_output.
+
+      "TCP/IP Connection T
+      ls_output = lc_tcp.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "TCP/IP Connection T
+      FREE lt_output1.
+      ls_output = lc_tcp.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF  lt_rfcdes_t IS NOT INITIAL.
+
+        "Column Headings
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+*
+        CONCATENATE  lc_dest
+                     lc_connection_type
+                     lc_activation
+                     lc_program
+                     lc_tarhost
+                     lc_save
+                     lc_external
+                     lc_cpictime
+                     lc_valuesec
+                     lc_gwhost
+                     lc_gwserv
+                     lc_logontkt
+                     lc_systemid
+                     lc_client
+                     lc_authdest
+                     lc_communication
+                     lc_options
+                     lc_codepagevalue
+                     lc_converstion
+                     lc_indicator
+                     lc_value
+                     lc_rfcconnection
+                     lc_rfctrace
+                     lc_tracemethods
+                     lc_keepalive
+                     lc_secondsvalue
+         INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_t INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+              WITH KEY rfclang = sy-langu
+              rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            CALL FUNCTION 'RFC_READ_TCPIP_DESTINATION'
+              EXPORTING
+                destination             = ls_rfcdes-rfcdest
+              IMPORTING
+                method                  = lv_method
+                program                 = lv_program
+                server                  = lv_server
+                gwhost                  = lv_gwhost
+                gwservice               = lv_gwservice
+                rfcunicode              = lv_rfcunicode
+                sso_ticket              = lv_ssoticket
+                authority               = lv_authority
+                starttype               = lv_starttype
+                cpictimeoutvalue        = lv_toutval
+                assertion_ticket        = lv_ticket
+                assertion_ticket_sysid  = lv_sysid
+                assertion_ticket_client = lv_client
+              EXCEPTIONS
+                authority_not_available = 1
+                destination_not_exist   = 2
+                information_failure     = 3
+                internal_failure        = 4
+                OTHERS                  = 5.
+            IF sy-subrc = 0.
+
+              CASE lv_method.
+                WHEN lc_a.
+                  lv_activation = lc_startapp.
+                  lv_prgm = lv_program.
+                WHEN lc_e.
+                  lv_activation = lc_exhost.
+                  lv_prgm = lv_program.
+                  lv_targhost = lv_server.
+                WHEN lc_f.
+                  lv_activation = lc_frontend.
+                  lv_prgm = lv_program.
+                WHEN lc_r.
+                  lv_activation = lc_regprogram.
+                  lv_prgm = lv_program.
+              ENDCASE.
+
+              IF ls_rfcdisplay-cpictimeout = lc_m2.
+                lv_cpic = lc_defaultgw.
+              ELSE.
+                lv_cpic = lc_spetimeout.
+                lv_value = lv_toutval.
+              ENDIF.
+
+              "Logon Procedure
+              lv_sendlogon = lc_donotsend.
+
+              IF lv_ssoticket IS NOT INITIAL.
+                lv_sendlogon = lc_sendlogon.
+              ENDIF.
+
+              IF lv_ticket IS NOT INITIAL.
+                lv_sendlogon = lc_sendassertion.
+              ENDIF.
+
+              " Unicode/Non-Unicode
+              IF lv_rfcunicode = lc_1.
+                lv_unicode = lc_text.
+              ELSEIF lv_rfcunicode = lc_2.
+                lv_unicode = lc_text1.
+              ENDIF.
+
+              "Non-unicode options
+              CASE ls_rfcdisplay-proxyuser.
+                WHEN lc_n.
+                  lv_nonunicode = lc_codepage.
+                WHEN lc_e.
+                  lv_nonunicode = lc_ecodepage.
+                  SPLIT ls_rfcdes AT lc_3x INTO lv_string lv_string1.
+                  CLEAR: lv_string.
+                  SPLIT lv_string1 AT lc_4x INTO lv_string lv_string2.
+                  CLEAR: lv_string1, lv_string.
+                  SPLIT lv_string2 AT lc_comma INTO
+                  lv_string1 lv_string.
+                  lv_ecodepage = lv_string1.
+                WHEN lc_y.
+                  lv_nonunicode = lc_mdmpactive.
+              ENDCASE.
+
+              "Strat Type
+              CASE lv_starttype.
+                WHEN lc_0 OR space.
+                  lv_external = lc_defaultgw.
+                WHEN lc_1.
+                  lv_external = lc_remoteshell.
+                WHEN lc_2.
+                  lv_external = lc_remoteexe.
+                WHEN lc_4.
+                  lv_external = lc_secureshell.
+              ENDCASE.
+
+              CASE ls_rfcdisplay-rfcconvert.
+                WHEN lc_*.
+                  lv_alt_conv_default = lc_default.
+                WHEN lc_n.
+                  lv_alt_conv_default = lc_dump.
+                WHEN lc_i.
+                  lv_alt_conv_default = lc_conerrors.
+              ENDCASE.
+
+              "Character Conversion
+
+              CALL 'C_SAPGPARAM'
+                     ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                     ID 'VALUE' FIELD lv_rfcconvert_x.
+
+              lv_convchar_x = lv_rfcconvert_x.
+
+              CALL METHOD cl_abap_conv_in_ce=>uccp
+                EXPORTING
+                  uccp = lv_convchar_x
+                RECEIVING
+                  char = lv_convchar_c.
+
+              "Keep-alive timeout
+              CASE ls_rfcdisplay-keepalivetimeout.
+                WHEN lc_m2.
+                  lv_keepalive = lc_defaultgw.
+                WHEN lc_0.
+                  lv_keepalive = lc_timeoutinact.
+                WHEN OTHERS.
+                  lv_keepalive = lc_stimeout.
+                  lv_value = ls_rfcdisplay-keepalivetimeout.
+              ENDCASE.
+
+              CASE ls_rfcdisplay-tracepropagation.
+
+                WHEN lc_2.
+                  lv_trace = lc_defaultgw.
+
+                WHEN lc_1.
+                  lv_trace = lc_exptrace.
+
+                WHEN lc_0.
+                  lv_trace = lc_notexptrace.
+
+                WHEN ''.
+                  lv_trace = lc_defaultgw.
+
+              ENDCASE.
+
+
+              IF ls_rfcdisplay-saveserver = lc_x.
+                lv_saveas = lc_host.
+              ELSE.
+                lv_saveas = lc_ip.
+              ENDIF.
+
+              IF ls_rfcdisplay-rfctrace EQ lc_x.
+                lv_rfctrace = lc_x.
+              ENDIF.
+
+              IF ls_rfcdisplay-rfcdest IS INITIAL.
+                ls_rfcdisplay-rfcdest = lc_null.
+              ENDIF.
+
+              IF lv_external IS INITIAL.
+                lv_external = lc_null.
+              ENDIF.
+
+              CONCATENATE ls_rfcdes-rfcdest
+                          ls_rfcdes-rfctype
+                          ls_rfcdoc-rfcdoc1
+                          ls_rfcdoc-rfcdoc2
+                          ls_rfcdoc-rfcdoc3
+                          ls_rfcattrib-cuname
+                          ls_rfcattrib-cudate
+                          ls_rfcattrib-cuclient
+                          ls_rfcattrib-cutime
+                          ls_rfcattrib-muname
+                          ls_rfcattrib-mudate
+                          ls_rfcattrib-muclient
+                          ls_rfcattrib-mutime
+              INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output.
+
+              IF lv_value IS INITIAL.
+                lv_value = lc_null.
+              ENDIF.
+*
+              CONCATENATE   ls_rfcdes-rfcdest
+                            ls_rfcdes-rfctype
+                            lv_activation
+                            lv_prgm
+                            lv_targhost
+                            lv_saveas
+                            lv_external
+                            lv_cpic
+                            lv_value
+                            lv_gwhost
+                            lv_gwservice
+                            lv_sendlogon
+                            lv_sysid
+                            lv_client
+                            lv_authority
+                            lv_unicode
+                            lv_nonunicode
+                            lv_ecodepage
+                            lv_alt_conv_default
+                            lv_rfcconvert_x
+                            lv_convchar_c
+                            ls_rfcdisplay-rfcwan
+                            lv_rfctrace
+                            lv_trace
+                            lv_keepalive
+                            lv_value
+                            INTO ls_output SEPARATED BY lc_sep.
+
+              APPEND ls_output TO lt_output1.
+              CLEAR: ls_output.
+
+              CLEAR: lv_server, lv_program, lv_keepalive,
+                    lv_trace, lv_convchar_c, lv_rfcconvert_x,
+                    ls_rfcdisplay, lv_value, lv_rfctrace, ls_rfcattrib,
+                    ls_rfcdoc,lv_activation, lv_prgm, lv_targhost,
+                    lv_saveas, lv_external, lv_ecodepage,
+                    lv_unicode, lv_sendlogon, lv_cpic, ls_rfcdes,
+                    lv_nonunicode, lv_authority, lv_client, lv_sysid,
+                    lv_targhost, lv_saveas, lv_prgm, lv_string,
+                    lv_string1, lv_string2,
+                    lv_value, lv_gwhost, lv_rfctrace, lv_gwservice,
+                    lv_sysid, lv_client, lv_authority.
+
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+*      "blank line
+      APPEND ls_output TO lt_output.
+
+      "Connections using ABAP Driver
+      ls_output = lc_condriver.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      "Connections using ABAP Driver
+      FREE lt_output1.
+      ls_output = lc_condriver.
+      APPEND ls_output TO lt_output1.
+      CLEAR ls_output.
+
+      IF lt_rfcdes_x IS NOT INITIAL.
+
+        "Column Heading
+        CONCATENATE lc_dest
+                    lc_connection_type
+                    lc_desc
+                    lc_desc2
+                    lc_desc3
+                    lc_createdby
+                    lc_createdon
+                    lc_creclient
+                    lc_cretime
+                    lc_changedby
+                    lc_changedon
+                    lc_chgclient
+                    lc_chgtime
+                    INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+*
+       CONCATENATE  lc_dest
+                    lc_connection_type
+                    lc_driver
+                    lc_gwhost
+                    lc_gwserv
+                    lc_authdest
+                    lc_communication
+                    lc_options
+                    lc_converstion
+                    lc_indicator
+                    lc_value
+                    lc_rfcconnection
+                    lc_rfctrace
+                    lc_tracemethods
+                    lc_keepalive
+                    lc_timeoutvalue
+                    lc_donotmodfiy
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output1.
+        CLEAR ls_output.
+
+        LOOP AT lt_rfcdes_x INTO ls_rfcdes.
+
+          CALL FUNCTION 'RFCDES2RFCDISPLAY'
+            EXPORTING
+              import_rfcdes           = ls_rfcdes
+            IMPORTING
+              export_rfcdisplay       = ls_rfcdisplay
+            EXCEPTIONS
+              format_error            = 1
+              authority_not_available = 2
+              OTHERS                  = 3.
+
+          IF sy-subrc = 0.
+
+            "Administration Data
+            READ TABLE lt_rfcattrib  INTO ls_rfcattrib WITH KEY
+            rfcdest = ls_rfcdisplay-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcattrib.
+            ENDIF.
+
+            " RFC Description
+            READ TABLE lt_rfcdoc INTO ls_rfcdoc
+            WITH KEY rfclang = sy-langu
+            rfcdest = ls_rfcdes-rfcdest BINARY SEARCH.
+            IF sy-subrc NE 0.
+              CLEAR ls_rfcdoc.
+            ENDIF.
+
+            " Unicode/Non-Unicode
+
+            IF ls_rfcdisplay-rfcunicode = lc_1.
+              lv_unicode = lc_text.
+            ELSEIF ls_rfcdisplay-rfcunicode = lc_2.
+              lv_unicode = lc_text1.
+            ENDIF.
+
+            "Non-unicode options
+
+            CASE ls_rfcdisplay-proxyuser.
+              WHEN lc_n.
+                lv_nonunicode = lc_codepage.
+              WHEN lc_e.
+                lv_nonunicode = lc_ecodepage.
+              WHEN lc_y.
+                lv_nonunicode = lc_mdmpactive.
+            ENDCASE.
+
+            "Character Conversion
+
+            CASE ls_rfcdisplay-rfcconvert.
+              WHEN lc_*.
+                lv_alt_conv_default = lc_default.
+              WHEN lc_n.
+                lv_alt_conv_default = lc_dump.
+              WHEN lc_i.
+                lv_alt_conv_default = lc_conerrors.
+            ENDCASE.
+
+            CALL 'C_SAPGPARAM'
+                   ID 'NAME'  FIELD 'rfc/cp_convert/conversion_char'
+                   ID 'VALUE' FIELD lv_rfcconvert_x.
+
+            lv_convchar_x = lv_rfcconvert_x.
+
+            CALL METHOD cl_abap_conv_in_ce=>uccp
+              EXPORTING
+                uccp = lv_convchar_x
+              RECEIVING
+                char = lv_convchar_c.
+
+            CASE ls_rfcdisplay-tracepropagation.
+
+              WHEN lc_2.
+                lv_trace = lc_defaultgw.
+
+              WHEN lc_1.
+                lv_trace = lc_exptrace.
+
+              WHEN lc_0.
+                lv_trace = lc_notexptrace.
+
+              WHEN ''.
+                lv_trace = lc_defaultgw.
+
+            ENDCASE.
+
+            "Keep-alive timeout
+            CASE ls_rfcdisplay-keepalivetimeout.
+              WHEN lc_m2.
+                lv_keepalive = lc_defaultgw.
+              WHEN lc_0.
+                lv_keepalive = lc_timeoutinact.
+              WHEN OTHERS.
+                lv_keepalive = lc_stimeout.
+                lv_value = ls_rfcdisplay-keepalivetimeout.
+            ENDCASE.
+
+            IF ls_rfcdes CS lc_flag.
+              lv_nmod = lc_x.
+            ELSE.
+              lv_nmod = lc_null.
+            ENDIF.
+
+            CONCATENATE ls_rfcdisplay-rfcdest
+                        ls_rfcdisplay-rfctype
+                        ls_rfcdoc-rfcdoc1
+                        ls_rfcdoc-rfcdoc2
+                        ls_rfcdoc-rfcdoc3
+                        ls_rfcattrib-cuname
+                        ls_rfcattrib-cudate
+                        ls_rfcattrib-cuclient
+                        ls_rfcattrib-cutime
+                        ls_rfcattrib-muname
+                        ls_rfcattrib-mudate
+                        ls_rfcattrib-muclient
+                        ls_rfcattrib-mutime
+                        INTO ls_output SEPARATED BY lc_sep.
+              APPEND ls_output TO lt_output.
+              CLEAR: ls_output.
+
+            CONCATENATE ls_rfcdes-rfcdest
+                        ls_rfcdes-rfctype
+                        ls_rfcdisplay-rfcexit
+                        ls_rfcdisplay-rfcgwhost
+                        ls_rfcdisplay-rfcgwserv
+                        ls_rfcdisplay-authority
+                        lv_unicode
+                        lv_nonunicode
+                        lv_alt_conv_default
+                        lv_rfcconvert_x
+                        lv_convchar_c
+                        ls_rfcdisplay-rfcwan
+                        lv_rfctrace
+                        lv_trace
+                        lv_keepalive
+                        lv_value
+                        lv_nmod
+                        INTO ls_output SEPARATED BY lc_sep.
+            APPEND ls_output TO lt_output1.
+          ENDIF.
+
+          CLEAR: ls_output, ls_rfcdes, ls_rfcdisplay,ls_rfcdoc,
+                 lv_unicode, lv_nonunicode, lv_alt_conv_default,
+                 lv_nmod,
+                 ls_rfcattrib, lv_rfctrace, lv_keepalive, lv_rfctrace,
+                 lv_rfcconvert_x, lv_convchar_c,lv_trace, lv_keepalive,
+                 lv_value.
+
+        ENDLOOP.
+
+        "blank line
+        CLEAR: ls_output.
+        APPEND ls_output TO lt_output.
+
+        "for second table
+        APPEND LINES OF lt_output1 TO lt_output.
+        FREE lt_output1.
+
+      ELSE.
+
+        ls_output = lc_msg13.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+      ENDIF.
+
+      "blank line
+      APPEND ls_output TO lt_output.
+
+      "SSL certificate details
+      ls_output = lc_sslcert.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      lv_psecontext = lc_sslc.
+
+      CALL FUNCTION 'SSFP_GET_APPINFO'
+        EXPORTING
+          context         = lv_psecontext
+          language        = lv_langu
+        TABLES
+          applictab       = lt_sslvalue
+        EXCEPTIONS
+          invalid_context = 1
+          OTHERS          = 2.
+
+      IF sy-subrc = 0.
+
+        ls_output = lc_descs.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+        LOOP AT lt_sslvalue INTO ls_sslvalue.
+          CONCATENATE ls_sslvalue-applic ls_sslvalue-descript
+          INTO lv_ssl SEPARATED BY space.
+          ls_output = lv_ssl.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output, ls_sslvalue, lv_ssl.
+        ENDLOOP.
+
+      ELSE.
+
+        ls_output = lc_sslerr.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+
+      ENDIF.
+
+    WHEN OTHERS.
+
+      "Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "Adding NULL values in between
+  DO.
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

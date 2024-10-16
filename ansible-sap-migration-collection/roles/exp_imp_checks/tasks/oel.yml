@@ -1,0 +1,23 @@
+##################################### port status for oel listener ############################################
+- name: oel | set  oracle lister port  
+  set_fact: 
+    oracle_lister_port: "{{ exp_imp_prechecks.oracle_lister_port_source | default('1521') }}"
+    
+- name: oel | To check if ports are open 
+  command: nc -vz {{ hostvars[groups['source_pas'][0]].ansible_host }} {{oracle_lister_port}}
+  register: port_status_listener
+  failed_when: port_status_listener.rc not in [0,1]
+
+- name: oel | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_status_listener.stderr.split('] ')[1] | replace('!','') }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_portstatus_listener.txt"
+  when: port_status_listener.stderr is search('succeeded')
+
+- name: oel | copy the content of port status to a file
+  local_action: 
+    module: copy 
+    content: "{{ port_status_listener.stderr.split()[-2] }} {{ port_status_listener.stderr.split()[-1] }}"
+    dest: "{{ exp_imp_prechecks.source_file_path }}/source_portstatus_listener.txt" 
+  when: port_status_listener.stderr is search('Connection refused')

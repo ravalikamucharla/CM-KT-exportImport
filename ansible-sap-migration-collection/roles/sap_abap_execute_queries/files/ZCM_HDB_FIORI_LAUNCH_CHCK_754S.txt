@@ -18,6 +18,8 @@
 *11-10-2021  V001      Yasaswini K   Local     Added Intent check code*
 *                                              in same report to avoid*
 *                                              parallel running       *
+*09-07-2023  V002      Yasaswini K   Local     Adding null value for  *
+*                                             last column             *
 *---------------------------------------------------------------------*
 
 REPORT zcm_hdb_fiori_launch_chck_754s MESSAGE-ID /ui2/fiocont.
@@ -84,7 +86,7 @@ FORM get_config
              lc_edata       TYPE c      VALUE
              'Issue in fetching launchpad checks'          LENGTH 40,
              lc_ndata       TYPE c      VALUE
-             'Incorrect Input'                             LENGTH 40,
+             'No data found'                               LENGTH 40,
              lc_status      TYPE c      VALUE 'Status'     LENGTH 6,
              lc_package     TYPE c      VALUE 'Package'    LENGTH 7,
              lc_adaplyr     TYPE c      VALUE
@@ -465,7 +467,11 @@ FORM get_config
           IF ls_intent-msg EQ ''.
             ls_intent-msg = lc_null.
           ENDIF.
-
+*Begin of changes V002          
+          IF ls_intent-app_type EQ ''.
+            ls_intent-app_type = lc_null.
+          ENDIF.
+*End of changes V002
           "Truncating Data for lengthy fields
           lv_tilepara = ls_intent-chip_parameter.
           lv_mappsign = ls_intent-mapping_signature.

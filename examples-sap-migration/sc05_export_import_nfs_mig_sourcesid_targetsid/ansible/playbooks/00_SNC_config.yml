@@ -1,0 +1,27 @@
+---
+
+- hosts: all
+  gather_facts: no
+
+- hosts: localhost #SNC configuration on CM vm
+  tags: one
+  vars:
+    exec_freq: one
+  roles:
+    - SNC_configuration
+
+- hosts: localhost #SNC configuration on source/target vm
+  tags: multiple
+  vars:
+    exec_freq: multiple
+    system_cert_name: FIO_SNC.crt
+    update_host_file: true #false if CM server hosts file update is not required
+    hostname: "{{ groups['source_ascs'][0] }}"
+    hostip: "{{ hostvars[groups['source_ascs'][0]].ansible_host }}"
+  vars_files:
+    - ../inventory/group_vars/all/all.yml
+    - ../inventory/group_vars/source_ascs.yml
+    - ../inventory/host_vars/{{ groups['source_ascs'][0] }}.yml
+  roles:
+    - folder_creation
+    - SNC_configuration

@@ -1,2 +1,0 @@
-Result of OS command : cat|/etc/services
-No data found

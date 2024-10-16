@@ -1,4 +1,0 @@
-- import_playbook: 05_1_hsr_migration_source.yml
-- import_playbook: 05_2_hsr_migration_target.yml
-- import_playbook: 05_3_hsr_replication_status.yml
-- import_playbook: 05_scheduling_cut_over.yml

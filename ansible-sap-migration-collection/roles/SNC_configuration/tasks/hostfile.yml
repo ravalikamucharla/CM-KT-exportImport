@@ -1,0 +1,9 @@
+- name: main | add to hostfile
+  blockinfile: 
+    marker: "# {mark} ANSIBLE MANAGED BLOCK"
+    marker_begin: "{{ 'BEGIN ' + new_marker | default('') }}"
+    marker_end: "{{ 'END ' + new_marker | default('') }}"
+    dest: /etc/hosts
+    block: "{{ hostname }} {{ hostip }}"
+    state: present
+  become: yes

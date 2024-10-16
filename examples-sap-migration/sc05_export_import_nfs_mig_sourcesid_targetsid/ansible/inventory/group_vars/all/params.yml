@@ -7,40 +7,40 @@ params:  # input for import and export
     import_db: NW_ABAP_DB_DBRefresh:NW750.HDB.CP
   export_import_dir: #creates direcory in source server for to store export data
     - path: /Media/
-    - path: /Media/export_susmita
-    - path: /Media/export_susmita/ABAP
+    - path: /Media/export_ravalika
+    - path: /Media/export_ravalika/ABAP
   import_import_dir: #creates direcory in target server for to store import data
     - path: /Media/
-    - path: /Media/export_susmita
-    - path: /Media/export_susmita/ABAP
+    - path: /Media/export_ravalika
+    - path: /Media/export_ravalika/ABAP
   sapsys:
     gid: 79  #79
   sidadm:
     uid: 1001  #1001
-  dump_directory: "/Media/export_susmita/"     #/Media/ORA_DUMP_HANA(creating folder)
+  dump_directory: "/Media/export_ravalika/"     #/Media/ORA_DUMP_HANA(creating folder)
   export:
-    sapinst_pkg_exp: "/Media/export_susmita/ABAP"
+    sapinst_pkg_exp: "/Media/export_ravalika/ABAP"
     downloadbasket: "/Media/backup/Kernel753"
     sapinst_path: "/Media/backup/SWPM"
-    exp_migmonNetExchangeDir: "/Media/export_susmita"  #{{ dump_directory }}(HANA), {{ dump_directory }}//TABLE_SPLITTING (sql)
-    mainExportDir: "/Media/export_susmita"
-    splitTableFile: "/Media/export_susmita/ABAP/DATA/whr.txt"
+    exp_migmonNetExchangeDir: "/Media/export_ravalika"  #{{ dump_directory }}(HANA), {{ dump_directory }}//TABLE_SPLITTING (sql)
+    mainExportDir: "/Media/export_ravalika"
+    splitTableFile: "/Media/export_ravalika/ABAP/DATA/whr.txt"
     sqlFileDir: "/Data/smgir"
-    tableFile: "/Media/export_susmita/table_splitting.txt"
+    tableFile: "/Media/export_ravalika/table_splitting.txt"
     parallelR3szchkExecution: true
     data_transfer_type: NET # NET(nfs), FTP, RSYNC
     migmondatatransfertype: NET # NET(nfs), FTP, none
-    migmonFtpExportDir: "/Media/export_susmita/ABAP"
-    migmonFtpExchangeDir: "/Media/export_susmita/ABAP"
+    migmonFtpExportDir: "/Media/export_ravalika/ABAP"
+    migmonFtpExchangeDir: "/Media/export_ravalika/ABAP"
     source_db_type: ORA #db type
     product: NW750 #product
   import:
-    sapinst_pkg_exp: "/Media/export_susmita/ABAP"
+    sapinst_pkg_exp: "/Media/export_ravalika/ABAP"
     downloadbasket: "/usr/sap/sapinst/KERNEL"
     sapinst_path: "/usr/sap/sapinst/SWPM"
     os_type: "linux"
-    mainExportDir: "/Media/export_susmita"
+    mainExportDir: "/Media/export_ravalika"
     target_db_type: HDB  # 'ADA', 'HDB', 'DB2', 'DB4', 'DB6', 'MSS', 'ORA', 'SYB
-    migmonExchangeDir: "/Media/export_susmita"
+    migmonExchangeDir: "/Media/export_ravalika"
     tenant_user: SYSTEM
     product: NW750

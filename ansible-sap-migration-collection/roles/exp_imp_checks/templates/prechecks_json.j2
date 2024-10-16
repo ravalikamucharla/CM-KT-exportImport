@@ -1,0 +1,608 @@
+[
+{% if port_status_src == 'succeeded' and port_status_tgt == 'succeeded' %}
+  { 
+    "Name": "SWPM https port 4237 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src }}",
+    "target_output": "{{ port_status_tgt }}",
+    "status": "{{ '\u2713' }}",
+    "compared_result": "source port 4237 and target port 4237 is open"
+  },
+{% elif port_status_src == 'succeeded' and port_status_tgt == 'Connection refused' %}
+  { 
+    "Name": "SWPM https port 4237 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src }}",
+    "target_output": "{{ port_status_tgt }}",
+    "status": "X",
+    "compared_result": "target port 4237 is not open"
+  }, 
+{% elif port_status_src == 'Connection refused' and port_status_tgt == 'succeeded' %}
+  { 
+    "Name": "SWPM https port 4237 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src }}",
+    "target_output": "{{ port_status_tgt }}",
+    "status": "X",
+    "compared_result": "source port 4237 is not open"
+  },
+{% else %}
+  { 
+    "Name": "SWPM https port 4237 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src }}",
+    "target_output": "{{ port_status_tgt }}",
+    "status": "X",
+    "compared_result": "both source port 4237 and target port 4237 are not open"
+  },
+{% endif %}
+{% if port_status_src_4238 == 'succeeded' and port_status_tgt_4238 == 'succeeded' %}
+  { 
+    "Name": "SWPM http port 4238 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src_4238 }}",
+    "target_output": "{{ port_status_tgt_4238 }}",
+    "status": "{{ '\u2713' }}",
+    "compared_result": "source port 4238 and target port 4238 is open"
+  },
+{% elif port_status_src_4238 == 'succeeded' and port_status_tgt_4238 == 'Connection refused' %}
+  { 
+    "Name": "SWPM http port 4238 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src_4238 }}",
+    "target_output": "{{ port_status_tgt_4238 }}",
+    "status": "X",
+    "compared_result": "target port 4238 is not open"
+  }, 
+{% elif port_status_src_4238 == 'Connection refused' and port_status_tgt_4238 == 'succeeded' %}
+  { 
+    "Name": "SWPM http port 4238 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src_4238 }}",
+    "target_output": "{{ port_status_tgt_4238}}",
+    "status": "X",
+    "compared_result": "source port 4238 is not open"
+  },
+{% else %}
+  { 
+    "Name": "SWPM http port 4238 status check from cloud migrate server to source and target",
+    "source_output": "{{ port_status_src_4238 }}",
+    "target_output": "{{ port_status_tgt_4238 }}",
+    "status": "X",
+    "compared_result": "both source port 4238 and target port 4238 are not open"
+  },
+{% endif %}
+  {
+    "Name": "Check Source export directory is present in target",
+    "source_output": "NA",
+    "target_output": "{{ register_name_src }}",
+    "status": "NA",
+    "compared_result": "{{ register_name_src }}"
+  },
+{% if source_exp_dir_permission == expected_source_exp_dir_permission and target_exp_dir_permission == expected_target_exp_dir_permission %}
+  { 
+    "Name": "Check Permissions of export directory should have sidadm/sapsys in source and target",
+    "source_output": "{{ source_exp_dir_permission }}",
+    "target_output": "{{ target_exp_dir_permission }}",
+    "status": "{{ '\u2713' }}",
+    "compared_result": "source and target have sidadm/sapsys permissions"
+  },
+{% elif source_exp_dir_permission == expected_source_exp_dir_permission and target_exp_dir_permission != expected_target_exp_dir_permission %}
+  { 
+    "Name": "Check Permissions of export directory should have sidadm/sapsys in source and target",
+    "source_output": "{{ source_exp_dir_permission }}",
+    "target_output": "{{ target_exp_dir_permission }}",
+    "status": "X",
+    "compared_result": "source have sidadm/sapsys permissions but target does not have sidadm/sapsys permissions"
+  }, 
+{% elif source_exp_dir_permission != expected_source_exp_dir_permission and target_exp_dir_permission == expected_target_exp_dir_permission %}
+  { 
+    "Name": "Check Permissions of export directory should have sidadm/sapsys in source and target",
+    "source_output": "{{ source_exp_dir_permission }}",
+    "target_output": "{{ target_exp_dir_permission }}",
+    "status": "X",
+    "compared_result": "source does not have sidadm/sapsys permissions but target have sidadm/sapsys permissions"
+  },
+{% elif source_exp_dir_permission != expected_source_exp_dir_permission and target_exp_dir_permission != expected_target_exp_dir_permission %}
+  { 
+    "Name": "Check Permissions of export directory should have sidadm/sapsys in source and target",
+    "source_output": "{{ source_exp_dir_permission }}",
+    "target_output": "{{ target_exp_dir_permission }}",
+    "status": "X",
+    "compared_result": "both source and target does not have sidadm/sapsys permissions"
+  },
+{% else %}
+  { 
+    "Name": "Check Permissions of export directory should have sidadm/sapsys in source and target",
+    "source_output": "{{ source_exp_dir_permission }}",
+    "target_output": "{{ target_exp_dir_permission }}",
+    "status": "X",
+    "compared_result": "please check output in respective column"
+  },
+{% endif %}
+{% if source_exp_dir_contents == target_exp_dir_contents and target_exp_dir_contents == 'Export directory empty' %}
+  { 
+    "Name": "Check Export directory should have be empty in both source and target",
+    "source_output": "{{source_exp_dir_contents}}",
+    "target_output": "{{target_exp_dir_contents}}",
+    "status": "{{ '\u2713' }}",
+    "compared_result": "source and target export directory are empty"
+  },
+{% else %}
+  { 
+    "Name": "Check Export directory should have be empty in both source and target",
+    "source_output": "{{source_exp_dir_contents}}",
+    "target_output": "{{target_exp_dir_contents}}",
+    "status": "X",
+    "compared_result": "{{source_exp_dir_contents}} in source but {{target_exp_dir_contents}} in target"
+  },
+{% endif %}
+  {
+    "Name": "Check source export directory have the required space",
+    "source_output": "{{ directory_size_src }}",
+    "target_output": "NA",
+    "status": "NA",
+    "compared_result": "{{directory_size_src}}"
+  },
+  {
+    "Name": "Check if export directory is shared",
+    "source_output": "NA",
+    "target_output": "{{exp_dir_shared_on_tgt}}",
+    "status": "NA",
+    "compared_result": "Export directory {{exp_dir_shared_on_tgt}} on target system"
+  },
+{% if exp_imp_prechecks.data_transfer_type is defined and exp_imp_prechecks.data_transfer_type == "NET" %}
+    {% if source_nfs_status_pas.stdout_lines[0] == 'loaded' and target_nfs_status_pas.stdout_lines[0] == 'loaded' %}
+      { 
+        "Name": "Check NFS service present in source and target of PAS",
+        "source_output": "{{ source_nfs_status_pas.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_pas.stdout_lines[0] }}",
+        "status": "{{ '\u2713' }}",
+        "compared_result": "NFS service present in source and target of PAS system"
+      },
+    {% elif source_nfs_status_pas.stdout_lines[0] == 'loaded' and target_nfs_status_pas.stdout_lines[0] == 'not-found' %}
+      { 
+        "Name": "Check NFS service present in source and target of PAS",
+        "source_output": "{{ source_nfs_status_pas.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_pas.stdout_lines[0] }}",
+        "status": "X",
+        "compared_result": "NFS service present in source PAS system but NFS service not present in target PAS"
+      }, 
+    {% elif source_nfs_status_pas.stdout_lines[0] == 'not-found' and target_nfs_status_pas.stdout_lines[0] == 'loaded' %}
+      { 
+        "Name": "Check NFS service present in source and target of PAS",
+        "source_output": "{{ source_nfs_status_pas.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_pas.stdout_lines[0] }}",
+        "status": "X",
+        "compared_result": "NFS service not present in source PAS system but NFS service present in target PAS"
+      },
+    {% else %}
+      { 
+        "Name": "Check NFS service present in source and target of PAS",
+        "source_output": "{{ source_nfs_status_pas.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_pas.stdout_lines[0] }}",
+        "status": "X",
+        "compared_result": "both source and target does not have NFS service"
+      },
+    {% endif %}
+{% endif %}
+{% if exp_imp_prechecks.data_transfer_type is defined and exp_imp_prechecks.data_transfer_type == "NET" %}
+    {% if source_nfs_status_db.stdout_lines[0] == 'loaded' and target_nfs_status_db.stdout_lines[0] == 'loaded' %}
+      { 
+        "Name": "Check NFS service present in source and target of db",
+        "source_output": "{{ source_nfs_status_db.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_db.stdout_lines[0] }}",
+        "status": "{{ '\u2713' }}",
+        "compared_result": "NFS service present in source and target of db system"
+      },
+    {% elif source_nfs_status_db.stdout_lines[0] == 'loaded' and target_nfs_status_db.stdout_lines[0] == 'not-found' %}
+      { 
+        "Name": "Check NFS service present in source and target of db",
+        "source_output": "{{ source_nfs_status_db.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_db.stdout_lines[0] }}",
+        "status": "X",
+        "compared_result": "NFS service present in source db system but NFS service not present in target db"
+      }, 
+    {% elif source_nfs_status_db.stdout_lines[0] == 'not-found' and target_nfs_status_db.stdout_lines[0] == 'loaded' %}
+      { 
+        "Name": "Check NFS service present in source and target of db",
+        "source_output": "{{ source_nfs_status_db.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_db.stdout_lines[0] }}",
+        "status": "X",
+        "compared_result": "NFS service not present in source db system but NFS service present in target db"
+      },
+    {% else %}
+      { 
+        "Name": "Check NFS service present in source and target of db",
+        "source_output": "{{ source_nfs_status_db.stdout_lines[0] }}",
+        "target_output": "{{ target_nfs_status_db.stdout_lines[0] }}",
+        "status": "X",
+        "compared_result": "both source and target does not have NFS service"
+      },
+    {% endif %}
+{% endif %}
+{% if exp_imp_prechecks.data_transfer_type is defined and exp_imp_prechecks.data_transfer_type == "FTP" %}
+        {% if source_ftp_status_pas.stdout_lines[0] == 'loaded' and target_ftp_status_pas.stdout_lines[0] == 'loaded' %}
+          { 
+            "Name": "Check FTP service present in source and target of PAS",
+            "source_output": "{{ source_ftp_status_pas.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_pas.stdout_lines[0] }}",
+            "status": "{{ '\u2713' }}",
+            "compared_result": "FTP service present in source and target of PAS system"
+          },
+        {% elif source_ftp_status_pas.stdout_lines[0] == 'loaded' and target_ftp_status_pas.stdout_lines[0] == 'not-found' %}
+          { 
+            "Name": "Check FTP service present in source and target of PAS",
+            "source_output": "{{ source_ftp_status_pas.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_pas.stdout_lines[0] }}",
+            "status": "X",
+            "compared_result": "FTP service present in source PAS system but FTP service not present in target PAS"
+          }, 
+        {% elif source_ftp_status_pas.stdout_lines[0] == 'not-found' and target_ftp_status_pas.stdout_lines[0] == 'loaded' %}
+          { 
+            "Name": "Check FTP service present in source and target of PAS",
+            "source_output": "{{ source_ftp_status_pas.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_pas.stdout_lines[0] }}",
+            "status": "X",
+            "compared_result": "FTP service not present in source PAS system but FTP service present in target PAS"
+          },
+        {% else %}
+          { 
+            "Name": "Check FTP service present in source and target of PAS",
+            "source_output": "{{ source_ftp_status_pas.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_pas.stdout_lines[0] }}",
+            "status": "X",
+            "compared_result": "both source and target does not have FTP service"
+          },
+        {% endif %}
+{% endif %}
+{% if exp_imp_prechecks.data_transfer_type is defined and exp_imp_prechecks.data_transfer_type == "FTP" %}
+        {% if source_ftp_status_db.stdout_lines[0] == 'loaded' and target_ftp_status_db.stdout_lines[0] == 'loaded' %}
+          { 
+            "Name": "Check FTP service present in source and target of db",
+            "source_output": "{{ source_ftp_status_db.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_db.stdout_lines[0] }}",
+            "status": "{{ '\u2713' }}",
+            "compared_result": "FTP service present in source and target of db system"
+          },
+        {% elif source_ftp_status_db.stdout_lines[0] == 'loaded' and target_ftp_status_db.stdout_lines[0] == 'not-found' %}
+          { 
+            "Name": "Check FTP service present in source and target of db",
+            "source_output": "{{ source_ftp_status_db.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_db.stdout_lines[0] }}",
+            "status": "X",
+            "compared_result": "FTP service present in source db system but FTP service not present in target db"
+          }, 
+        {% elif source_ftp_status_db.stdout_lines[0] == 'not-found' and target_ftp_status_db.stdout_lines[0] == 'loaded' %}
+          { 
+            "Name": "Check FTP service present in source and target of db",
+            "source_output": "{{ source_ftp_status_db.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_db.stdout_lines[0] }}",
+            "status": "X",
+            "compared_result": "FTP service not present in source db system but FTP service present in target db"
+          },
+        {% else %}
+          { 
+            "Name": "Check FTP service present in source and target of db",
+            "source_output": "{{ source_ftp_status_db.stdout_lines[0] }}",
+            "target_output": "{{ target_ftp_status_db.stdout_lines[0] }}",
+            "status": "X",
+            "compared_result": "both source and target does not have FTP service"
+          },
+        {% endif %}
+{% endif %}
+  { 
+    "Name": "FTP Port status check from source to target",
+    "source_output": "{{ port_status_src_ftp }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "FTP Port status check from source to target: {{ port_status_src_ftp }}"
+  },
+{% if (kernel_compare == 'Source kernel version is less than target kernel version' or kernel_compare == 'Source and target kernel version are same') and (patch_compare == 'Source patch no is less than target patch no' or patch_compare == 'Source and target patch no are same') %}
+  { 
+    "Name": "Check R3load version in source and target system, target value should be equal to or greater than the source values",
+    "source_output": "{{ source_r3load.stdout }}",
+    "target_output": "{{ target_r3load.stdout }}",
+    "status": "{{ '\u2713' }}",
+    "compared_result": "{{kernel_compare}} and {{patch_compare}}"
+  },
+{% else %}
+  { 
+    "Name": "Check R3load version in source and target system, target value should be equal to or greater than the source values",
+    "source_output": "{{ source_r3load.stdout }}",
+    "target_output": "{{ target_r3load.stdout }}",
+    "status": "X",
+    "compared_result": "{{kernel_compare}} and {{patch_compare}}"
+  },
+{% endif %}
+  { 
+    "Name": "Check R3trans connection in source and target system",
+    "source_output": "{{ source_r3trans.stdout }}",
+    "target_output": "{{ target_r3trans.stdout }}",
+    "status": "X",
+    "compared_result": "R3trans connection in source and target system"
+  },
+  { 
+    "Name": "Check disp+work in source and target system",
+    "source_output": "{{ source_disp_work.stdout }}",
+    "target_output": "{{ target_disp_work.stdout }}",
+    "status": "X",
+    "compared_result": "disp+work in source and target system"
+  },
+  {
+    "Name": "Check if smigr is executed in export directory in source server",
+    "source_output": "{{ smigr_status_src }}",
+    "target_output": "NA",
+    "status": "NA",
+    "compared_result": "{{ smigr_status_src }}"
+  },
+  { 
+    "Name": "Check cpu and number of processes easy for user on source and target",
+    "source_output": "cpu count: {{ source_cpu_count.stdout }} and process count: {{ source_process_count.stdout }}",
+    "target_output": "cpu count: {{ target_cpu_count.stdout }} and process count: {{ target_process_count.stdout }}",
+    "status": "X",
+    "compared_result": "CPU and number of processes easy for user on source and target"
+  },
+{% if db_status_src == 'Running' %}
+  { 
+    "Name": "DB should be up and running in source system",
+    "source_output": "{{ db_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "DB is up and running on source"
+  }, 
+{% elif db_status_src == 'Only few instances are Running' %}
+  { 
+    "Name": "DB should be up and running in source system",
+    "source_output": "{{ db_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Only few instances DB are running in source,please refer db_service_status.txt file to check the stopped instances"
+  },
+{% else %}
+  { 
+    "Name": "DB should be up and running in source system",
+    "source_output": "{{ db_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Source DB system is stopped"
+  },
+{% endif %}
+{% if ascs_status_src == 'Running' %}
+  { 
+    "Name": "ASCS should be stopped in source system",
+    "source_output": "{{ ascs_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "ASCS is up and running on source"
+  }, 
+{% elif ascs_status_src == 'Only few instances are Running' %}
+  { 
+    "Name": "ASCS should be stopped in source system",
+    "source_output": "{{ ascs_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Only few ASCS instances are running in source,please refer ascs_service_status.txt file to check the stopped instances"
+  },
+{% else %}
+  { 
+    "Name": "ASCS should be stopped in source system",
+    "source_output": "{{ ascs_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Source ASCS system is stopped"
+  },
+{% endif %}
+{% if pas_status_src == 'Running' %}
+  { 
+    "Name": "PAS should be stopped in source system",
+    "source_output": "{{ pas_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Source is up and running"
+  }, 
+{% elif pas_status_src == 'Only few instances are Running' %}
+  { 
+    "Name": "PAS should be stopped in source system",
+    "source_output": "{{ pas_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Few instances are running in source,please refer pas_service_status.txt file to check the running instances"
+  },
+{% else %}
+  { 
+    "Name": "PAS should be stopped in source system",
+    "source_output": "{{ pas_status_src }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Source PAS system is stopped"
+  },
+{% endif %}
+{% if ascs_status_tgt == 'Running' %}
+  { 
+    "Name": "ASCS should be up and running in target system",
+    "source_output": "X",
+    "target_output": "{{ ascs_status_tgt }}",
+    "status": "X",
+    "compared_result": "ASCS is up and running on target"
+  }, 
+{% elif ascs_status_tgt == 'Only few instances are Running' %}
+  { 
+    "Name": "ASCS should be up and running in target system",
+    "source_output": "X",
+    "target_output": "{{ ascs_status_tgt }}",
+    "status": "X",
+    "compared_result": "Only few ASCS instances are running in target,please refer ascs_service_status.txt file to check the stopped instances"
+  },
+{% else %}
+  { 
+    "Name": "ASCS should be up and running in target system",
+    "source_output": "X",
+    "target_output": "{{ ascs_status_tgt }}",
+    "status": "X",
+    "compared_result": "Target ASCS system is stopped"
+  },
+{% endif %}
+{% if pas_status_tgt == 'Running' %}
+  { 
+    "Name": "PAS should be stopped in target system",
+    "source_output": "X",
+    "target_output": "{{ pas_status_tgt }}",
+    "status": "X",
+    "compared_result": "Target is up and running"
+  }, 
+{% elif pas_status_tgt == 'Only few instances are Running' %}
+  { 
+    "Name": "PAS should be stopped in target system",
+    "source_output": "X",
+    "target_output": "{{ pas_status_tgt }}",
+    "status": "X",
+    "compared_result": "Few instances are running in target,please refer pas_service_status.txt file to check the running instances"
+  },
+{% else %}
+  { 
+    "Name": "PAS should be stopped in target system",
+    "source_output": "X",
+    "target_output": "{{ pas_status_tgt }}",
+    "status": "X",
+    "compared_result": "Target PAS system is stopped"
+  },
+{% endif %}
+{% if db_status_tgt == 'Running' %}
+  { 
+    "Name": "DB should always be stopped in target system",
+    "source_output": "X",
+    "target_output": "{{ db_status_tgt }}",
+    "status": "X",
+    "compared_result": "DB is up and running on target"
+  }, 
+{% elif db_status_tgt == 'Only few instances are Running' %}
+  { 
+    "Name": "DB should always be stopped in target system",
+    "source_output": "X",
+    "target_output": "{{ db_status_tgt }}",
+    "status": "X",
+    "compared_result": "Only few instances DB are running in target,please refer db_service_status.txt file to check the stopped instances"
+  },
+{% else %}
+  { 
+    "Name": "DB should always be stopped in target system",
+    "source_output": "X",
+    "target_output": "{{ db_status_tgt }}",
+    "status": "X",
+    "compared_result": "Target DB system is stopped"
+  },
+{% endif %}
+  { 
+    "Name": "Check ulimit for root user on source and target",
+    "source_output": "{{ source_ulimit.stdout }}",
+    "target_output": "{{ target_ulimit.stdout }}",
+    "status": "X",
+    "compared_result": "ulimit for root user on source and target"
+  },
+  { 
+    "Name": "Check ulimit for sidadm user on source and target",
+    "source_output": "{{ source_ulimit_sidadm.stdout }}",
+    "target_output": "{{ target_ulimit_sidadm.stdout }}",
+    "status": "X",
+    "compared_result": "ulimit for sidadm user on source and target"
+  },
+{% if db_type is defined and db_type == "oracle" %}
+ { 
+    "Name": "Oracle Listener Port status check from cloud migrate server to source",
+    "source_output": "{{ source_portstatus_listener.stdout_lines[0] }}",
+    "target_output": "X",
+    "status": "X",
+    "compared_result": "Oracle Listener Port status in Source server: {{ source_portstatus_listener.stdout_lines[0] }}"
+  },
+{% endif %}
+{% if output_firewall_src.stdout == '' and output_firewall.stdout == '' %}
+  {
+    "Name": "Check firewall status on source and target system",
+    "source_output": "Error: {{ output_firewall_src.stderr }}",
+    "target_output": "Error: {{ output_firewall.stderr }}",
+    "status": "NA",
+    "compared_result": "Error in firewall status for both source and target"
+  },
+{% elif output_firewall_src.stdout == '' and output_firewall.stdout != '' %}
+  {
+    "Name": "Check firewall status on source and target system",
+    "source_output": "Error: {{ output_firewall_src.stderr }}",
+    "target_output": "{{ output_firewall.stdout.split(':')[1] }}",
+    "status": "NA",
+    "compared_result": "Error in source firewall status"
+  },
+{% elif output_firewall_src.stdout != '' and output_firewall.stdout == '' %}
+  {
+    "Name": "Check firewall status on source and target system",
+    "source_output": "{{ output_firewall_src.stdout.split(':')[1] }}",
+    "target_output": "Error: {{ output_firewall.stderr }}",
+    "status": "NA",
+    "compared_result": "Error in target firewall status"
+  },
+{% else %}
+  {
+    "Name": "Check firewall status on source and target system",
+    "source_output": "{{ output_firewall_src.stdout.split(':')[1] }}",
+    "target_output": "{{ output_firewall.stdout.split(':')[1] }}",
+    "status": "NA",
+    "compared_result": "Firewall status for source is: {{ output_firewall_src.stdout.split(':')[1] }} and target is: {{ output_firewall.stdout.split(':')[1] }}"
+  },
+{% endif %} 
+{% if output_fstab_tgt.stdout == '' %}
+  {
+    "Name": "Check fstab output on target system",
+    "source_output": "NA",
+    "target_output": "Error:  {{ output_fstab_tgt.stderr }}",
+    "status": "NA",
+    "compared_result": "Error:  {{ output_fstab_tgt.stderr }}"
+  },
+{% else %}
+  {
+    "Name": "Check fstab output on target system",
+    "source_output": "NA",
+    "target_output": "{{ output_fstab_tgt.stdout }}",
+    "status": "NA",
+    "compared_result": "Target system mount point listed"
+  },
+{% endif %}
+  {
+    "Name": "Check swap space on source and target system",
+    "source_output": "{{ output_swap_src.stdout }}G",
+    "target_output": "{{ output_swap_tgt.stdout }}G",
+    "status": "NA",
+    "compared_result": "Swap space for source system: {{ output_swap_src.stdout }}G and Swap size for target system:{{ output_swap_tgt.stdout }}G"
+  },
+  {
+    "Name": "Check timezone check on source and target system",
+    "source_output": "{{ output_timezone_src.stdout_lines[0] }}",
+    "target_output": "{{ output_timezone_tgt.stdout_lines[0] }}",
+    "status": "NA",
+    "compared_result": "Timezone of source and target server"
+  },
+{% if output_saptune_src.stdout == '' and output_saptune_tgt.stdout == '' %}
+  {
+    "Name": "Check if saptune enabled in source and target system",
+    "source_output": "Saptune not Enabled in source server",
+    "target_output": "Saptune not Enabled in target server",
+    "status": "NA",
+    "compared_result": "Saptune not Enabled in both server"
+  }
+{% elif output_saptune_src.stdout == '' and output_saptune_tgt.stdout != '' %}
+  {
+    "Name": "Check if saptune enabled in source and target system",
+    "source_output": "Saptune not Enabled in source server",
+    "target_output": "{{ output_saptune_tgt.stdout }}",
+    "status": "NA",
+    "compared_result": "Saptune not Enabled in source server"
+  }
+{% elif output_saptune_src.stdout != '' and output_saptune_tgt.stdout == '' %}
+  {
+    "Name": "Check if saptune enabled in source and target system",
+    "source_output": "{{ output_saptune_src.stdout }}",
+    "target_output": "Saptune not Enabled in source server",
+    "status": "{{ '\u2713' }}",
+    "compared_result": "Saptune not Enabled in target server"
+  }
+{% else %}
+  {
+    "Name": "Check if saptune enabled in source and target system",
+    "source_output": "{{ output_saptune_src.stdout }}",
+    "target_output": "{{ output_saptune_tgt.stdout }}",
+    "status": "NA",
+    "compared_result": "saptune is enabled in both server"
+  }
+{% endif %}]

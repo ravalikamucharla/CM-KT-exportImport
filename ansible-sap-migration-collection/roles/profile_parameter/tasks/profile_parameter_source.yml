@@ -1,0 +1,29 @@
+---
+- name: create folders
+  file:
+    path: "{{ item }}"
+    owner: "{{ cloudmigrate_server_sudo_user }}"
+    group: "{{ cloudmigrate_server_sudo_user_group }}"
+    mode: '0755'
+    recurse: yes
+    state: directory
+  with_items: 
+  - "{{ profile_param_output }}"
+  - "{{ profile_param_output }}/PFL_Files"
+  become: true
+  become_method: sudo
+  delegate_to: localhost
+
+- name: Profile Parameter
+  shell: sudo su - {{ sid|lower }}adm -c 'grep /{{ sid }}/ /usr/sap/sapservices' | awk '{print $5}' | cut -d'=' -f2
+  register: profile_outputs
+
+- name: fetch profile files from source 
+  become_method: sudo 
+  become: yes
+  fetch:
+    src: "{{ item }}"
+    dest: '{{ profile_files }}'
+    flat: yes
+    fail_on_missing: no
+  with_items: "{{ profile_outputs.stdout_lines }}"

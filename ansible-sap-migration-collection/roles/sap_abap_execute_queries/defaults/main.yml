@@ -1,6 +1,7 @@
 ---
 abap_pre_migration_list:
   abap:
+    - { name: "ZBASIS_R_BASIS_COMPONENT.txt" }
     - { name: "ZCM_T_CVERS_EXP_SOFTWARE_COMP.txt" }
     - { name: "ZCM_EXP_SYSTEM_STATUS.txt" }
     - { name: "ZCM_SM51_EXP_KERNEL_PATCH.txt" }
@@ -22,7 +23,7 @@ abap_pre_migration_list:
     - { name: "ZCM_SLDAPICUST_EXP_SLDDATA.txt" }
     - { name: "ZCM_STMS_CHK_CONNECTION.txt" }
     - { name: "ZCM_STMS_EXP_IMPORT_QUEUE.txt" }
-    # - { name: "ZCM_STMS_EXP_IMPORT_RUNNIG_TRS.txt" }
+    - { name: "ZCM_STMS_EXP_IMPORT_RUNNIG_TRS.txt" }
     - { name: "ZCM_STZAC_EXP_CUSTOM_TIMEZONE.txt" }
     - { name: "ZCM_SFW5_EXP_ACTIVE_BUSINESSFN.txt" }
     - { name: "ZCM_SMQ1_EXP_OUTBOUND_QUEUE.txt" }
@@ -70,7 +71,7 @@ abap_pre_migration_list:
     - { name: "ZCM_EXP_RSICFCHK_DETAILS.txt" }
     - { name: "ZCM_SICF_EXP_ACTIVE_SERVICES.txt" }
     - { name: "ZCM_BD64_EXP_DISTRIBUTION_MDL.txt" }
-    - { name: "ZCM_SM59_EXP_RFC_DESTINATIONS.txt" }
+    - { name: "ZCM_EXP_SM59_RFC_DESTINATIONS.txt" }
     - { name: "ZCM_SMLG_EXP_LOGON_GROUPS.txt" }
     - { name: "ZCM_DBCO_EXP_CONNECTION_OVERVW.txt" }
     - { name: "ZCM_DBCO_EXP_CONNECTION_INFO.txt" }
@@ -86,7 +87,12 @@ abap_pre_migration_list:
     - { name: "ZCM_T_SAPWLSERV_EXPORT.txt" }
     - { name: "ZCM_AL11_EXP_SAP_DIRECTORY.txt" }
     - { name: "ZCM_SP12_EXP_TEMSE_CONSISTENCY.txt" }
-    - { name: "ZCM_HDB_DB02_EXP_HOST_SERVICES.txt" } #when: component_version >= "751" and component_version != "752" }
+    - { name: "ZCM_SM66_EXP_INST_WORK_PROCESS.txt"}
+    - { name: "ZCM_T_SNCSYSACL_EXP_SNC_ACL.txt" }
+    - { name: "ZCM_ICNV_EXP_WORKLISTDATA.txt" }
+    - { name: "ZCM_RSRFCCHK_EXP_JOBSUBMIT.txt" }
+    - { name: "ZCM_SM13_EXP_ADMINISTRATION_DT.txt" }
+
 
   oracle:
     - { name: "ZCM_ORA_MSS_CHK_DB_ENCRYPTION.txt" }
@@ -100,6 +106,7 @@ abap_pre_migration_list:
     - { name: "ZCM_DXB_ST04_EXP_ALERT_MONITOR.txt" }
     - { name: "ZCM_ORA_DB02_CHK_LOGBCKUP_ENBL.txt" }
     - { name: "ZCM_DB13_CHK_DB_STATS.txt" }
+    - { name: "ZCM_ORACLE_SQL_QUERIES_EXECUTE.txt" }
 
   hana:
     - { name: "ZCM_HANA_TOP_TABLES_EXP.txt", input_params: 'FETCH,100,{{ schema_name }}' }
@@ -112,6 +119,7 @@ abap_pre_migration_list:
     - { name: "ZCM_HDB_NWBC_CONFIG_OVRVW.txt" }
     - { name: "ZCM_HDB_FIORI_LAUNCH_CHCK.txt" } # component_version == "751" & == "754"
     - { name: "ZCM_HDB_SQL_QUERIES_EXECUTE.txt" }
+    - { name: "ZCM_HDB_DB02_EXP_HOST_SERVICES.txt" } #when: component_version >= "751" and component_version != "752" }
 
   sql:
     - { name: "ZCM_ORA_MSS_CHK_DB_ENCRYPTION.txt" }
@@ -141,23 +149,27 @@ abap_pre_migration_list:
 version_specific_scripts:
   - { name: "ZCM_STRUST_EXP_CERT.txt" }
   - { name: "ZCM_STRUST_EXP_WEBDIS.txt" }
-  - { name: "ZCM_EXP_RSPARAM_DETAILS.txt" }
+  - { name: "ZCM_EXP_RSPARAM_DETAILS_HVER.txt" }
+  - { name: "ZCM_EXP_RSPARAM_DETAILS_LVER.txt" }
   - { name: "ZCM_EXP_SAP_SYSALIASE.txt" }
   - { name: "ZCM_IWFND_EXP_SERVICE.txt" }
   - { name: "ZCM_OAC0_EXP_CONTENT_REPO.txt" }
   - { name: "ZCM_RSA1_EXP_LOGICAL_STAT.txt" }
-  - { name: "ZCM_RSAU_CONFIG_PARAM.txt" } 
+  - { name: "ZCM_RSAU_CONFIG_PARAM.txt" }
   - { name: "ZCM_RZ12_EXP_RFC_GRP.txt" }
   - { name: "ZCM_SCOT_EXP_SMTP_NODES.txt" }
   - { name: "ZCM_SM52_EXP_STATUS.txt" }
   - { name: "ZCM_WE20_EXP_PART_PROFILE.txt" }
   - { name: "ZCM_SE06_EXP_SYS_SETTINGS.txt" }
-  - { name: "ZCM_EXP_INSTALL_PROD_VERS.txt" } #supportpackage_version > "0000"
+  - { name: "ZCM_EXP_INSTALL_PROD_VERS_HVER.txt" } #supportpackage_version > "0000"
+  - { name: "ZCM_EXP_INSTALL_PROD_VERS_LVER.txt" } #supportpackage_version > "0000"
   - { name: "ZCM_SECSTORE_EXP_CONTENTS.txt" }
   - { name: "ZCM_SM13_EXP_ADMIN_DT.txt" }
   - { name: "ZCM_SM21_EXP_SYSTEM_LOGS.txt", input_params: 'EXPORT,{{ SM21_no_of_days }}' }
-  - { name: "ZCM_SMICM_CHK_HTTP_SMTP.txt" }
-  - { name: "ZCM_CHK_RFC_CONNECTIONS.txt" }
+  - { name: "ZCM_SMICM_CHK_HTTP_SMTP_HVER.txt" }
+  - { name: "ZCM_SMICM_CHK_HTTP_SMTP_LVER.txt" }
+  - { name: "ZCM_SMICM_CHK_HTTP_SMTP_PORT.txt" }
+  # - { name: "ZCM_CHK_RFC_CONNECTIONS.txt" }
 
 abap_pre_migration_list_clients:
   - { name: "ZCM_SMQ1_EXP_OUTBOUND_QUEUE.txt" }
@@ -176,22 +188,17 @@ abap_pre_migration_list_clients:
 os_queries_windows:
   - { name: "get_hostname_details", query: "hostname", when: os_type == 'windows' }
   - { name: "get_webdispatcher_details", query: "disp+work", when: os_type == 'windows' }
-  - { name: "get_webdispatcher_version_details", query: "sapwebdisp -version", when: os_type == 'windows' }
+  - { name: "get_webdispatcher_version_details", query: "sapwebdisp|-version", when: os_type == 'windows' }
   - { name: "get_systeminfo", query: "systeminfo", when: os_type == 'windows' }
-  - { name: "get_disklayout", query: "wmic logicaldisk get size,freespace,caption", when: os_type == 'windows' } 
+  - { name: "get_disklayout_size", query: "wmic|logicaldisk get size, caption", when: os_type == 'windows' }
+  - { name: "get_disklayout_freespace", query: "wmic|logicaldisk get freespace, caption", when: os_type == 'windows' } 
 
 os_queries_linux:
   - { name: "get_hostname", query: "hostname", when: os_type == 'linux' }
   - { name: "get_lscpu_details", query: "lscpu", when: os_type == 'linux' }
   - { name: "get_webdispatcher", query: "disp+work", when: os_type == 'linux' }
-  - { name: "get_webdispatcher_version", query: "sapwebdisp -version", when: os_type == 'linux' }
-  - { name: "get_ulimit", query: "ulimit -a", when: os_type == 'linux' }
-  - { name: "get_host_details", query: "cat /etc/hosts", when: os_type == 'linux' }
-  - { name: "get_service_files", query: "cat /etc/services", when: os_type == 'linux' }
-  - { name: "get_disk_size", query: "df -h", when: os_type == 'linux' } 
-             
-folders:
-  - path: "{{ abap_export_path }}"
-    owner: "{{ cloudmigrate_server_sudo_user }}"
-    group: "{{ cloudmigrate_server_sudo_user_group }}"
-    mode: '0755'
+  - { name: "get_webdispatcher_version", query: "sapwebdisp|-version", when: os_type == 'linux' }
+  - { name: "get_ulimit", query: "ulimit|-a", when: os_type == 'linux' }
+  - { name: "get_host_details", query: "cat|/etc/hosts", when: os_type == 'linux' }
+  - { name: "get_service_files", query: "cat|/etc/services", when: os_type == 'linux' }
+  - { name: "get_disk_size", query: 'df|-h', when: os_type == 'linux' } 

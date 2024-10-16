@@ -6,27 +6,41 @@
   vars:
     ansible_python_interpreter: "{{ python_interpreter }}"
     stage: premigration
-    hostname: "{{ groups['source_pas'][0] }}"
-    hostip: "{{ hostvars[groups['source_pas'][0]].ansible_host }}"
+    hostname: "{{ groups['source_ascs'][0] }}"
+    hostip: "{{ hostvars[groups['source_ascs'][0]].ansible_host }}"
+    tags: abap
+    playbook_name: 01_source_pre_migration_basisconfig_export
+    create_zip: "no"
+    send_email: "no"
   vars_files:
-    - ../inventory/group_vars/source_pas.yml
-    - ../inventory/host_vars/{{ groups['source_pas'][0] }}.yml
+    - ../inventory/group_vars/all/all.yml
+    - ../inventory/group_vars/source_ascs.yml
+    - ../inventory/host_vars/{{ groups['source_ascs'][0] }}.yml
   roles:
     - folder_creation
     - sap_abap_execute_queries
+    - generate_log
 
 - hosts: source_pas #source_ascs,source_pas,source_aas,source_db
   tags: os
   remote_user: "{{ os_user }}"
   ignore_errors: true
   vars:
+    mode: "source"
     hostip: "{{ hostvars[groups['source_pas'][0]].ansible_host }}"
     ansible_become: false
+    tags: os
+    playbook_name: 01_source_pre_migration_basisconfig_export
+    create_zip: "no"
+    send_email: "no"
   vars_files:
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/source_pas.yml
     - ../inventory/host_vars/{{ groups['source_pas'][0] }}.yml
   roles:
     - sap_get_os_command_outputs
+    - { role: profile_parameter, when: profile_parameter.required_os == 'yes' }
+    - generate_log
 
 - hosts: source_db
   tags: db
@@ -38,17 +52,30 @@
     sql_db_username: "{{ hostvars[groups['source_db'][0]].ansible_user }}"
     # oracle_user: "{{ source.sap.db.oracle_user }}" # this is the default user for oracle user
     # hana_db_name: "{{ source.sap.db.hana_db_name }}" # this is the default hana_db name 
+    tags: db
+    playbook_name: 01_source_pre_migration_basisconfig_export
+    create_zip: "no"
+    send_email: "no"
   vars_files:
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/source_db.yml
   roles:
     - sap_get_db_queries_outputs
+    - generate_log
 
 - name: Hana mini checks # if database type is hana
   hosts: source_db
   gather_facts: yes
   become: true
   tags: hanamini
+  vars:
+    tags: hana_mini_checks
+    playbook_name: 01_source_pre_migration_basisconfig_export
+    create_zip: "no"
+    send_email: "no"
   vars_files:
+    - ../inventory/group_vars/all/all.yml
     - ../inventory/group_vars/source_db.yml
   roles:
       - hana_mini_checks
+      - generate_log

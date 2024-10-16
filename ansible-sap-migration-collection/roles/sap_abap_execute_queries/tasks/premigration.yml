@@ -1,20 +1,14 @@
 - name: establish connection and getting output from SAP installed System 
   sap_pyrfc: 
-    username: "{{ user }}" 
-    password: "{{ password }}"
-    sncpartnername: "{{ sncpartner_name }}"
-    hostname: "{{ hostname }}" 
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: "{{ item.name }}" 
     outputspath: "{{ abap_export_path }}" 
     inputparams: "{{ item.input_params | default('EXPORT') }}"
   with_items:
-    - "{{ abap_pre_migration_list[db_type | lower] | default([]) }}"
     - "{{ abap_pre_migration_list[sap_type | lower] | default([]) }}"
+    - "{{ abap_pre_migration_list[db_type | lower] | default([]) }}"
     - "{{ version_specific_scripts }}"
   register: output
   async: 3600
@@ -35,6 +29,60 @@
       index_var: index
   when:
      - (item.name) == output.results[index].item.name
+
+- name: file creation 
+  file:
+    path: "{{ outputs_path }}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/sm59_output/"
+    state: directory
+    mode: "755"
+
+- SM59_create_populate:
+    json_path: "{{ abap_export_path }}ZCM_EXP_SM59_RFC_DESTINATIONS.json"
+    outputpath: "{{outputs_path}}/Migrate_{{ source.sap.sid }}_{{ target.sap.sid }}/source/sm59_output/"
+  register: output 
+
+- debug:
+    var: output
+
+- name: change permission 
+  file:
+    path: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/sm59_output/"
+    mode: "777"
+    recurse: yes
+
+- name: read ZCM_RSRFCCHK_EXP_JOBSUBMIT.json
+  command: cat "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/ZCM_RSRFCCHK_EXP_JOBSUBMIT.json"
+  register: RSRFCCHK_result
+
+- name: Parse JSON output
+  set_fact:
+    job_info: "{{ RSRFCCHK_result.stdout | from_json }}"
+
+- name: Print Jobname 
+  set_fact:
+    RSRFCCHK_Jobname: "{{ job_info.OUTPUT[0].DATA[0].Jobname }}"
+
+- name: Print Jobnumber
+  set_fact:
+    RSRFCCHK_Jobnumber: "{{ job_info.OUTPUT[0].DATA[0].Jobnumber }}"
+
+- debug:
+    msg: "{{RSRFCCHK_Jobname}}"
+
+- debug:
+    msg: "{{RSRFCCHK_Jobnumber}}"
+
+- debug:
+    msg: "{{RSRFCCHK_Jobname}}|{{RSRFCCHK_Jobnumber}}"
+
+- name: test rsrfc_status_check
+  rsrfc_status_check_test:
+    ConnectionString: "{{connection_string}}"
+    abappath: "{{ abap_scripts_path }}" 
+    abapscript: ZCM_RSRFCCHK_EXP_SPOOL.txt
+    outputspath: "{{ abap_export_path }}" 
+    inputparams: "{{RSRFCCHK_Jobname}}|{{RSRFCCHK_Jobnumber}}"
+    DBtype: "{{ db_type }}"
 
 - name: set fact the db types for which db scpecific scripts are executed
   set_fact:
@@ -69,14 +117,8 @@
 
 - name: establish connection and getting output from SAP installed System client
   sap_pyrfc: 
-    username: "{{ item.user }}" 
-    password: "{{ item.password }}"
-    sncpartnername: "{{ sncpartner_name }}" 
-    hostname: "{{ hostname }}" 
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ item.client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: "{{ item.name }}" 
     outputspath: "{{ abap_export_path }}{{ item.client }}_" 
@@ -106,12 +148,7 @@
 
 - name: Execute os commands
   os_command_execution: 
-    username: "{{ user }}" 
-    password: "{{ password }}" 
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: ZCM_EXP_RSBDCOS0_OSCOMMAND.txt 
     command: "{{ item.query }}" 

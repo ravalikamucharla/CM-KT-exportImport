@@ -52,7 +52,7 @@
     var: output
 
 -  name: Execute oracle queries
-   shell: '{{ login }} su - {{ sid | lower }}adm -c "sqlplus -s / as sysdba @/tmp/{{ item.name }}.sql"'
+   shell: '{{ login }} su - ora{{ sid | lower }} -c "sqlplus -s / as sysdba @/tmp/{{ item.name }}.sql"'
    register: output_txt
    args:
      executable: /bin/bash

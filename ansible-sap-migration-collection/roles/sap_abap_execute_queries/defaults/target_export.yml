@@ -20,6 +20,9 @@ abap_pre_migration_list:
     - { name: "ZCM_SM19_EXP_SEC_AUDIT_PROFILE.txt" }
     - { name: "ZCM_T_SAPWLSERV_EXPORT.txt" }
     - { name: "ZCM_AL11_EXP_SAP_DIRECTORY.txt" }
+    - { name: "ZCM_RZ10_EXP_PROFILE_PARAMETER.txt" }
+    - { name: "ZCM_SE06_EXP_SYS_SETTINGS.txt" }
+
 
   oracle:
     - { name: "ZCM_ORA_MSS_CHK_DB_ENCRYPTION.txt" }
@@ -91,10 +94,5 @@ abap_pre_migration_list_clients:
   - { name: "ZCM_SOST_EXP_FAILED_MAILS.txt" }
   - { name: "ZCM_SWU3_EXP_ERROR_NODES.txt" }
 
-folders:
-  - path: "{{ abap_export_path }}"
-    owner: "{{ cloudmigrate_server_sudo_user }}"
-    group: "{{ cloudmigrate_server_sudo_user_group }}"
-    mode: '0755'
 
 

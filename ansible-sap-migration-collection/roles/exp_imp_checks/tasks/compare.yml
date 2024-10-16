@@ -1,0 +1,524 @@
+##################################### SWPM Port status 4237 #########################################################################
+- name: compare | port status source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_portstatus.txt"
+  register: source_portstatus
+  
+- name: set fact source port status 
+  set_fact:
+    port_status_src: "{{ source_portstatus.stdout_lines[0] }}"
+
+- name: compare | port status source
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_portstatus.txt"
+  register: target_portstatus
+
+- name: compare | set fact target port status
+  set_fact:
+    port_status_tgt: "{{ target_portstatus.stdout_lines[0] }}"
+
+##################################### SWPM Port status 4238 #########################################################################
+- name: compare | port status source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_portstatus_4238.txt"
+  register: source_portstatus_4238
+  
+- name: set fact source port status 
+  set_fact:
+    port_status_src_4238: "{{ source_portstatus_4238.stdout_lines[0] }}"
+
+- name: compare | port status source
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_portstatus_4238.txt"
+  register: target_portstatus_4238
+
+- name: compare | set fact target port status
+  set_fact:
+    port_status_tgt_4238: "{{ target_portstatus_4238.stdout_lines[0] }}"
+##################################### Export dir permission #########################################################################
+- name: compare | Export dir permission source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_export_dir_permissions.txt"
+  register: source_exp_dir_permission
+
+- name: compare | set fact source Export dir permission 
+  set_fact:
+    source_exp_dir_permission: "{{ source_exp_dir_permission.stdout_lines[0] }}"
+
+- name: compare | set fact expected source Export dir permission 
+  set_fact:
+    expected_source_exp_dir_permission: "{{app_sid_src | lower}}adm/sapsys"
+
+- name: compare | Export dir permission target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_export_dir_permissions.txt"
+  register: target_exp_dir_permission
+  
+- name: compare | set fact target Export dir permission
+  set_fact:
+    target_exp_dir_permission: "{{ target_exp_dir_permission.stdout_lines[0] }}"
+
+- name: compare | set fact expected target Export dir permission 
+  set_fact:
+    expected_target_exp_dir_permission: "{{app_sid_tgt | lower}}adm/sapsys"
+
+##################################### Export dir empty #########################################################################
+- name: compare | Export dir contents source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_export_dir_contents.txt"
+  register: exp_dir_contents_source
+
+- set_fact: 
+    source_exp_dir_contents: "Export directory is not empty"
+  when: exp_dir_contents_source.stdout_lines[0] != "total 0"
+
+- set_fact: 
+    source_exp_dir_contents: "Export directory empty"
+  when: exp_dir_contents_source.stdout_lines[0] == "total 0"
+
+- set_fact: 
+    source_exp_dir_contents: "Directory does not exists"
+  when: exp_dir_contents_source.stdout_lines[0] == "Directory does not exists"
+
+- name: compare | Export dir contents target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_export_dir_contents.txt"
+  register: exp_dir_contents_target
+
+- set_fact: 
+    target_exp_dir_contents: "Export directory is not empty"
+  when: exp_dir_contents_target.stdout_lines[0] != "total 0"
+
+- set_fact: 
+    target_exp_dir_contents: "Export directory empty"
+  when: exp_dir_contents_target.stdout_lines[0] == "total 0"
+
+- set_fact: 
+    target_exp_dir_contents: "Directory does not exists"
+  when: exp_dir_contents_target.stdout_lines[0] == "Directory does not exists"
+
+##################################### nfs service status on PAS host #########################################################################
+- name: compare | NFS service status of source PAS host
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_nfs_status_src_pas.txt"
+  register: source_nfs_status_pas
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+  
+- name: compare | NFS service status of target PAS host
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_nfs_status_tgt_pas.txt"
+  register: target_nfs_status_pas
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+##################################### nfs service status on DB host #########################################################################
+- name: compare | NFS service status of source DB host
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_nfs_status_src_db.txt"
+  register: source_nfs_status_db
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+- name: compare | NFS service status of target db host
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_nfs_status_tgt_db.txt"
+  register: target_nfs_status_db
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "NET"
+
+##################################### FTP service status on PAS host #########################################################################
+- name: compare | ftp service status of source PAS host
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_ftp_status_src_pas.txt"
+  register: source_ftp_status_pas
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+
+- name: compare | ftp service status of target PAS host
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_ftp_status_tgt_pas.txt"
+  register: target_ftp_status_pas
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+##################################### ftp service status on DB host #########################################################################
+- name: compare | ftp service status of source DB host
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_ftp_status_src_db.txt"
+  register: source_ftp_status_db
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+
+- name: compare | ftp service status of target db host
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_ftp_status_tgt_db.txt"
+  register: target_ftp_status_db
+  when: 
+    - exp_imp_prechecks.data_transfer_type is defined
+    - exp_imp_prechecks.data_transfer_type == "FTP"
+    
+##################################### FTP Port status from source to target #########################################################################
+- name: compare | FTP port status source to target
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/src_tgt_port_status.txt"
+  register: source_portstatus_ftp
+  
+- name: set fact source port status 
+  set_fact:
+    port_status_src_ftp: "{{ source_portstatus_ftp.stdout_lines[0] }}"
+
+#################################### R3load version in source and target server ############################################
+- name: compare | R3load version in source server
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/r3load-version.txt"
+  register: source_r3load
+
+- name: compare | R3load version in target server
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/r3load-version.txt"
+  register: target_r3load
+#################################### Kernel version comparison in source and target server ############################################
+- name: compare | check if source kernel version file is present
+  stat:
+    path: "{{ exp_imp_prechecks.source_file_path }}/kernel-version.txt"
+  register: path_check_kernel_src
+
+- name: compare | check if target kernel version file is present
+  stat:
+    path: "{{ exp_imp_prechecks.target_file_path }}/kernel-version.txt"
+  register: path_check_kernel_tgt
+
+- name: compare | kernel version in source server
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/kernel-version.txt"
+  register: source_kernel 
+  when: path_check_kernel_src.stat.exists
+
+- name: compare | kernel version in target server
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/kernel-version.txt"
+  register: target_kernel
+  when: path_check_kernel_tgt.stat.exists
+
+- name: set fact 1
+  set_fact: 
+    kernel_compare: "Error in kernel version"
+  when: (not path_check_kernel_src.stat.exists) or (not path_check_kernel_tgt.stat.exists)
+
+- name: set fact 2
+  set_fact: 
+    kernel_compare: "Source and target kernel version are same"
+  ignore_errors: true
+  when: 
+    - "{{source_kernel.stdout == target_kernel.stdout}}"
+    - path_check_kernel_src.stat.exists
+    - path_check_kernel_tgt.stat.exists
+
+- name: set fact 3
+  set_fact: 
+    kernel_compare: "Source kernel version is greater than target kernel version"
+  ignore_errors: true
+  when: 
+    - "{{source_kernel.stdout > target_kernel.stdout}}"
+    - path_check_kernel_src.stat.exists
+    - path_check_kernel_tgt.stat.exists
+
+- name: set fact 4
+  set_fact: 
+    kernel_compare: "Source kernel version is less than target kernel version"
+  ignore_errors: true
+  when: 
+    - "{{source_kernel.stdout < target_kernel.stdout}}"
+    - path_check_kernel_src.stat.exists
+    - path_check_kernel_tgt.stat.exists
+
+################################### patch no comparison in source and target server ############################################
+- name: compare | check if source patch no file is present
+  stat:
+    path: "{{ exp_imp_prechecks.source_file_path }}/patch-no.txt"
+  register: path_check_patch_src
+
+- name: compare | check if target patch no file is present
+  stat:
+    path: "{{ exp_imp_prechecks.target_file_path }}/patch-no.txt"
+  register: path_check_patch_tgt
+
+- name: compare | patch no in source server
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/patch-no.txt"
+  register: source_patch 
+  when: path_check_patch_src.stat.exists
+
+- name: compare | patch no in target server
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/patch-no.txt"
+  register: target_patch
+  when: path_check_patch_tgt.stat.exists
+
+- name: set fact 1
+  set_fact: 
+    patch_compare: "Error in patch no"
+  when: (not path_check_patch_src.stat.exists) or (not path_check_patch_tgt.stat.exists)
+
+- name: set fact 2
+  set_fact: 
+    patch_compare: "Source and target patch no are same"
+  ignore_errors: true
+  when: 
+    - "{{source_patch.stdout == target_patch.stdout}}"
+    - path_check_patch_src.stat.exists
+    - path_check_patch_tgt.stat.exists
+
+- name: set fact 3
+  set_fact: 
+    patch_compare: "Source patch no is greater than target patch no"
+  ignore_errors: true
+  when: 
+    - "{{source_patch.stdout > target_patch.stdout}}"
+    - path_check_patch_src.stat.exists
+    - path_check_patch_tgt.stat.exists
+
+- name: set fact 4
+  set_fact: 
+    patch_compare: "Source patch no is less than target patch no"
+  ignore_errors: true
+  when: 
+    - "{{source_patch.stdout < target_patch.stdout}}"
+    - path_check_patch_src.stat.exists
+    - path_check_patch_tgt.stat.exists
+
+- debug:
+    msg: "{{patch_compare}}"
+
+#################################### r3trans-version in source and target server ############################################
+- name: compare | R3trans version in source server
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/r3trans-version.txt"
+  register: source_r3trans
+
+- name: compare | R3trans version in target server
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/r3trans-version.txt"
+  register: target_r3trans
+#################################### disp+work in source and target server ############################################
+- name: compare | disp+work version in source server
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/disp_work.txt"
+  register: source_disp_work
+
+- name: compare | disp+work version in target server
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/disp_work.txt"
+  register: target_disp_work
+##################################### cpu and no of process count #########################################################################
+- name: compare | cpu count on source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_cpu_count.txt"
+  register: source_cpu_count
+  
+- name: compare | no of process count on source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_processes_count.txt"
+  register: source_process_count
+
+- name: compare | cpu count on target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_cpu_count.txt"
+  register: target_cpu_count
+  
+- name: compare | no of process count on target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_processes_count.txt"
+  register: target_process_count
+
+######################################### DB services on Source ###################################################
+- name: compare | db service status source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/dbservice_status.txt"
+  register: db_service_status_src
+
+- name: compare | set fact db service status source
+  set_fact:
+    db_status_src: "Stopped"
+  when: db_service_status_src.stdout is search ('Stopped') and (not(db_service_status_src.stdout is search ('Running')))
+
+- name: compare | set fact db service status source
+  set_fact:
+    db_status_src: "Running"
+  when: db_service_status_src.stdout is search ('Running') and (not(db_service_status_src.stdout is search ('Stopped')))
+
+- name: compare | set fact db service status source
+  set_fact:
+    db_status_src: "Only few instances are Running"
+  when: db_service_status_src.stdout is search ('Running') and db_service_status_src.stdout is search ('Stopped')
+
+######################################### ASCS services on source ###################################################
+- name: compare | ascs service status source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/ascsservice_status.txt"
+  register: ascs_service_status_src
+
+- name: compare | set fact ascs service status source
+  set_fact:
+    ascs_status_src: "Stopped"
+  when: ascs_service_status_src.stdout is search ('Stopped') and (not(ascs_service_status_src.stdout is search ('Running')))
+
+- name: compare | set fact ascs service status source
+  set_fact:
+    ascs_status_src: "Running"
+  when: ascs_service_status_src.stdout is search ('Running') and (not(ascs_service_status_src.stdout is search ('Stopped')))
+
+- name: compare | set fact ascs service status source
+  set_fact:
+    ascs_status_src: "Only few instances are Running"
+  when: ascs_service_status_src.stdout is search ('Running') and ascs_service_status_src.stdout is search ('Stopped')
+
+######################################### PAS services on source ###################################################
+- name: compare | pas service status source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/passervice_status.txt"
+  register: pas_service_status_src
+
+- name: compare | set fact pas service status source
+  set_fact:
+    pas_status_src: "Stopped"
+  when: pas_service_status_src.stdout is search ('Stopped') and (not(pas_service_status_src.stdout is search ('Running')))
+
+- name: compare | set fact pas service status source
+  set_fact:
+    pas_status_src: "Running"
+  when: pas_service_status_src.stdout is search ('Running') and (not(pas_service_status_src.stdout is search ('Stopped')))
+
+- name: compare | set fact pas service status source
+  set_fact:
+    pas_status_src: "Only few instances are Running"
+  when: pas_service_status_src.stdout is search ('Running') and pas_service_status_src.stdout is search ('Stopped')
+
+######################################### ASCS services on target ###################################################
+- name: compare | ascs service status target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/ascsservice_status.txt"
+  register: ascs_service_status_tgt
+
+- name: compare | set fact ascs service status target
+  set_fact:
+    ascs_status_tgt: "Stopped"
+  when: ascs_service_status_tgt.stdout is search ('Stopped') and (not(ascs_service_status_tgt.stdout is search ('Running')))
+
+- name: compare | set fact ascs service status target
+  set_fact:
+    ascs_status_tgt: "Running"
+  when: ascs_service_status_tgt.stdout is search ('Running') and (not(ascs_service_status_tgt.stdout is search ('Stopped')))
+
+- name: compare | set fact ascs service status target
+  set_fact:
+    ascs_status_tgt: "Only few instances are Running"
+  when: ascs_service_status_tgt.stdout is search ('Running') and ascs_service_status_tgt.stdout is search ('Stopped')
+
+######################################### PAS services on target ###################################################
+- name: compare | pas service status target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/passervice_status.txt"
+  register: pas_service_status_tgt
+
+- name: compare | set fact pas service status target
+  set_fact:
+    pas_status_tgt: "Stopped"
+  when: pas_service_status_tgt.stdout is search ('Stopped') and (not(pas_service_status_tgt.stdout is search ('Running')))
+
+- name: compare | set fact pas service status target
+  set_fact:
+    pas_status_tgt: "Running"
+  when: pas_service_status_tgt.stdout is search ('Running') and (not(pas_service_status_tgt.stdout is search ('Stopped')))
+
+- name: compare | set fact pas service status target
+  set_fact:
+    pas_status_tgt: "Only few instances are Running"
+  when: pas_service_status_tgt.stdout is search ('Running') and pas_service_status_tgt.stdout is search ('Stopped')
+
+######################################### DB services on target ###################################################
+- name: compare | db service status target
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/dbservice_status.txt"
+  register: db_service_status_tgt
+
+- name: compare | set fact db service status target
+  set_fact:
+    db_status_tgt: "Stopped"
+  when: db_service_status_tgt.stdout is search ('Stopped') and (not(db_service_status_tgt.stdout is search ('Running')))
+
+- name: compare | set fact db service status target
+  set_fact:
+    db_status_tgt: "Running"
+  when: db_service_status_tgt.stdout is search ('Running') and (not(db_service_status_tgt.stdout is search ('Stopped')))
+
+- name: compare | set fact db service status target
+  set_fact:
+    db_status_tgt: "Only few instances are Running"
+  when: db_service_status_tgt.stdout is search ('Running') and db_service_status_tgt.stdout is search ('Stopped')
+
+##################################### check ulimit on source for root user #########################################################################
+
+- name: compare |  check ulimit on source for root user
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_ulimit.txt"
+  register: source_ulimit
+  
+- name: compare | check ulimit on target for root user
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_ulimit.txt"
+  register: target_ulimit
+
+##################################### check if export directory is shared on target #########################################################################
+
+- name: compare | check if target_exp_dir.txt file is present
+  stat:
+    path: "{{ exp_imp_prechecks.target_file_path }}/target_exp_dir.txt"
+  register: path_check_target_exp_dir
+
+- name: compare | target_exp_dir.txt file cotent copy
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_exp_dir.txt"
+  register: exp_dir_shared_on_tgt 
+  when: path_check_target_exp_dir.stat.exists
+
+- name: compare | set fact db service status target
+  set_fact:
+    exp_dir_shared_on_tgt: "not shared"
+  when: not path_check_target_exp_dir.stat.exists
+
+##################################### Listener Port status on oel source #########################################################################
+- name: compare | port status source
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_portstatus_listener.txt"
+  register: source_portstatus_listener
+  when: 
+    - db_type is defined
+    - db_type == "oracle"
+
+##################################### check ulimit on source for sidadm user #########################################################################
+
+- name: compare |  check ulimit on source for sidadm user
+  command: cat "{{ exp_imp_prechecks.source_file_path }}/source_ulimit_sidadm.txt"
+  register: source_ulimit_sidadm
+
+- name: compare | check ulimit on target for sidadm user
+  command: cat "{{ exp_imp_prechecks.target_file_path }}/target_ulimit_sidadm.txt"
+  register: target_ulimit_sidadm
+  
+#####################################################################################################################
+
+- name: compare | Json output
+  block:
+    - name: create folder
+      file:
+        path: "{{ exp_imp_prechecks.prechecks_output_path }}json"
+        state: directory
+      
+    - name: compare | Write output in json format 
+      template:
+        src: "prechecks_json.j2"
+        dest: "{{ exp_imp_prechecks.prechecks_output_path }}json/exp_imp_precheck.json"
+      
+- name: compare | Excel output 
+  block:
+    - name: compare | create folder
+      file:
+        path: "{{ exp_imp_prechecks.prechecks_output_path }}excel"
+        state: directory
+         
+    - name: compare | install packages 
+      command: pip3 install {{ item }}
+      loop:
+        - openpyxl
+        - flatten_json     
+
+    - name: compare | change permission
+      file: 
+        path: "{{ exp_imp_prechecks.prechecks_output_path }}"
+        mode: "755"
+        recurse: yes
+      
+    - name: compare | set fact input file path
+      set_fact:
+        excel_filepath: "{{ lookup('first_found','json2excel.py')}}"
+        input_path: "{{ exp_imp_prechecks.prechecks_output_path }}json/"
+
+    - name: compare | execute python code for converting all jsons to excel
+      command: python3 {{ excel_filepath }} --input={{ input_path }} --output="{{ exp_imp_prechecks.prechecks_output_path }}excel/exp_imp_prchecks.xlsx"
+      register: output
+  when: exp_imp_prechecks.output_format == 'excel'
+  
+- name: main | delete folders
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ exp_imp_prechecks.source_file_path }}"
+    - "{{ exp_imp_prechecks.target_file_path }}"

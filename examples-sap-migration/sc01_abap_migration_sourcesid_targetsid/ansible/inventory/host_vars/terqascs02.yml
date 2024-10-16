@@ -1,5 +1,0 @@
-virtual_hostname: "{{ target.sap.logical_hosts.ers.hostname }}"
-virtual_ip: "{{ target.sap.logical_hosts.ers.ip }}"
-os_user: "{{ users.os.target.ers }}"
-os_type: "{{ target.sap.os_type.ers }}"
-instance_number: "{{ target.sap.instance_numbers.ers }}"

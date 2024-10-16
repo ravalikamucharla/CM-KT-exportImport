@@ -4,14 +4,8 @@
 
 - name: establish connection and getting output from SAP installed System 
   sap_pyrfc: 
-    username: "{{ user }}" 
-    password: "{{ password }}" 
-    hostname: "{{ hostname }}"
-    sncpartnername: "{{ sncpartner_name }}"
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: "{{ item.name }}" 
     outputspath: "{{ abap_export_path }}" 
@@ -54,14 +48,8 @@
 
 - name: establish connection and getting output from SAP installed System client
   sap_pyrfc: 
-    username: "{{ item.user }}" 
-    password: "{{ item.password }}" 
-    hostname: "{{ hostname }}"
-    sncpartnername: "{{ sncpartner_name }}"
-    hostip: "{{ hostip }}" 
-    instance: "{{ instance_number }}" 
-    client: "{{ item.client }}" 
-    group: "{{ group }}" 
+    ConnectionString: "{{connection_string}}"
+    DBtype: "{{ db_type }}"
     abappath: "{{ abap_scripts_path }}" 
     abapscript: "{{ item.name }}" 
     outputspath: "{{ abap_export_path }}{{ item.client }}_" 
@@ -71,22 +59,3 @@
       - "{{ client_list }}"
   when: source.sap.all_clients is defined
   register: output_ls
-
-# - name: profile parameter update 
-#   sap_profile_update: 
-#     username: "{{ user }}" 
-#     password: "{{ password }}" 
-#     hostname: "{{ hostname }}" 
-#     hostip: "{{ hostip }}" 
-#     instance: "{{ instance_number }}" 
-#     client: "{{ client }}" 
-#     group: "{{ group }}" 
-#     abappath: "{{ abap_scripts_path }}" 
-#     abapscript: ZCM_RZ10_UPD_PROFILEPARA_UPD.txt 
-#     inclusion_param: "[]" 
-#     sourcevalues: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/source/abap_export/ZCM_RZ10_EXP_PROFILEPARA_EXP.txt" 
-#     targetvalues: "{{outputs_path}}/Migrate_{{source.sap.sid}}_{{target.sap.sid}}/target/abap_export/ZCM_RZ10_EXP_PROFILEPARA_EXP.txt" 
-#     exclude_vars_file: "{{ exclusion_list }}"
-#   register: output_profile_update
-
-- debug: var=output_profile_update

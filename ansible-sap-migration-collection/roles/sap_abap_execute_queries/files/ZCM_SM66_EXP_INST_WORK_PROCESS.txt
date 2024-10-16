@@ -1,0 +1,279 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_SM66_EXP_INST_WORK_PROCESS               *
+* Title               :  To export SM66 data                          *
+* Purpose             :  To export work processess of each active     *
+*                     :  instance in the system                       *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* SM66                                                                *
+*---------------------------------------------------------------------*
+*	Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXXX                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-14-2023  Initial  Ashwini K P     Local     To export work process*
+*                                               details of each active*
+*                                               instance in the system*
+*---------------------------------------------------------------------*
+
+REPORT zcm_sm66_exp_inst_work_process.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+
+  CONSTANTS: lc_sep     TYPE c VALUE '|'                    LENGTH 1,
+             lc_x       TYPE c VALUE 'X'                    LENGTH 1,
+             lc_export  TYPE c VALUE 'EXPORT'               LENGTH 6,
+             lc_null    TYPE c VALUE 'NULL'                 LENGTH 4,
+             lc_title   TYPE c VALUE
+             'Active work process of all AS instances'      LENGTH 50,
+             lc_ninput  TYPE c VALUE
+             'No input passed'                              LENGTH 15,
+             lc_msg     TYPE c VALUE
+             'Unable to retrieve ALV data'                  LENGTH 80,
+             lc_inc_inp TYPE c VALUE 'Incorrect Input'      LENGTH 30,
+             lc_nodata  TYPE c VALUE 'No data found'        LENGTH 13.
+
+  TYPES: BEGIN OF lty_out_header,
+           fieldname TYPE fieldname,
+           descrp    TYPE string,
+         END OF lty_out_header.
+
+  DATA: ls_output        TYPE tab512,
+        ls_input         TYPE tab512,
+        lv_action        TYPE string,
+        lt_work_pro      TYPE ssi_worker_list_disp,
+        ls_work_pro      TYPE LINE OF ssi_worker_list_disp,
+        lr_pay_data      TYPE REF TO data,
+        lt_fieldcat      TYPE slis_t_fieldcat_alv,
+        lo_struct_descr  TYPE REF TO cl_abap_structdescr,
+        lt_struct_fields TYPE ddfields,
+        ls_struct_field  TYPE dfies,
+        lt_out_table     TYPE lvc_t_fcat,
+        ls_out_table     TYPE lvc_s_fcat,
+        lt_out_header    TYPE STANDARD TABLE OF lty_out_header,
+        ls_out_header    TYPE lty_out_header,
+        lr_new_line      TYPE REF TO data,
+        ls_prefinal      TYPE string.
+
+  FIELD-SYMBOLS: <lfs_pay_data>     TYPE ANY TABLE,
+                 <lfs_runtime_data> TYPE any,
+                 <lfs_comp>         TYPE any,
+                 <lft_struct>       TYPE STANDARD TABLE,
+                 <lfs_dyn_wa>       TYPE any,
+                 <lfs_fieldcat>     TYPE slis_fieldcat_alv.
+
+  FREE: lt_output.
+
+  "Title
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+  CLEAR ls_output.
+
+  CLEAR: ls_input.
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc NE 0.
+    "No input given
+    ls_output = lc_ninput.
+    APPEND ls_output TO lt_output.
+    CLEAR: ls_output.
+    RETURN.
+  ENDIF.
+
+  lv_action = ls_input.
+
+  CASE lv_action.
+
+    WHEN lc_export.
+
+      cl_salv_bs_runtime_info=>set( EXPORTING display  = abap_false
+                                              metadata = abap_false
+                                              data     = abap_true ).
+
+      " Submit standard report of SM66 to get work-process data
+      SUBMIT rsmon000_alv_new USING SELECTION-SCREEN 001
+      WITH sys_list = lc_x AND RETURN.
+
+      CLEAR: lr_pay_data,ls_output.
+
+      UNASSIGN: <lfs_pay_data>.
+
+      TRY.
+          " Class to get the run-time ALV data of SM66
+          cl_salv_bs_runtime_info=>get_data_ref(
+                                   IMPORTING r_data = lr_pay_data ).
+          ASSIGN lr_pay_data->* TO <lfs_pay_data>.
+
+        CATCH cx_salv_bs_sc_runtime_info.
+          "Message:Unable to retrieve ALV data
+          ls_output = lc_msg.
+          APPEND ls_output TO lt_output.
+          CLEAR: ls_output.
+          RETURN.
+      ENDTRY.
+
+      cl_salv_bs_runtime_info=>clear_all( ).
+
+      CLEAR: ls_work_pro.
+      UNASSIGN: <lfs_runtime_data>.
+
+      FREE: lt_work_pro.
+      " Pass the work process runtime data into internal table
+      LOOP AT <lfs_pay_data> ASSIGNING  <lfs_runtime_data>.
+
+        MOVE-CORRESPONDING  <lfs_runtime_data> TO ls_work_pro.
+
+        APPEND ls_work_pro TO lt_work_pro.
+        CLEAR: ls_work_pro.
+
+      ENDLOOP.
+
+      " Pass "No data found" if internal table LT_WORK_PRO"
+      " has no data
+      IF lt_work_pro IS INITIAL.
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output.
+        RETURN.
+      ENDIF.
+
+      FREE: lt_fieldcat[].
+
+      " Call sub-routine of standard report "RSMON000_ALV_NEW"
+      PERFORM build_fieldcat IN PROGRAM rsmon000_alv_new
+      USING lt_fieldcat[] '0'.
+
+      " Below code is to build dynamic output structure and read
+      " description of data elements of a structure
+      lo_struct_descr ?=
+      cl_abap_typedescr=>describe_by_data( ls_work_pro ).
+
+      FREE: lt_struct_fields[].
+
+      " Read the associated structure fields
+      lt_struct_fields = lo_struct_descr->get_ddic_field_list( ).
+
+      FREE: lt_out_table,
+            lt_out_header.
+
+      LOOP AT lt_fieldcat ASSIGNING <lfs_fieldcat>.
+        " Get only those fields which are to be displayed
+        IF <lfs_fieldcat>-no_out EQ ' '.
+          CLEAR: ls_struct_field.
+          READ TABLE lt_struct_fields INTO ls_struct_field
+          WITH KEY fieldname = <lfs_fieldcat>-fieldname.
+          IF sy-subrc EQ 0.
+            " Dynamic output structure
+            ls_out_table-fieldname = ls_struct_field-fieldname.
+            ls_out_table-datatype = 'STRING'.
+            APPEND ls_out_table TO lt_out_table.
+            CLEAR: ls_out_table.
+
+            " Get the description of data elements
+            ls_out_header-fieldname = ls_struct_field-fieldname.
+            ls_out_header-descrp = ls_struct_field-scrtext_l.
+            APPEND ls_out_header TO lt_out_header.
+            CLEAR: ls_out_header.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+
+      CLEAR: lr_pay_data.
+
+      " Create dynamic table and work-area
+      CALL METHOD cl_alv_table_create=>create_dynamic_table
+        EXPORTING
+          it_fieldcatalog = lt_out_table
+        IMPORTING
+          ep_table        = lr_pay_data.
+
+      ASSIGN lr_pay_data->* TO <lft_struct>.
+
+      CREATE DATA lr_new_line LIKE LINE OF <lft_struct>.
+      ASSIGN lr_new_line->* TO <lfs_dyn_wa>.
+
+      " Pass the column headings.
+      CLEAR: ls_out_header.
+      LOOP AT lt_out_header INTO ls_out_header.
+        CONCATENATE ls_output ls_out_header-descrp INTO ls_output
+        SEPARATED BY lc_sep.
+        CLEAR: ls_out_header.
+      ENDLOOP.
+
+      " Remove first '|' character from string
+      REPLACE FIRST OCCURRENCE OF '|' IN ls_output WITH space.
+      CONDENSE ls_output.
+      APPEND ls_output TO lt_output.
+      CLEAR: ls_output.
+
+      " Building the output data
+      CLEAR: ls_work_pro.
+      LOOP AT lt_work_pro INTO ls_work_pro.
+        MOVE-CORRESPONDING ls_work_pro TO <lfs_dyn_wa>.
+        DO.
+          ASSIGN COMPONENT sy-index OF STRUCTURE <lfs_dyn_wa>
+          TO <lfs_comp>.
+          IF sy-subrc EQ 0.
+            IF <lfs_comp> IS INITIAL.
+              <lfs_comp> = lc_null.
+            ENDIF.
+            CONCATENATE ls_output <lfs_comp> INTO ls_output
+            SEPARATED BY lc_sep.
+          ELSE.
+            EXIT.
+          ENDIF.
+        ENDDO.
+        ls_prefinal = ls_output.
+        " Check NULL at the end
+        PERFORM end_null_check CHANGING ls_prefinal.
+        ls_output = ls_prefinal.
+        REPLACE FIRST OCCURRENCE OF '|' IN ls_output WITH space.
+        CONDENSE ls_output.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output,ls_work_pro,ls_prefinal.
+      ENDLOOP.
+
+      " Check NULL in the string
+      PERFORM null_check TABLES lt_output.
+
+    WHEN OTHERS.
+
+      " Incorrect Input
+      ls_output = lc_inc_inp.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+      RETURN.
+
+  ENDCASE.
+
+ENDFORM.
+FORM end_null_check CHANGING ls_string TYPE string.
+
+  DATA lv_last_char TYPE char1.
+
+  lv_last_char = substring( val = ls_string
+                   off = strlen( ls_string ) - 1
+                   len = 1 ).
+  IF lv_last_char = '|'.
+    CONCATENATE ls_string 'NULL'
+      INTO ls_string.
+  ENDIF.
+
+ENDFORM.
+FORM null_check TABLES lt_table TYPE table.
+
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_table WITH '|NULL|'.
+    FIND '||' IN TABLE lt_table.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

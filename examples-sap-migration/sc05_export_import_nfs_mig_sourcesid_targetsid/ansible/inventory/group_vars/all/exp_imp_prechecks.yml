@@ -1,0 +1,10 @@
+exp_imp_prechecks:
+  prechecks_output_path: /code1/susmita/check/examples-sap-migration/sc01_abap_migration_{{ source.sap.sid }}_{{ target.sap.sid }}/ansible/outputs/exp_imp_prechecks/
+  source_file_path: /tmp/cm_source_files #Path to store the output of source exp_imp checks
+  target_file_path: /tmp/cm_target_files #Path to store the output of target exp_imp checks
+  output_format: "excel" # excel, json
+  expdir: "/Media/export_testing_08" #export directory
+  impdir: "/Media/export_testing_08" #import directory
+  export_dir_size_src: 2G #put value in GB
+  data_transfer_type: NET # NET(nfs), FTP
+  # oracle_lister_port_source: 1527 #oracle listener port,default is 1521

@@ -20,6 +20,8 @@
 *                                                tem                  *
 *09-15-2022  V001     Soumya Ray   Local         To remove inline de- *
 *                                                 clarations          *
+*06-20-2024  V002     Yasaswini K  Local        To remove logs greater*
+*                                               than 100 count        *
 *---------------------------------------------------------------------*
 
 REPORT zcm_db13_exp_dba_calendar_jobs.
@@ -56,8 +58,12 @@ FORM get_config
              'No data found',
 * Begin of changes in V001
              lc_inc_input TYPE c VALUE 'Incorrect input'    LENGTH 20,
-             lc_noinput   TYPE c VALUE 'No input given'     LENGTH 20.
+             lc_noinput   TYPE c VALUE 'No input given'     LENGTH 20,
 * End of changes in V001
+* Begin of changes in V002
+             lc_100       TYPE c VALUE '100'                LENGTH 3,
+             lc_101       TYPE c VALUE '101'                LENGTH 3.
+* End of changes in V002
 
   TYPES: BEGIN OF lty_status,
            action     TYPE sdba_btype,
@@ -112,6 +118,7 @@ FORM get_config
         ls_gone    TYPE db6tstamp_struct,
         ls_running TYPE db6tstamp_struct,
         ls_endtime TYPE db6tstamp_struct,
+        lv_lines   TYPE i,                           "+V002
 * Begin of changes in V001
         lv_dbname  TYPE dbcon_dbms,
         lv_tstmp   TYPE sdba_frsts,
@@ -173,7 +180,6 @@ FORM get_config
       "Recurrence Job details
       DATA: lv_timestmp TYPE sdba_delts,
             lv_text     TYPE string.
-      APPEND ls_output TO ft_output.
 
       " Heading Columns
       CLEAR: ls_output.
@@ -388,7 +394,7 @@ FORM get_config
       DESCRIBE TABLE ft_output LINES lv_count.
       IF lv_count LT 3.
         DELETE ft_output INDEX 2.
-        ls_output = 'Planned Jobs not found'.
+        ls_output = lc_msg.                            "+V002
         APPEND ls_output TO ft_output.
       ENDIF.
 
@@ -425,6 +431,9 @@ FORM get_config
       CLEAR: ls_sdbap.
 
       IF lt_sdbap[] IS NOT INITIAL.
+
+        CLEAR: ls_output.
+        APPEND ls_output TO ft_output.              "+V002
 
         " Title
         CLEAR: ls_output.
@@ -492,6 +501,14 @@ FORM get_config
 
         SORT lt_sdbap BY starttstmp.
         SORT lt_db6_logs BY starttime DESCENDING.
+
+* Begin of changes in V002
+        DESCRIBE TABLE lt_db6_logs LINES lv_lines.
+
+        IF lv_lines GT lc_100.
+           DELETE lt_db6_logs FROM lc_101.
+        ENDIF.
+* End of changes in V002
 
 **Get status of jobs
         LOOP AT lt_db6_logs INTO ls_logs.
@@ -588,6 +605,9 @@ FORM get_config
         ENDLOOP.
 
       ELSE.
+
+        CLEAR: ls_output.
+        APPEND ls_output TO ft_output.              "+V002
 
         " Title
         CLEAR: ls_output.

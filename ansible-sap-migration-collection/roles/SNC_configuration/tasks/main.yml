@@ -1,0 +1,81 @@
+---
+
+- block:
+
+    - name: main | expand SAPCRYPTOLIBP sar file 
+      command: sudo ./SAPCAR_1200-70007716.EXE -xvf SAPCRYPTOLIBP*.SAR
+      args:
+        chdir: /cm_sap_migration/cm-role/SNC_config
+
+    - name: main | find shell
+      command: echo $SHELL
+      register: shell
+
+    - name: main | Update env var
+      lineinfile:
+        line: "{{item}}"
+        create: yes
+        path: /home/admin_accenture/.bashrc
+      with_items: 
+        - export SNC_LIB=/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so
+        - export SECUDIR=/cm_sap_migration/cm-role/SNC_config
+      when: shell.stdout_lines[0] == "/bin/bash"
+
+    - name: main | Update env var
+      lineinfile:
+        line: "{{item}}"
+        create: yes
+        path: /home/admin_accenture/.profile
+      with_items: 
+        - export SNC_LIB=/cm_sap_migration/cm-role/SNC_config/libsapcrypto.so
+        - export SECUDIR=/cm_sap_migration/cm-role/SNC_config
+      when: shell.stdout_lines[0] == "/bin/bash"
+
+    - name: main | setup pse 
+      command: ./sapgenpse gen_pse -lps -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}" "{{ snc.cm_snc_partner_value }}"
+      args:
+        chdir: /cm_sap_migration/cm-role/SNC_config
+
+    - name: main | Export Own Certificate
+      command: ./sapgenpse export_own_cert -o SAP_CloudMigrate-RFC.crt -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}"
+      args:
+        chdir: /cm_sap_migration/cm-role/SNC_config
+
+    - name: main | Add own certificate to PSE
+      command: ./sapgenpse maintain_pk -a SAP_CloudMigrate-RFC.crt -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}"
+      args:
+        chdir: /cm_sap_migration/cm-role/SNC_config
+
+    - name: main | Create cred_v2 file for associating OS user to PSE
+      command: ./sapgenpse seclogin -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}"
+      args:
+        chdir: /cm_sap_migration/cm-role/SNC_config
+
+    - name: main | Validate PSE 
+      command: ./sapgenpse maintain_pk -v -l -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}"
+      args:
+        chdir: /cm_sap_migration/cm-role/SNC_config
+
+  when: exec_freq == "one"
+
+- block:
+      - name: main | Add ABAP Server certificate to PSE 
+        command: ./sapgenpse maintain_pk -v -a {{ system_cert_name }} -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}"
+        args:
+          chdir: /cm_sap_migration/cm-role/SNC_config
+
+      - name: main | Validate PSE 
+        command: ./sapgenpse maintain_pk -v -l -p CloudMigrate.pse -x "{{ passwords.snc_cm.password }}"
+        args:
+          chdir: /cm_sap_migration/cm-role/SNC_config
+
+      - name: main | update SAP host entried under /etc/hosts of CM server
+        include_tasks: hostfile.yml
+        when: 
+          - update_host_file == true
+
+      - name: main | update SAP host entried under /etc/hosts of CM server
+        include_tasks: SNC_conn_test.yml
+          
+  when: exec_freq == "multiple"
+

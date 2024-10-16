@@ -1,0 +1,224 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_ICNV_EXP_WORKLISTDATA                    *
+* Title               :  To fetch worklist data from ICNV             *
+* Purpose             :  To fetch worklist data if any from ICNV      *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* ICNV                                                                *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* TICNV                     X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*09-01-2022  Initial   Soumya Ray   Local         Fetch ICNV data     *
+*---------------------------------------------------------------------*
+
+REPORT zcm_icnv_exp_worklistdata.
+
+LOAD-OF-PROGRAM.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+  TYPES: BEGIN OF lty_ticnv,
+           tabname    TYPE icnvtab,
+           cnvscan    TYPE c LENGTH 6,
+           processes  TYPE c LENGTH 10,
+           handled1   TYPE c LENGTH 17,
+           handled2   TYPE c LENGTH 19,
+           handled0   TYPE c LENGTH 19,
+           cnvstate   TYPE ddicnvstat,
+           state      TYPE c LENGTH 1,
+           updsg      TYPE c LENGTH 1,
+           descript   TYPE c LENGTH 30,
+           nonprod    TYPE c LENGTH 4,
+           percente   TYPE icpercente,
+           time_br    TYPE dd_time_br,
+           total      TYPE ictotal,
+           row_permin TYPE icrowpermi,
+           time_ne    TYPE dd_time_ne,
+           time_es    TYPE dd_time_es,
+           sceneprosa TYPE ddszenario,
+           migdest    TYPE rfcdest,
+         END OF lty_ticnv.
+
+  CONSTANTS: lc_sep                 TYPE c VALUE '|'       LENGTH 1,
+             lc_null                TYPE c VALUE 'NULL'    LENGTH 4,
+             lc_export              TYPE c VALUE 'EXPORT'  LENGTH 6,
+             lc_table               TYPE c VALUE 'Table'   LENGTH 5,
+             lc_scenario            TYPE c VALUE
+             'Scenario'                                    LENGTH 8,
+             lc_state               TYPE c VALUE 'State'   LENGTH 5,
+             lc_product             TYPE c VALUE 'Product' LENGTH 7,
+             lc_proc                TYPE c VALUE 'Process' LENGTH 7,
+             lc_title               TYPE c VALUE
+             'ICNV worklist data'                          LENGTH 30,
+             lc_cnv_init            TYPE c VALUE 'INIT'    LENGTH 8,
+             lc_main_off            TYPE c VALUE 'OFFLINE' LENGTH 8,
+             lc_cnv_end             TYPE c VALUE 'READY'   LENGTH 7,
+             lc_cnv_clear           TYPE c VALUE 'CLEAR'   LENGTH 9,
+             lc_main_on             TYPE c VALUE 'ONLINE'  LENGTH 7,
+             lc_cnv_switch          TYPE c VALUE '?'       LENGTH 10,
+             lc_state_0             TYPE c VALUE '0'       LENGTH 1,
+             lc_state_1             TYPE c VALUE '1'       LENGTH 1,
+             lc_state_2             TYPE c VALUE '2'       LENGTH 1,
+             lc_state_3             TYPE c VALUE '3'       LENGTH 1,
+             lc_state_4             TYPE c VALUE '4'       LENGTH 1,
+             lc_state_e             TYPE c VALUE 'E'       LENGTH 1,
+             lc_no                  TYPE c VALUE 'No'      LENGTH 2,
+             lc_yes                 TYPE c VALUE 'Yes'     LENGTH 3,
+             lc_error               TYPE c VALUE 'Error'   LENGTH 5,
+             lc_runs                TYPE c VALUE 'Runs'    LENGTH 4,
+             lc_hold                TYPE c VALUE 'Hold'    LENGTH 4,
+             lc_migfree             TYPE ddscenario VALUE 'PREMIGFREE',
+             lc_migunicode_mdmp     TYPE ddscenario VALUE 'PREMIGUMDM',
+             lc_migunicode_non_mdmp TYPE ddscenario VALUE 'PREMIGUNON',
+             lc_inc_input           TYPE c VALUE
+             'Incorrect input'                              LENGTH 20,
+             lc_noinput             TYPE c VALUE
+             'No input given'                               LENGTH 20,
+             lc_nodata              TYPE c VALUE
+             'No data found'                                LENGTH 20.
+
+  DATA: ls_output   TYPE tab512,
+        lv_action   TYPE string,
+        ls_input    TYPE tab512,
+        ls_ddcnode  TYPE ddcnode,
+        lv_rc       TYPE syst_subrc,
+        ls_ticnv_nw TYPE lty_ticnv,
+        ls_ticnv    TYPE ticnv,
+        lt_ticnv    TYPE STANDARD TABLE OF ticnv.
+
+  CLEAR: ls_output, lv_action, ls_input, ls_ddcnode, lv_rc, ls_ticnv_nw,
+  ls_ticnv.
+  FREE: lt_ticnv.
+
+  " Adding title to the output
+  ls_output = lc_title.
+  APPEND ls_output TO lt_output.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    " No input given
+    ls_output = lc_noinput.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+*   End of changes in V001
+  CASE lv_action.
+
+    WHEN lc_export.      " If action is Export
+
+
+      "Code taken from FORM 'data_get_0010' of Include 'LSDB9O01'
+      "of program 'SAPLSDB9'
+      SELECT * FROM ticnv INTO TABLE lt_ticnv
+      WHERE tabname  <> ' '
+      AND   scenario <> lc_migfree
+      AND   scenario <> lc_migunicode_mdmp
+      AND   scenario <> lc_migunicode_non_mdmp.
+
+      IF lt_ticnv IS INITIAL.
+        ls_output = lc_nodata.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+        RETURN.
+      ENDIF.
+
+      "Code taken from FORM 'info_get_0005' of Include 'LSDB9O01'
+      "of program 'SAPLSDB9'
+      LOOP AT lt_ticnv INTO ls_ticnv.
+        MOVE-CORRESPONDING ls_ticnv TO ls_ticnv_nw.
+        IF ls_ticnv-cnvstate = lc_cnv_init OR
+           ls_ticnv-cnvstate = lc_main_off.
+*       table is locked
+          ls_ticnv_nw-state = lc_state_1.
+        ELSEIF ls_ticnv-cnvstate = lc_cnv_end OR
+          ls_ticnv-cnvstate = lc_cnv_clear.
+*       table-conversion finished
+          ls_ticnv_nw-state = lc_state_2.
+        ELSEIF ls_ticnv-cnvstate = lc_main_on.
+*       table-conversion is currently executed
+          ls_ticnv_nw-state = lc_state_3.
+        ELSEIF ls_ticnv-cnvstate = lc_cnv_switch.
+*       table is currently switched to new version
+          ls_ticnv_nw-state = lc_state_4.
+        ELSE.
+*       table has no known state
+          ls_ticnv_nw-state = lc_state_0.
+        ENDIF.
+        IF ls_ticnv-severity = lc_state_e.
+          ls_ticnv_nw-state = lc_state_e.
+        ENDIF.
+
+        PERFORM node_get(radbtsta) USING ls_ticnv-cnvcontext
+              ls_ticnv-scenario ls_ticnv-staterepid ls_ticnv-cnvstate
+              ls_ticnv-schema1 ls_ticnv-schema2 ls_ddcnode lv_rc.
+
+        ls_ticnv_nw-descript   = ls_ddcnode-descript.
+        ls_ticnv_nw-nonprod    = ls_ddcnode-nonprod.
+        ls_ticnv_nw-sceneprosa = ls_ddcnode-sceneprosa.
+
+        "Code taken from FORM 'move_to_dynpro_05' of Include 'LSDB9F01'
+        "of program 'SAPLSDB9'
+        IF ls_ticnv_nw-nonprod = abap_true.
+          ls_ticnv_nw-nonprod = lc_no.
+        ELSE.
+          ls_ticnv_nw-nonprod = lc_yes.
+        ENDIF.
+
+        IF ls_ticnv-severity = lc_state_e.
+          ls_ticnv_nw-processes = lc_error.
+        ELSE.
+          IF ls_ticnv_nw-processes > lc_state_0.
+            ls_ticnv_nw-processes = lc_runs.
+          ELSE.
+            ls_ticnv_nw-processes = lc_hold.
+          ENDIF.
+        ENDIF.
+
+        "Column Heading
+        CONCATENATE lc_table lc_proc lc_product lc_state lc_scenario
+        INTO ls_output SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        IF ls_ticnv_nw-sceneprosa IS INITIAL.
+          ls_ticnv_nw-sceneprosa = lc_null.
+        ENDIF.
+
+        "Data
+        CONCATENATE ls_ticnv_nw-tabname ls_ticnv_nw-processes
+                    ls_ticnv_nw-nonprod ls_ticnv_nw-descript
+                    ls_ticnv_nw-sceneprosa INTO ls_output
+                    SEPARATED BY lc_sep.
+        APPEND ls_output TO lt_output.
+        CLEAR: ls_output, ls_ddcnode, lv_rc, ls_ticnv_nw, ls_ticnv.
+      ENDLOOP.
+
+    WHEN OTHERS.
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+  ENDCASE.
+
+  "To replace the blank data in fields with NULL
+  DO .
+    REPLACE ALL OCCURRENCES OF SUBSTRING '||'
+    IN TABLE lt_output WITH '|NULL|'.
+    FIND '||' IN TABLE lt_output.
+    IF sy-subrc <> 0.
+      EXIT .
+    ENDIF.
+  ENDDO.
+
+ENDFORM.

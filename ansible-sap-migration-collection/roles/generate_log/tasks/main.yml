@@ -1,0 +1,70 @@
+---
+
+- name: main | Append delimiter to ansible.log file
+  lineinfile:
+    path: ../ansible.log
+    line: "---------------end-of-execution_{{ playbook_name }}_{{ tags | default()}}_{{ ansible_date_time.iso8601 }}---------------"
+  delegate_to: localhost
+  
+- name: main | create local folder to store log
+  file:
+    path: ../log-collection
+    mode: '0777'
+    recurse: yes
+    state: directory
+  become: yes
+
+- name: main.yml | generate playbook logs
+  copy: 
+    src: ../ansible.log
+    dest: ../log-collection/{{ playbook_name }}_{{ tags | default()}}_{{ ansible_date_time.iso8601 }}.log
+  become: yes
+
+- block:
+    - name: main | create zip file of ansible logs
+      archive:
+        path: ../log-collection
+        dest: "../log-collection/ansiblelog_{{ ansible_date_time.iso8601 }}.zip"
+        format: zip
+        force_archive: true
+    
+    - name: main | find .log files
+      find:
+        paths: ../log-collection
+        patterns: "*.log"
+        recurse: yes
+      become: yes
+      register: log_files
+
+    - name: main | tidy up .log
+      command: rm ../log-collection/"{{item.path}}"
+      with_items: "{{log_files.files}}"
+      become: yes
+  
+  when: create_zip == "yes"
+
+- name: main | find .zip files
+  find:
+    paths: ../log-collection
+    patterns: "*.zip"
+    recurse: yes
+  become: yes
+  register: zip_files
+  when: send_email == "yes"
+
+- name: main | send log files 
+  mail:
+    host: "{{ mail_server }}" #smtp.ex.com
+    port: 25 #The mail server port
+    subject: "Ansible-log"
+    body: Ansible logs
+    from: '{{ sender_email_address }}'
+    to: '{{ recipient_email_address }}'
+    cc: '{{ cc_email_address }}'
+    attach:
+      - "{{item.path}}"
+    charset: utf8
+  with_items: "{{zip_files.files}}"
+  when: 
+    - send_email == "yes"
+    - zip_files.matched > 0

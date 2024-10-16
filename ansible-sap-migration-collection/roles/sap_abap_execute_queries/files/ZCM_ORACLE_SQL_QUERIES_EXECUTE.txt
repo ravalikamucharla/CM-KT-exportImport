@@ -1,0 +1,597 @@
+*---------------------------------------------------------------------*
+* Program Name        :  ZCM_ORACLE_SQL_QUERIES_EXECUTE               *
+* Title               :  To execute sql queries                       *
+* Purpose             :  This report is to capture sql queries o/p    *
+*---------------------------------------------------------------------*
+* Related Transaction OR Standard Program References                  *
+* X                                                                   *
+*---------------------------------------------------------------------*
+* Tables              :   SELECT    UPDATE      INSERT      DELETE    *
+* XXXX                      X                                         *
+*---------------------------------------------------------------------*
+* Program Change History                                              *
+*---------------------------------------------------------------------*
+*Date        Version   Author       TR#/Local     Description         *
+*---------------------------------------------------------------------*
+*08-03-2023  Initial  Yasaswini K   Local      To Capture sql queries *
+*                                              output                 *
+*12-08-2023   V001    Ashwini K P   Local      Corrected the code to  *
+*                                             display output which was*
+*                                              coming as "NULL" always*
+*05-03-2024   V002    Yasaswini K   Local      To add sql queries to  *
+*                                              output                 *
+*---------------------------------------------------------------------*
+REPORT zcm_oracle_sql_queries_execute.
+
+FORM get_config
+               TABLES lt_input  STRUCTURE tab512
+                      lt_output STRUCTURE tab512.
+
+  TYPES : BEGIN OF lty_sqlquery,
+            heading  TYPE string,
+            sqlquery TYPE string,
+          END OF lty_sqlquery.
+
+  CONSTANTS: lc_no_input   TYPE c VALUE 'No input given'   LENGTH 20,
+             lc_export     TYPE c VALUE 'EXPORT'           LENGTH 6,
+             lc_alpha      TYPE c VALUE
+             'ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'       LENGTH 40,
+             lc_table      TYPE c VALUE 'Table output'     LENGTH 20,
+             lc_null       TYPE c VALUE 'NULL'             LENGTH 4,
+             lc_hash       TYPE c VALUE '#'                LENGTH 1,
+             lc_num        TYPE c VALUE '0123456789'       LENGTH 12,
+             lc_version    TYPE c VALUE
+             'Oracle Version Output'                       LENGTH 30,
+             lc_datafile   TYPE c VALUE
+             'Oracle Datafile Layout Output'               LENGTH 30,
+             lc_logmode    TYPE c VALUE
+             'Oracle Log Mode Output'                      LENGTH 30,
+             lc_selective  TYPE c VALUE
+             'Selective Oracle Tables Output'              LENGTH 30,
+             lc_dbsize     TYPE c VALUE
+             'Oracle DB Size Output'                       LENGTH 30,
+             lc_lastlog    TYPE c VALUE
+             'Oracledb Last Log Backup Output'             LENGTH 50,
+             lc_logbackup  TYPE c VALUE
+             'Oracle DB Last Backup Output'                LENGTH 30,
+             lc_connection TYPE c VALUE
+             'Oracle DB Connection Status Output'          LENGTH 50,
+             lc_dbinfo     TYPE c VALUE
+             'Oracle DB Information Output'                LENGTH 30,
+             lc_components TYPE c VALUE
+             'Oracle DB Installed Components Output'       LENGTH 50,
+             lc_patch      TYPE c VALUE
+             'Oracle Patch Version Output'                 LENGTH 30,
+             lc_delta      TYPE c VALUE
+             'Oracle Delta Growth Output'                  LENGTH 30,
+             lc_toplob     TYPE c VALUE
+             'List of Top Lob Output'                      LENGTH 30,
+             lc_toptables  TYPE c VALUE
+             'List of Top Tables Output'                   LENGTH 30,
+             lc_tablespace TYPE c VALUE
+             'Oracle Tablespace Information Output'        LENGTH 50,
+             lc_inc_input  TYPE c VALUE 'Incorrect input'  LENGTH 20,
+*    Begin of changes in V002
+             lc_expo       TYPE c VALUE 'E+'               LENGTH 2,
+             lc_dbobjcount TYPE c VALUE
+             'Database Object Count by Owner and Type'     LENGTH 50,
+             lc_validcount TYPE c VALUE
+             'Count of Valid Database Objects'             LENGTH 50,
+             lc_dbobjinfo  TYPE c VALUE
+             'Database Object Information'                 LENGTH 30.
+*    End of changes in V002
+
+
+  DATA: ls_input           TYPE tab512,
+        ls_output          TYPE tab512,
+        lv_action          TYPE char10,
+        lv_sql_stmt        TYPE string,
+        lv_comp            TYPE char80,
+        lv_prefinal        TYPE string,
+        lv_prefinal1       TYPE string,
+        lv_msg             TYPE string,
+        lv_helpstr         TYPE c,
+        lv_compno          TYPE i,
+        ls_components      TYPE abap_component_tab,
+        lv_pcknum          TYPE decfloat34,
+        lt_sqlquery        TYPE STANDARD TABLE OF lty_sqlquery,
+        ls_sqlquery        TYPE lty_sqlquery,
+        lr_set             TYPE REF TO cl_sql_result_set,
+        lr_tabletype       TYPE REF TO cl_abap_tabledescr,
+        lr_structure       TYPE REF TO data,
+        lr_structdescr     TYPE REF TO cl_abap_structdescr,
+        ls_struct          LIKE LINE OF lr_structdescr->components,
+        lr_structdesc      TYPE REF TO cl_abap_structdescr,
+        lr_result_ref      TYPE REF TO data,
+        l_result_ref       TYPE REF TO data,
+        lt_metadata        TYPE adbc_rs_metadata_descr_tab,
+        ls_metadata        LIKE LINE OF lt_metadata,
+        lv_len             TYPE i,
+        lv_tabix_n(4)      TYPE n,
+        lr_new_structdescr TYPE REF TO cl_abap_structdescr,
+        lr_dref            TYPE REF TO data,
+        lv_off             TYPE         i,
+        lr_metadata        TYPE REF TO data,
+        lt_column_names    TYPE HASHED TABLE OF adbc_name
+        WITH UNIQUE KEY table_line,
+        lo_sql_stmt        TYPE REF TO cl_sql_statement,
+        lo_sql_excp        TYPE REF TO cx_sql_exception,
+        lo_sql_con         TYPE REF TO cl_sql_connection,
+*    Begin of changes in V002
+        lv_packnum         TYPE p,
+        lv_pcknum1         TYPE string.
+*    End of changes in V002
+
+  FIELD-SYMBOLS: <fs_table>     TYPE ANY TABLE,
+                 <fs_data>      TYPE data,
+                 <fs_lcomp>     TYPE any,
+                 <fs_sdyntable> TYPE any,
+                 <fs_tdyntable> TYPE STANDARD TABLE,
+                 <fs_ltable>    TYPE ANY TABLE,
+                 <fs_comp2>     TYPE abap_componentdescr,
+                 <ls_temp>      TYPE any,
+                 <fs_field>     TYPE any,
+                 <ls_table>     TYPE any,
+                 <fs_comp>      TYPE abap_componentdescr,
+                 <fs_structure> TYPE any.
+
+  READ TABLE lt_input INTO ls_input INDEX 1.
+  IF sy-subrc EQ 0.
+    lv_action = ls_input.      " Action
+  ELSE.
+    "Table heading
+    ls_output = lc_table.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+
+    " No input given
+    ls_output = lc_no_input.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+    RETURN.
+  ENDIF.
+
+  CASE lv_action.
+
+    WHEN lc_export.               " When action is EXPORT
+
+      ls_sqlquery-heading = lc_version.
+      ls_sqlquery-sqlquery =
+      'select banner from V$version'.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_datafile.
+      ls_sqlquery-sqlquery =
+      'select name, file#, status, enabled from v$datafile'.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_logmode.
+      CONCATENATE
+      'SELECT NAME, LOG_MODE, OPEN_MODE, DATABASE_ROLE,'
+      'PLATFORM_NAME  from V$database'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_dbsize.
+      CONCATENATE
+      'SELECT SUM(BYTES)/1024/1024/1024 AS DBSIZE_IN_GB'
+      'FROM dba_data_files'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+*      one query pending with tushar
+      ls_sqlquery-heading = lc_selective.
+      ls_sqlquery-sqlquery =
+       'select count(*) from USR02'.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_lastlog.
+      CONCATENATE
+      'SELECT NAME, COMPLETION_TIME FROM V$ARCHIVED_LOG WHERE'
+      'COMPLETION_TIME = (SELECT MAX(COMPLETION_TIME)'
+      'FROM V$ARCHIVED_LOG WHERE COMPLETION_TIME <= SYSDATE)'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_logbackup.
+      CONCATENATE
+      'SELECT * FROM (select FILE_TYPE,STATUS, BS_STATUS,'
+      'COMPLETION_TIME from V$BACKUP_FILES where'
+      `FILE_TYPE = 'DATAFILE' ORDER BY COMPLETION_TIME DESC)`
+      'FETCH NEXT 1 ROWS ONLY'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_connection.
+      ls_sqlquery-sqlquery =
+      'select name,open_mode from v$database'.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_dbinfo.
+      CONCATENATE
+      'SELECT NAME, LOG_MODE, OPEN_MODE, DATABASE_ROLE,'
+      'PLATFORM_NAME from v$database'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_components.
+      ls_sqlquery-sqlquery =
+      'SELECT comp_name, version, status FROM dba_registry'.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_patch.
+      CONCATENATE
+      'select description, action,'
+      `to_char(action_time,'DD/MM/RR HH24:MI:SS')`
+      `action_date, ' ' version from dba_registry_sqlpatch`
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_delta.
+      CONCATENATE
+      'select b.tsname tablespace_name ,'
+      'MAX(b.used_size_mb) cur_used_size_mb ,'
+      'round(AVG(inc_used_size_mb),2)avg_increas_mb'
+      'from  ( SELECT a.days,a.tsname , used_size_mb ,'
+'used_size_mb - LAG (used_size_mb,1) OVER ( PARTITION BY'
+'a.tsname ORDER BY a.tsname,a.days) inc_used_size_mb'
+`from ( SELECT TO_CHAR(sp.begin_interval_time,'MM-DD-YYYY') days ,`
+'ts.tsname ,'
+'MAX(round((tsu.tablespace_usedsize* dt.block_size )/('
+'1024*1024),2)) used_size_mb from dba_hist_tbspc_space_usage  tsu ,'
+'dba_hist_tablespace_stat  ts ,dba_hist_snapshot  sp, dba_tablespaces'
+'dt   where tsu.tablespace_id= ts.ts# AND tsu.snap_id = sp.snap_id'
+'AND ts.tsname = dt.tablespace_name AND'
+'sp.begin_interval_time > sysdate-7 GROUP BY '
+`TO_CHAR(sp.begin_interval_time,'MM-DD-YYYY'), ts.tsname ORDER `
+'BY ts.tsname, days ) a) b GROUP BY b.tsname ORDER BY b.tsname'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_toplob.
+      CONCATENATE
+      'select chunk, owner, table_name from ALL_LOBS'
+      `WHERE owner = 'SAPSR3' and ROWNUM <= 10`
+      'order by chunk desc'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_toptables.
+      CONCATENATE
+      'select * from(select owner, table_name, nvl(num_rows,-1)from'
+      'all_tables order by nvl(num_rows, -1)desc)c where rownum <= 10'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_tablespace.
+      CONCATENATE
+      'SELECT TABLESPACE_NAME, STATUS, CONTENTS,'
+      'SEGMENT_SPACE_MANAGEMENT FROM dba_tablespaces'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+*    Begin of changes in V002
+      ls_sqlquery-heading = lc_dbobjinfo.
+      CONCATENATE
+      'select owner, object_type, status, count(*) from dba_objects'
+      'where owner not in'
+      `('ANONYMOUS','APPQOSSYS','AUDSYS','DBSFWUSER','DBSNMP','DIP',`
+      `'GGSYS','GSMADMIN_INTERNAL',`
+      `'GSMCATUSER','GSMUSER','ORACLE_OCM','OUTLN',`
+      `'REMOTE_SCHEDULER_AGENT','SYS',`
+      `'SYS$UMF','SYSBACKUP','SYSDG','SYSKM','SYSRAC',`
+      `'SYSTEM','XDB','UOLNREYR')`
+      'group by owner, object_type, status'
+      'order by owner, object_type, status'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_dbobjcount.
+      CONCATENATE
+      'select owner, object_type, count(*) from dba_objects'
+      'where owner not in'
+      `('ANONYMOUS','APPQOSSYS','AUDSYS','DBSFWUSER',`
+      `'DBSNMP','DIP','GGSYS','GSMADMIN_INTERNAL',`
+      `'GSMCATUSER','GSMUSER','ORACLE_OCM','OUTLN',`
+      `'REMOTE_SCHEDULER_AGENT','SYS',`
+      `'SYS$UMF','SYSBACKUP','SYSDG','SYSKM',`
+      `'SYSRAC','SYSTEM','XDB','UOLNREYR')`
+      'group by owner, object_type'
+      'order by owner, object_type'
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+
+      ls_sqlquery-heading = lc_validcount.
+      CONCATENATE
+      'select count(*) from dba_objects'
+      'where owner not in'
+      `('ANONYMOUS','APPQOSSYS','AUDSYS','DBSFWUSER','DBSNMP',`
+      `'DIP','GGSYS','GSMADMIN_INTERNAL','GSMCATUSER',`
+      `'GSMUSER','ORACLE_OCM','OUTLN','REMOTE_SCHEDULER_AGENT',`
+      `'SYS','SYS$UMF','SYSBACKUP','SYSDG','SYSKM','SYSRAC',`
+      `'SYSTEM','XDB')`
+      `and status = 'VALID'`
+      INTO ls_sqlquery-sqlquery SEPARATED BY space.
+      APPEND ls_sqlquery TO lt_sqlquery.
+      CLEAR ls_sqlquery.
+*    End of changes in V002
+
+      CREATE OBJECT lo_sql_con.
+      " Build the SQL statement and execute it.
+      CREATE OBJECT lo_sql_stmt.
+
+      LOOP AT lt_sqlquery INTO ls_sqlquery.
+        "Blank Line
+        IF lt_output[] IS NOT INITIAL.
+          CLEAR: ls_output.
+          APPEND ls_output TO lt_output.
+        ENDIF.
+
+        "Table heading
+        ls_output = ls_sqlquery-heading.
+        APPEND ls_output TO lt_output.
+        CLEAR ls_output.
+
+        TRY.
+            lo_sql_stmt = lo_sql_con->create_statement( ).
+            lv_sql_stmt = ls_sqlquery-sqlquery.
+            lr_set = lo_sql_stmt->execute_query( lv_sql_stmt ).
+            lt_metadata = lr_set->get_metadata( ).
+
+            LOOP AT lt_metadata INTO ls_metadata.
+              lv_tabix_n = sy-tabix.
+              TRANSLATE ls_metadata-column_name TO UPPER CASE.
+              lv_len = strlen( ls_metadata-column_name ).
+
+              WHILE lv_off < lv_len.
+                IF ls_metadata-column_name+lv_off(1) CN lc_alpha.
+                  ls_metadata-column_name+lv_off(1) = ' '.
+                ENDIF.
+                lv_off = lv_off + 1.
+              ENDWHILE.
+
+              CONDENSE ls_metadata-column_name NO-GAPS.
+
+*       prevent empty column names
+              IF ls_metadata-column_name IS INITIAL.
+                ls_metadata-column_name = lv_tabix_n.
+              ENDIF.
+
+              IF ls_metadata-column_name(1) CA lc_num.
+                CONCATENATE '_' ls_metadata-column_name INTO
+                ls_metadata-column_name.
+              ENDIF.
+
+*       ensure unique column names
+              INSERT ls_metadata-column_name INTO TABLE lt_column_names.
+              IF ls_metadata-length = 0.
+                ls_metadata-length = 1.
+              ENDIF.
+
+              MODIFY lt_metadata FROM ls_metadata.
+
+              CLEAR: ls_metadata,lv_tabix_n,lv_len,lv_off.
+            ENDLOOP.
+
+            lr_metadata  = lr_set->get_struct_ref(
+                             md_tab = lt_metadata
+                             p_strict = abap_false ).
+
+            lr_structdesc ?=
+                cl_abap_typedescr=>describe_by_data_ref( lr_metadata ).
+
+            ls_components = lr_structdesc->get_components( ). "+V001
+
+            lr_tabletype =
+            cl_abap_tabledescr=>create( p_line_type  = lr_structdesc
+            p_table_kind = cl_abap_tabledescr=>tablekind_std ).
+
+            CREATE DATA lr_result_ref TYPE HANDLE lr_tabletype.
+
+            lr_structdescr ?=
+            cl_abap_typedescr=>describe_by_data_ref( lr_metadata ).
+
+            CREATE DATA lr_structure TYPE HANDLE lr_structdescr.
+            ASSIGN lr_structure->* TO <fs_structure>.
+
+            lr_set->set_param_table( itab_ref = lr_result_ref ).
+            lr_set->next_package( ).
+
+            LOOP AT ls_components ASSIGNING <fs_comp>.
+              IF <fs_comp>-type = cl_abap_elemdescr=>get_f( ).
+*...set the component type to decfloat34 if it was of type F
+                <fs_comp>-type = cl_abap_elemdescr=>get_decfloat34( ).
+              ENDIF.
+              lv_len = strlen( <fs_comp>-name ) - 1.
+
+              lv_helpstr = <fs_comp>-name+lv_len(1).
+
+              IF ( lv_helpstr = lc_hash ).
+                <fs_comp>-name = replace( val = <fs_comp>-name
+                                       off = lv_len
+                                       len = 1
+                                       with = '_' ).
+              ENDIF.
+              CLEAR: lv_len, lv_helpstr.
+            ENDLOOP.
+
+            lr_new_structdescr = lr_structdesc->create( ls_components ).
+
+            CREATE DATA lr_dref TYPE HANDLE lr_new_structdescr.
+            ASSIGN lr_dref->* TO <fs_sdyntable>.
+
+            ASSIGN lr_result_ref->* TO <fs_ltable>.
+
+            CREATE DATA l_result_ref LIKE STANDARD TABLE OF
+            <fs_sdyntable>.
+            ASSIGN l_result_ref->* TO <fs_tdyntable>.
+
+            LOOP AT <fs_ltable> ASSIGNING <ls_table>.
+
+              lv_compno = 0.
+
+              LOOP AT ls_components ASSIGNING <fs_comp2>.
+                lv_compno = lv_compno + 1.
+
+                IF ( <fs_comp2>-type =
+                  cl_abap_elemdescr=>get_decfloat34( ) ).
+
+                  ASSIGN COMPONENT lv_compno OF STRUCTURE <ls_table> TO
+                  <ls_temp>.
+
+                  lv_pcknum = <ls_temp>.
+
+                  ASSIGN lv_pcknum TO <ls_temp> CASTING TYPE decfloat34.
+
+                  ASSIGN COMPONENT lv_compno OF STRUCTURE
+                  <fs_sdyntable> TO <fs_field>.
+
+*    Begin of changes in V002
+*    To convert exponential values into Decimals
+                  lv_pcknum1 = lv_pcknum.
+
+                  IF  lv_pcknum1 CS lc_expo.
+                  lv_packnum = lv_pcknum.
+                  <fs_field> = lv_packnum.
+                  ELSE.
+                  <fs_field> = lv_pcknum.
+                  ENDIF.
+*    End of changes in V002
+
+                ELSE.
+
+                  ASSIGN COMPONENT lv_compno OF
+                  STRUCTURE <ls_table> TO <ls_temp>.
+
+                  ASSIGN COMPONENT lv_compno OF
+                  STRUCTURE <fs_sdyntable> TO <fs_field>.
+                  <fs_field> = <ls_temp>.
+
+                ENDIF.
+              ENDLOOP.
+              APPEND <fs_sdyntable> TO <fs_tdyntable>.
+
+              CLEAR: lv_compno, lv_pcknum,
+                     lv_pcknum1, lv_packnum.              "+V002
+            ENDLOOP.
+
+            lr_new_structdescr =
+            lr_structdescr->create( ls_components ).
+
+            GET REFERENCE OF <fs_tdyntable> INTO lr_result_ref.
+
+            ASSIGN lr_result_ref->* TO <fs_table>.
+
+            "Adding Column headings to table
+            LOOP AT lr_structdescr->components INTO ls_struct.
+              CONCATENATE lv_prefinal ls_struct-name '|' INTO
+              lv_prefinal.
+              IF <fs_table> IS INITIAL.
+                CONCATENATE lv_prefinal1 lc_null '|' INTO
+              lv_prefinal1.
+              ENDIF.
+              CLEAR: ls_struct.
+            ENDLOOP.
+
+            "Removing seperator at end
+            lv_prefinal = shift_right(
+            val = lv_prefinal  places = 1 ).
+            ls_output = lv_prefinal.
+            APPEND ls_output TO lt_output.
+            CLEAR: lv_prefinal, ls_output.
+
+            IF lv_prefinal1 IS NOT INITIAL.
+              "Removing seperator at end
+              lv_prefinal1 = shift_right(
+              val = lv_prefinal1  places = 1 ).
+              ls_output = lv_prefinal1.
+              APPEND ls_output TO lt_output.
+              CLEAR: lv_prefinal1, ls_output.
+            ENDIF.
+
+            IF <fs_table> IS NOT INITIAL.
+
+
+              LOOP AT <fs_table> ASSIGNING <fs_data>.
+
+                IF <fs_data> IS ASSIGNED.
+                  DO .
+                    ASSIGN COMPONENT sy-index OF STRUCTURE <fs_data>
+                    TO <fs_lcomp>.
+                    IF sy-subrc <> 0.
+                      EXIT .
+                    ENDIF.
+                    CLEAR lv_comp.
+                    IF <fs_lcomp> IS ASSIGNED.
+                      lv_comp = <fs_lcomp>.
+                      CONDENSE lv_comp.
+                      IF lv_comp IS INITIAL.
+                        lv_comp = lc_null.
+                      ENDIF.
+                      CONCATENATE lv_prefinal lv_comp '|' INTO
+                      lv_prefinal.
+                    ENDIF.
+                  ENDDO.
+                ENDIF.
+
+                "Removing seperator at end
+                lv_prefinal = shift_right(
+                               val = lv_prefinal  places = 1 ).
+
+                "Adding NULL to end blank values
+                IF lv_comp IS INITIAL.
+                  CONCATENATE lv_prefinal lc_null INTO lv_prefinal.
+                ENDIF.
+
+                "Appending output
+                ls_output = lv_prefinal.
+                APPEND ls_output TO lt_output.
+
+                CLEAR: ls_output, lv_prefinal, lv_sql_stmt.
+
+              ENDLOOP.
+
+            ENDIF.
+
+
+          CATCH cx_sql_exception INTO lo_sql_excp.
+
+            lv_msg = lo_sql_excp->get_text( ).
+            CLEAR: ls_output.
+            ls_output = lv_msg.
+            APPEND ls_output TO lt_output.
+
+        ENDTRY.
+      ENDLOOP.
+
+    WHEN OTHERS.
+
+      "Table heading
+      ls_output = lc_table.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+
+      " Incorrect input
+      ls_output = lc_inc_input.
+      APPEND ls_output TO lt_output.
+      CLEAR ls_output.
+  ENDCASE.
+
+ENDFORM.
